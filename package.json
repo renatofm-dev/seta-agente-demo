@@ -1,0 +1,29 @@
+{
+  "name": "seta-agente",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.30.3",
+  "engines": {
+    "node": ">=24 <25"
+  },
+  "scripts": {
+    "dev": "docker compose -f infra/compose.dev.yml up -d --wait && tsc -b && pnpm run '/^dev:/'",
+    "dev:tsc": "tsc -b --watch --preserveWatchOutput",
+    "dev:server": "node --watch --env-file-if-exists=.env apps/server/dist/index.js",
+    "dev:console": "pnpm --filter @seta/console dev",
+    "build": "tsc -b && pnpm --filter @seta/console build",
+    "typecheck": "tsc -b && pnpm --filter @seta/console typecheck",
+    "test": "tsc -b && vitest run",
+    "lint": "biome check . && depcruise apps packages",
+    "db:migrate": "pnpm --filter @seta/server db:migrate",
+    "db:seed": "node -e \"console.log('db:seed: no-op na spec 001 — seed do erp_mock chega na spec 002')\""
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.5.10",
+    "@types/node": "^26.3.0",
+    "dependency-cruiser": "^18.2.0",
+    "typescript": "~5.9.3",
+    "vitest": "^4.1.11"
+  }
+}

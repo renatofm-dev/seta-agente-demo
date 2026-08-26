@@ -1,0 +1,1 @@
+-- migração inicial vazia: valida o pipeline drizzle-kit migrate; tabelas chegam nas specs 005/007/009

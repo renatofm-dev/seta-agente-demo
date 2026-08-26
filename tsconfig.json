@@ -1,0 +1,18 @@
+{
+  "files": [],
+  "references": [
+    { "path": "packages/domain-erp" },
+    { "path": "packages/erp-connector" },
+    { "path": "packages/query-catalog" },
+    { "path": "packages/agent" },
+    { "path": "packages/ai-provider" },
+    { "path": "packages/guardrails" },
+    { "path": "packages/wa-meta" },
+    { "path": "packages/crm" },
+    { "path": "packages/rag" },
+    { "path": "packages/skills" },
+    { "path": "packages/observability" },
+    { "path": "packages/client-config" },
+    { "path": "apps/server" }
+  ]
+}
