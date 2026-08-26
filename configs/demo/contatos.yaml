@@ -1,0 +1,14 @@
+# Mapa wa_id (telefone WhatsApp, E.164 sem +) → cliente do ERP (codcli do erp_mock).
+# Definido na spec 002; o seed que grava esses vínculos no banco `app` roda na spec 007.
+# Até 5 números: limite do modo dev da Meta Cloud API (destinatários verificados).
+# Substituir os números pelos telefones reais verificados antes da demo.
+contatos:
+  - wa_id: '5511999990001'
+    cliente_erp: '1' # Comercial Andrade de Bebidas Ltda
+    apelido: Andrade
+  - wa_id: '5511999990002'
+    cliente_erp: '4' # Supermercado Bom Preço da Serra Ltda
+    apelido: Bom Preço
+  - wa_id: '5511999990003'
+    cliente_erp: '8' # Atacadão da Bebida Norte Ltda
+    apelido: Atacadão Norte

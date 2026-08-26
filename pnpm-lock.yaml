@@ -11,12 +11,21 @@ importers:
       '@biomejs/biome':
         specifier: 2.5.10
         version: 2.5.10
+      '@seta/erp-connector':
+        specifier: workspace:*
+        version: link:packages/erp-connector
       '@types/node':
         specifier: ^26.3.0
         version: 26.3.0
+      '@types/pg':
+        specifier: ^8.23.1
+        version: 8.23.1
       dependency-cruiser:
         specifier: ^18.2.0
         version: 18.2.0
+      pg:
+        specifier: ^8.23.0
+        version: 8.23.0
       typescript:
         specifier: ~5.9.3
         version: 5.9.3
@@ -141,9 +150,16 @@ importers:
       '@seta/domain-erp':
         specifier: workspace:*
         version: link:../domain-erp
+      pg:
+        specifier: ^8.23.0
+        version: 8.23.0
       zod:
         specifier: ^4.4.3
         version: 4.4.3
+    devDependencies:
+      '@types/pg':
+        specifier: ^8.23.1
+        version: 8.23.1
 
   packages/guardrails:
     dependencies:

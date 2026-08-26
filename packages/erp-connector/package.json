@@ -11,6 +11,10 @@
   },
   "dependencies": {
     "@seta/domain-erp": "workspace:*",
+    "pg": "^8.23.0",
     "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/pg": "^8.23.1"
   }
 }
