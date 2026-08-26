@@ -1,0 +1,32 @@
+id: vendas.status_pedido
+version: 1
+description: >-
+  Situação de UM pedido específico do cliente da sessão, pelo número do pedido:
+  data de emissão, status do fluxo (recebido, faturado, em_separacao,
+  em_transporte, entregue, cancelado) e total em centavos. Use quando o contato
+  citar um número de pedido. Se o pedido não for do cliente da sessão, retorna
+  vazio — nunca vaza pedido de outro cliente.
+entities: [pedido]
+modules: [pedidos]
+params:
+  cliente_id:
+    type: string
+    source: session
+    description: Cliente vinculado à sessão (nunca vem do modelo).
+  pedido_id:
+    type: string
+    source: agent
+    description: 'Número do pedido citado pelo contato (ex.: "90123").'
+sql: >-
+  SELECT id, emissao, status, total_centavos
+  FROM v_pedido
+  WHERE cliente_id = :cliente_id AND id = :pedido_id
+limits:
+  timeout_ms: 2000
+  max_rows: 1
+output:
+  columns: [id, emissao, status, total_centavos]
+  masking: {}
+tool:
+  expose: true
+  name: status_pedido

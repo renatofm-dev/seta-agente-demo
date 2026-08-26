@@ -1,0 +1,28 @@
+id: estoque.disponibilidade
+version: 1
+description: >-
+  Disponibilidade de estoque por produto, buscando pelo nome (busca parcial,
+  sem diferenciar maiúsculas): nome do produto e quantidade disponível. Use
+  quando o contato perguntar se tem determinado produto, quanto tem em estoque
+  ou se pode pedir. NÃO informa preço — para preço use a tabela vigente.
+entities: [estoque, produto]
+modules: [pedidos]
+params:
+  termo:
+    type: string
+    source: agent
+    description: 'Parte do nome do produto (ex.: "pilsen lata", "guaraná 2l").'
+sql: >-
+  SELECT produto_id, produto, disponivel
+  FROM v_estoque
+  WHERE produto ILIKE concat('%', CAST(:termo AS text), '%')
+  ORDER BY produto
+limits:
+  timeout_ms: 3000
+  max_rows: 20
+output:
+  columns: [produto_id, produto, disponivel]
+  masking: {}
+tool:
+  expose: true
+  name: estoque_disponibilidade

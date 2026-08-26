@@ -1,0 +1,29 @@
+id: financeiro.titulos_abertos
+version: 1
+description: >-
+  Boletos (títulos) em aberto ou vencidos do cliente da sessão, ordenados por
+  vencimento: valor em centavos, data de vencimento, status (aberto|vencido) e
+  linha digitável para pagamento. Use quando o contato perguntar sobre boletos,
+  faturas, cobranças, segunda via ou o que tem para pagar. Não inclui títulos
+  já pagos.
+entities: [titulo]
+modules: [financeiro]
+params:
+  cliente_id:
+    type: string
+    source: session
+    description: Cliente vinculado à sessão (nunca vem do modelo).
+sql: >-
+  SELECT id, valor_centavos, vencimento, status, linha_digitavel
+  FROM v_titulo
+  WHERE cliente_id = :cliente_id AND status IN ('aberto', 'vencido')
+  ORDER BY vencimento ASC
+limits:
+  timeout_ms: 3000
+  max_rows: 50
+output:
+  columns: [id, valor_centavos, vencimento, status, linha_digitavel]
+  masking: {}
+tool:
+  expose: true
+  name: titulos_abertos
