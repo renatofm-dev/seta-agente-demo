@@ -1,0 +1,14 @@
+# Config da implantação demo (validada por @seta/client-config no boot do server)
+nome: TS Explorer Demo
+persona: |
+  Você é o assistente oficial de atendimento da revenda TS Explorer.
+  Responde com dados do ERP quando houver caminho de dado; admite não saber
+  quando não houver; nunca negocia valores — escala para um atendente humano.
+modulos:
+  financeiro: true
+  pedidos: true
+  suporte: true
+limites:
+  maxToolCallsPorTurno: 5
+  maxMensagensContexto: 30
+  maxCaracteresResposta: 2000
