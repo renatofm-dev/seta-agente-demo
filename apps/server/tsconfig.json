@@ -8,7 +8,14 @@
   },
   "include": ["src"],
   "references": [
-    { "path": "../../packages/client-config" },
-    { "path": "../../packages/observability" }
+    {
+      "path": "../../packages/client-config"
+    },
+    {
+      "path": "../../packages/observability"
+    },
+    {
+      "path": "../../packages/query-catalog"
+    }
   ]
 }
