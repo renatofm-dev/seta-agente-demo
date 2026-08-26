@@ -13,6 +13,13 @@ export interface PositionalQuery {
   readonly values: readonly Scalar[];
 }
 
+/** Nomes de bind (`:nome`) presentes no SQL, únicos, na ordem de aparição. */
+export function bindTokens(sql: string): string[] {
+  const nomes = new Set<string>();
+  for (const m of sql.matchAll(TOKEN)) nomes.add(m[1] as string);
+  return [...nomes];
+}
+
 export function toPositional(
   sql: string,
   binds: Readonly<Record<string, Scalar>>,
