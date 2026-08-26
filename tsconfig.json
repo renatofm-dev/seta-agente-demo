@@ -13,6 +13,7 @@
     { "path": "packages/skills" },
     { "path": "packages/observability" },
     { "path": "packages/client-config" },
-    { "path": "apps/server" }
+    { "path": "apps/server" },
+    { "path": "infra/erp-mock" }
   ]
 }

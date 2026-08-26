@@ -6,6 +6,7 @@ describe('erp-connector (port)', () => {
     const cfg = ConnectorConfigSchema.parse({ url: 'postgres://erp_ro:x@localhost:5432/erp_mock' });
     expect(cfg.poolMax).toBe(5);
     expect(cfg.statementTimeoutMs).toBe(5_000);
+    expect(cfg.defaultMaxRows).toBe(500);
   });
 
   it('rejeita url inválida', () => {
