@@ -16,6 +16,9 @@
     },
     {
       "path": "../../packages/query-catalog"
+    },
+    {
+      "path": "../../packages/wa-meta"
     }
   ]
 }
