@@ -8,6 +8,19 @@ export const EnvSchema = z.object({
   DATABASE_URL: z.url(),
   ERP_DATABASE_URL: z.url(),
   CLIENT_CONFIG_PATH: z.string().min(1).default('configs/demo/client.yaml'),
+  /** Simulador dev: expõe POST /dev/inbound e GET /dev/events (plano B da demo). */
+  DEV_SIMULATOR: z
+    .enum(['true', 'false'])
+    .default('false')
+    .transform((v) => v === 'true'),
+  /** Verificação do webhook Meta (GET /webhook) e HMAC do POST. Defaults só para dev. */
+  WA_VERIFY_TOKEN: z.string().min(1).default('dev-verify-token'),
+  WA_APP_SECRET: z.string().min(1).default('dev-app-secret'),
+  /** Credenciais da Cloud API. Ausentes ⇒ gateway de saída vira log-only (dev). */
+  WA_ACCESS_TOKEN: z.string().optional(),
+  WA_PHONE_NUMBER_ID: z.string().optional(),
+  /** Silêncio (ms) que fecha um turno no debouncer. */
+  WA_DEBOUNCE_MS: z.coerce.number().int().min(100).default(4_000),
 });
 export type Env = z.infer<typeof EnvSchema>;
 

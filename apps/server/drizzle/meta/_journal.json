@@ -15,6 +15,13 @@
       "when": 1787783413728,
       "tag": "0001_evento-query",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1787784525831,
+      "tag": "0002_conversa-mensagem-turno-outbox",
+      "breakpoints": true
     }
   ]
 }
