@@ -26,8 +26,9 @@ beforeAll(async () => {
     );
   }
   await applySchema(admin);
+  await seedData(admin); // banco pode nascer limpo (CI) — testes não dependem de seed externo
   connector = createPgConnector({ url: ERP_RO_URL, poolMax: 3 });
-}, 30_000);
+}, 60_000);
 
 afterAll(async () => {
   await connector?.close();
