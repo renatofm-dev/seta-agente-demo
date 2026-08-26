@@ -1,0 +1,12 @@
+# fixture INVÁLIDA: interpolação ${} no SQL
+id: financeiro.injetado
+version: 1
+description: Entrada inválida usada pelo teste do loader — interpolação proibida.
+entities: [titulo]
+params: {}
+sql: SELECT id FROM v_titulo WHERE cliente_id = '${clienteId}'
+output:
+  columns: [id]
+tool:
+  expose: false
+  name: injetado
