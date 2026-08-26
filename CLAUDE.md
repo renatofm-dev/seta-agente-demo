@@ -20,3 +20,9 @@
   diff → commits → PR. Não faça push sem eu confirmar.
 - **Ambiguidade**: no máximo 3 perguntas antes de começar; fora isso, siga com premissa
   explícita e registre-a na descrição do PR.
+
+## Decisões registradas
+- TypeScript pinado em `~5.9.x` (decisão do Renato, 2026-08-26): a linha 7.0 (tsgo) é
+  recém-lançada; migrar só com aprovação explícita.
+- Deps além da lista travada aprovadas em 2026-08-26: `yaml` (parser p/ client-config e
+  catalog), `uuid` (UUIDv7) e `pg` (driver do Drizzle/Postgres).
