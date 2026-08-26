@@ -18,5 +18,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm lint
       - run: pnpm typecheck
+      # Postgres dev (mesmo compose do local) — exigido pelos testes de integração da 002
+      - run: docker compose -f infra/compose.dev.yml up -d --wait
       - run: pnpm test
       - run: pnpm build
