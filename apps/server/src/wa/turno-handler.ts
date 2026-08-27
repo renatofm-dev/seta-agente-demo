@@ -50,11 +50,12 @@ export function createAgentTurnoHandler(deps: AgentTurnoHandlerDeps): TurnoHandl
       const inicio = Date.now();
       try {
         const resultado = await processarComAgente(deps, t, traceId);
-        await gravarTrace(deps.db, t, traceId, resultado);
         if (resultado.escalado) {
           await escalarTicket(deps, t, resultado);
         }
         await gravarSinaisDeVerdict(deps, t, resultado);
+        // trace por ÚLTIMO: é o marcador de turno completo (ticket e sinais já visíveis)
+        await gravarTrace(deps.db, t, traceId, resultado);
       } catch (err) {
         // trace persistido SEMPRE — inclusive na falha catastrófica do runtime
         deps.logger.error({ err, turnoId: t.id, traceId }, 'turno falhou — fallback de emergência');
