@@ -51,5 +51,5 @@ export class QueryTimeoutError extends Error {
   }
 }
 
-export { type PositionalQuery, toPositional } from './named-binds.js';
+export { bindTokens, type PositionalQuery, toPositional } from './named-binds.js';
 export { createPgConnector } from './pg-connector.js';

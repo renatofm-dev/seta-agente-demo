@@ -13,6 +13,21 @@ export const OutboundTextSchema = z.object({
 });
 export type OutboundText = z.infer<typeof OutboundTextSchema>;
 
-export interface WaGateway {
-  sendText(msg: OutboundText): Promise<{ messageId: string }>;
-}
+export {
+  createLogGateway,
+  createMetaGateway,
+  JanelaFechadaError,
+  type JanelaInfo,
+  type LogGatewayLogger,
+  type MetaGatewayConfig,
+  type OutboundGateway,
+} from './gateway.js';
+export {
+  type InboundText,
+  parseInboundTexts,
+  parseStatuses,
+  type StatusUpdate,
+  type WebhookPayload,
+  WebhookPayloadSchema,
+} from './payload.js';
+export { signBody, verifySignature } from './signature.js';

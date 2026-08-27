@@ -1,0 +1,12 @@
+# fixture INVÁLIDA: referencia tabela física fora da allowlist de views
+id: fisico.tabela
+version: 1
+description: Entrada inválida usada pelo teste do loader — tabela física proibida.
+entities: [cliente]
+params: {}
+sql: SELECT codcli, cgcent FROM pcclient
+output:
+  columns: [codcli, cgcent]
+tool:
+  expose: false
+  name: tabela_fisica

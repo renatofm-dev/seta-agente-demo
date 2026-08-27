@@ -1,0 +1,287 @@
+import { join } from 'node:path';
+import { loadClientConfig } from '@seta/client-config';
+import { createLogger } from '@seta/observability';
+import { JanelaFechadaError, signBody } from '@seta/wa-meta';
+import { count, eq } from 'drizzle-orm';
+import { migrate } from 'drizzle-orm/node-postgres/migrator';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { type App, buildApp } from '../src/app.ts';
+import { FILA_DEBOUNCE, FILA_OUTBOX, startBoss } from '../src/boss.ts';
+import { createDb, type Db } from '../src/db/index.ts';
+import { conversa, mensagem, outbox, traceTurno, turno } from '../src/db/schema.ts';
+import { type Env, loadEnv } from '../src/env.ts';
+import { registerDebounceWorker, type TurnoPronto } from '../src/wa/debounce.ts';
+import { enqueueOutbound, registerOutboxWorker } from '../src/wa/outbox.ts';
+
+/**
+ * Critérios da spec 004 (integração; exige Postgres dev):
+ * reentrega idempotente, 3 msgs → 1 turno, assinatura inválida sem side effects.
+ */
+
+const DEBOUNCE_MS = 500;
+const logger = createLogger({ name: 'teste-wa', level: 'silent' });
+
+let env: Env;
+let db: Db;
+let closeDb: () => Promise<void>;
+let boss: Awaited<ReturnType<typeof startBoss>>;
+let app: App;
+const turnosProcessados: TurnoPronto[] = [];
+
+async function aguardar(cond: () => Promise<boolean>, timeoutMs = 8_000): Promise<void> {
+  const inicio = Date.now();
+  while (Date.now() - inicio < timeoutMs) {
+    if (await cond()) return;
+    await new Promise((r) => setTimeout(r, 100));
+  }
+  throw new Error('condição não atingida no tempo');
+}
+
+function payloadTexto(waId: string, waMessageId: string, texto: string) {
+  return JSON.stringify({
+    object: 'whatsapp_business_account',
+    entry: [
+      {
+        changes: [
+          {
+            field: 'messages',
+            value: {
+              messaging_product: 'whatsapp',
+              messages: [
+                {
+                  from: waId,
+                  id: waMessageId,
+                  timestamp: String(Math.floor(Date.now() / 1000)),
+                  type: 'text',
+                  text: { body: texto },
+                },
+              ],
+            },
+          },
+        ],
+      },
+    ],
+  });
+}
+
+async function postWebhook(corpo: string, assinatura?: string) {
+  return app.inject({
+    method: 'POST',
+    url: '/webhook',
+    headers: {
+      'content-type': 'application/json',
+      ...(assinatura ? { 'x-hub-signature-256': assinatura } : {}),
+    },
+    body: corpo,
+  });
+}
+
+beforeAll(async () => {
+  env = {
+    ...loadEnv({
+      DATABASE_URL:
+        process.env.DATABASE_URL ?? 'postgres://app_owner:app_owner_dev@localhost:5432/app',
+      ERP_DATABASE_URL:
+        process.env.ERP_DATABASE_URL ?? 'postgres://erp_ro:erp_ro_dev@localhost:5432/erp_mock',
+      LOG_LEVEL: 'silent',
+      DEV_SIMULATOR: 'true',
+    } as NodeJS.ProcessEnv),
+    WA_DEBOUNCE_MS: DEBOUNCE_MS,
+  };
+  const criado = createDb(env.DATABASE_URL);
+  db = criado.db;
+  closeDb = criado.close;
+  try {
+    await migrate(db, { migrationsFolder: join(import.meta.dirname, '../drizzle') });
+  } catch (err) {
+    throw new Error(
+      'Postgres dev indisponível — suba com: docker compose -f infra/compose.dev.yml up -d --wait',
+      { cause: err },
+    );
+  }
+  boss = await startBoss(env.DATABASE_URL, logger);
+  await registerDebounceWorker({
+    db,
+    boss,
+    debounceMs: DEBOUNCE_MS,
+    handler: {
+      async processar(t) {
+        turnosProcessados.push(t);
+      },
+    },
+    logger,
+  });
+  const clientConfig = loadClientConfig(
+    join(import.meta.dirname, '../../../configs/demo/client.yaml'),
+  );
+  app = buildApp({ env, clientConfig, wa: { db, boss } });
+}, 30_000);
+
+beforeEach(async () => {
+  await db.delete(traceTurno); // referencia turno (FK) — limpar primeiro
+  await db.delete(outbox);
+  await db.delete(mensagem);
+  await db.delete(turno);
+  await db.delete(conversa);
+  await boss.deleteQueuedJobs(FILA_DEBOUNCE);
+  await boss.deleteQueuedJobs(FILA_OUTBOX);
+});
+
+afterAll(async () => {
+  await app?.close();
+  await boss?.stop({ graceful: false });
+  await closeDb?.();
+});
+
+describe('critérios spec 004', () => {
+  it('assinatura inválida → 401 sem side effects', async () => {
+    const corpo = payloadTexto('5511999990001', 'wamid.assinatura', 'oi');
+    const semAssinatura = await postWebhook(corpo);
+    const assinaturaErrada = await postWebhook(corpo, signBody(corpo, 'outro-secret'));
+    expect(semAssinatura.statusCode).toBe(401);
+    expect(assinaturaErrada.statusCode).toBe(401);
+    expect((await db.select({ n: count() }).from(mensagem))[0]?.n).toBe(0);
+    expect((await db.select({ n: count() }).from(conversa))[0]?.n).toBe(0);
+  });
+
+  it('reentrega do mesmo wa_message_id não duplica mensagem nem turno', async () => {
+    const corpo = payloadTexto('5511999990002', 'wamid.reentrega', 'cadê meu pedido?');
+    const assinatura = signBody(corpo, env.WA_APP_SECRET);
+    expect((await postWebhook(corpo, assinatura)).statusCode).toBe(200);
+    expect((await postWebhook(corpo, assinatura)).statusCode).toBe(200); // reentrega imediata
+
+    await aguardar(async () => (await db.select({ n: count() }).from(turno))[0]?.n === 1);
+
+    // reentrega DEPOIS do turno fechado também não cria nada
+    expect((await postWebhook(corpo, assinatura)).statusCode).toBe(200);
+    await new Promise((r) => setTimeout(r, DEBOUNCE_MS * 2 + 300));
+
+    expect((await db.select({ n: count() }).from(mensagem))[0]?.n).toBe(1);
+    expect((await db.select({ n: count() }).from(turno))[0]?.n).toBe(1);
+  });
+
+  it('3 mensagens em rajada viram 1 turno agregado na ordem', async () => {
+    const waId = '5511999990003';
+    for (const [i, texto] of [
+      'bom dia',
+      'quais boletos tenho em aberto?',
+      'do mês passado',
+    ].entries()) {
+      const corpo = payloadTexto(waId, `wamid.rajada-${i}`, texto);
+      expect((await postWebhook(corpo, signBody(corpo, env.WA_APP_SECRET))).statusCode).toBe(200);
+      await new Promise((r) => setTimeout(r, 120)); // 3 msgs dentro da janela de silêncio
+    }
+
+    await aguardar(async () => (await db.select({ n: count() }).from(turno))[0]?.n >= 1);
+    await new Promise((r) => setTimeout(r, DEBOUNCE_MS + 300)); // garantiria 2º turno, se houvesse
+
+    const turnos = await db.select().from(turno);
+    expect(turnos).toHaveLength(1);
+    expect(turnos[0]?.textoAgregado).toBe(
+      'bom dia\nquais boletos tenho em aberto?\ndo mês passado',
+    );
+    const processado = turnosProcessados.find((t) => t.id === turnos[0]?.id);
+    expect(processado).toBeDefined();
+  });
+});
+
+describe('outbox', () => {
+  it('dedupe por turnoId+seq, envio marca enviada e registra mensagem out', async () => {
+    // conversa com janela aberta + turno
+    const corpo = payloadTexto('5511999990004', 'wamid.outbox', 'oi');
+    await postWebhook(corpo, signBody(corpo, env.WA_APP_SECRET));
+    await aguardar(async () => (await db.select({ n: count() }).from(turno))[0]?.n === 1);
+    const [t] = await db.select().from(turno);
+    const [conv] = await db.select().from(conversa);
+    if (!t || !conv) throw new Error('setup incompleto');
+
+    const enviados: string[] = [];
+    await registerOutboxWorker({
+      db,
+      boss,
+      logger,
+      gateway: {
+        async send(msg, janela) {
+          if (!janela.expiraEm || janela.expiraEm.getTime() < Date.now()) {
+            throw new JanelaFechadaError(msg.to);
+          }
+          enviados.push(msg.body);
+          return { waMessageId: `wamid.out-${enviados.length}` };
+        },
+      },
+    });
+
+    const item = { conversaId: conv.id, turnoId: t.id, seq: 1, texto: 'Segue seu boleto.' };
+    expect((await enqueueOutbound({ db, boss }, item)).duplicada).toBe(false);
+    expect((await enqueueOutbound({ db, boss }, item)).duplicada).toBe(true); // dedupe
+
+    await aguardar(async () => {
+      const [linha] = await db
+        .select()
+        .from(outbox)
+        .where(eq(outbox.dedupeKey, `${t.id}:1`));
+      return linha?.status === 'enviada';
+    });
+    expect(enviados).toEqual(['Segue seu boleto.']);
+    const saidas = await db.select().from(mensagem).where(eq(mensagem.direcao, 'out'));
+    expect(saidas).toHaveLength(1);
+    expect(saidas[0]?.waMessageId).toBe('wamid.out-1');
+
+    // webhook de status atualiza a mensagem out
+    const statusCorpo = JSON.stringify({
+      object: 'whatsapp_business_account',
+      entry: [{ changes: [{ value: { statuses: [{ id: 'wamid.out-1', status: 'delivered' }] } }] }],
+    });
+    await postWebhook(statusCorpo, signBody(statusCorpo, env.WA_APP_SECRET));
+    const [atualizada] = await db
+      .select()
+      .from(mensagem)
+      .where(eq(mensagem.waMessageId, 'wamid.out-1'));
+    expect(atualizada?.status).toBe('entregue');
+  }, 20_000);
+
+  it('janela fechada: marca janela_fechada sem lançar (POC sem template)', async () => {
+    const [conv] = await db
+      .insert(conversa)
+      .values({
+        id: '01990a5d-ac96-774b-bcce-b302099a8057',
+        waId: '5511999990005',
+        janelaExpiraEm: new Date(Date.now() - 1_000),
+      })
+      .returning();
+    const [t] = await db
+      .insert(turno)
+      .values({
+        id: '01990a5d-ac96-774b-bcce-b302099a8058',
+        conversaId: conv?.id ?? '',
+        textoAgregado: 'x',
+      })
+      .returning();
+    if (!conv || !t) throw new Error('setup incompleto');
+
+    await enqueueOutbound(
+      { db, boss },
+      { conversaId: conv.id, turnoId: t.id, seq: 1, texto: 'oi' },
+    );
+    await aguardar(async () => {
+      const [linha] = await db
+        .select()
+        .from(outbox)
+        .where(eq(outbox.dedupeKey, `${t.id}:1`));
+      return linha?.status === 'janela_fechada';
+    });
+  }, 15_000);
+});
+
+describe('simulador dev', () => {
+  it('POST /dev/inbound entra pelo mesmo caminho (conversa + mensagem + debounce)', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/dev/inbound',
+      payload: { waId: '5511999990006', text: 'oi pelo simulador' },
+    });
+    expect(res.statusCode).toBe(202);
+    expect(res.json().duplicada).toBe(false);
+    await aguardar(async () => (await db.select({ n: count() }).from(turno))[0]?.n === 1);
+  });
+});

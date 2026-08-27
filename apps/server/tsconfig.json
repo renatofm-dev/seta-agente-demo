@@ -8,7 +8,26 @@
   },
   "include": ["src"],
   "references": [
-    { "path": "../../packages/client-config" },
-    { "path": "../../packages/observability" }
+    {
+      "path": "../../packages/agent"
+    },
+    {
+      "path": "../../packages/ai-provider"
+    },
+    {
+      "path": "../../packages/client-config"
+    },
+    {
+      "path": "../../packages/erp-connector"
+    },
+    {
+      "path": "../../packages/observability"
+    },
+    {
+      "path": "../../packages/query-catalog"
+    },
+    {
+      "path": "../../packages/wa-meta"
+    }
   ]
 }

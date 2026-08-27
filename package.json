@@ -8,7 +8,7 @@
     "node": ">=24 <25"
   },
   "scripts": {
-    "dev": "docker compose -f infra/compose.dev.yml up -d --wait && tsc -b && pnpm run '/^dev:/'",
+    "dev": "docker compose -f infra/compose.dev.yml up -d --wait && tsc -b && pnpm db:migrate && pnpm run '/^dev:/'",
     "dev:tsc": "tsc -b --watch --preserveWatchOutput",
     "dev:server": "node --watch --env-file-if-exists=.env apps/server/dist/index.js",
     "dev:console": "pnpm --filter @seta/console dev",

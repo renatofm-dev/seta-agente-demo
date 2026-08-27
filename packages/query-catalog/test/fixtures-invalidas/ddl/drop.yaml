@@ -1,0 +1,12 @@
+# fixture INVÁLIDA: DDL em vez de SELECT
+id: ddl.drop
+version: 1
+description: Entrada inválida usada pelo teste do loader — DDL é proibido no catálogo.
+entities: [cliente]
+params: {}
+sql: DROP TABLE v_cliente
+output:
+  columns: [id]
+tool:
+  expose: false
+  name: drop_tabela
