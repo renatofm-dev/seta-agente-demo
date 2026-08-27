@@ -5,5 +5,16 @@
     "rootDir": "src",
     "outDir": "dist"
   },
-  "include": ["src"]
+  "include": ["src"],
+  "references": [
+    {
+      "path": "../ai-provider"
+    },
+    {
+      "path": "../query-catalog"
+    },
+    {
+      "path": "../guardrails"
+    }
+  ]
 }

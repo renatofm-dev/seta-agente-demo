@@ -9,7 +9,16 @@
   "include": ["src"],
   "references": [
     {
+      "path": "../../packages/agent"
+    },
+    {
+      "path": "../../packages/ai-provider"
+    },
+    {
       "path": "../../packages/client-config"
+    },
+    {
+      "path": "../../packages/erp-connector"
     },
     {
       "path": "../../packages/observability"
