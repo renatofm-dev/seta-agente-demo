@@ -12,3 +12,10 @@ limites:
   maxToolCallsPorTurno: 5
   maxMensagensContexto: 30
   maxCaracteresResposta: 2000
+guardrails:
+  temasSensiveis:
+    - jurídico
+    - processo judicial
+    - advogado
+    - imprensa
+    - cancelamento de contrato

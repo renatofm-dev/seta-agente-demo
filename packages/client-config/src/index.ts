@@ -20,6 +20,12 @@ export const ClientConfigSchema = z.object({
     maxMensagensContexto: z.number().int().min(1).max(200),
     maxCaracteresResposta: z.number().int().min(100).max(4096),
   }),
+  /** Políticas por config (006): mecanismo genérico, lista por cliente. */
+  guardrails: z
+    .object({
+      temasSensiveis: z.array(z.string().min(1)).default([]),
+    })
+    .default({ temasSensiveis: [] }),
 });
 export type ClientConfig = z.infer<typeof ClientConfigSchema>;
 

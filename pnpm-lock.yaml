@@ -102,6 +102,9 @@ importers:
       '@seta/erp-connector':
         specifier: workspace:*
         version: link:../../packages/erp-connector
+      '@seta/guardrails':
+        specifier: workspace:*
+        version: link:../../packages/guardrails
       '@seta/observability':
         specifier: workspace:*
         version: link:../../packages/observability
@@ -205,6 +208,9 @@ importers:
 
   packages/guardrails:
     dependencies:
+      '@seta/ai-provider':
+        specifier: workspace:*
+        version: link:../ai-provider
       zod:
         specifier: ^4.4.3
         version: 4.4.3

@@ -1,5 +1,11 @@
 import { Annotation, END, START, StateGraph } from '@langchain/langgraph';
 import type { ChatMessage, ToolCall, ToolDef } from '@seta/ai-provider';
+import {
+  type GuardrailCtx,
+  runBeforeReply,
+  runToolHooks,
+  type ToolResultTurno,
+} from '@seta/guardrails';
 import type { ToolSpec } from '@seta/query-catalog';
 import { z } from 'zod';
 import { renderPromptBase } from './prompt.js';
@@ -15,19 +21,31 @@ import type {
 /**
  * StateGraph do turno: montar_contexto → agente ⇄ tools → guardrails_saida →
  * responder, com fallback honesto (nunca inventa) em budget/timeout/bloqueio.
+ * Guardrails (006): hooks nos três pontos; escalate responde com a mensagem
+ * de transição e o ticket vai para humano (007).
  */
 
 export const TEXTO_FALLBACK =
   'Não consegui obter essa informação com segurança agora. Prefiro não arriscar uma ' +
   'resposta errada — quer que eu acione um de nossos atendentes para te ajudar?';
 
+export const TEXTO_TRANSICAO =
+  'Entendi! Esse assunto quem resolve é um de nossos atendentes. Já estou passando sua ' +
+  'conversa para a equipe — você recebe o retorno aqui mesmo. 🙂';
+
+/** 2 falhas definitivas de tool no turno ⇒ escalar (006). */
+const MAX_FALHAS_TOOL = 2;
+
 const StateAnnotation = Annotation.Root({
   mensagens: Annotation<ChatMessage[]>({ reducer: (a, b) => a.concat(b), default: () => [] }),
   pendingToolCalls: Annotation<ToolCall[]>({ reducer: (_a, b) => b, default: () => [] }),
   toolCallsFeitas: Annotation<number>({ reducer: (_a, b) => b, default: () => 0 }),
+  falhasTool: Annotation<number>({ reducer: (a, b) => a + b, default: () => 0 }),
+  toolResults: Annotation<ToolResultTurno[]>({ reducer: (a, b) => a.concat(b), default: () => [] }),
   draft: Annotation<string | null>({ reducer: (_a, b) => b, default: () => null }),
   fallbackMotivo: Annotation<string | null>({ reducer: (_a, b) => b, default: () => null }),
   escalado: Annotation<boolean>({ reducer: (a, b) => a || b, default: () => false }),
+  escaladoTrigger: Annotation<string | null>({ reducer: (a, b) => b ?? a, default: () => null }),
   eventos: Annotation<TraceEvento[]>({ reducer: (a, b) => a.concat(b), default: () => [] }),
   tokensEntrada: Annotation<number>({ reducer: (a, b) => a + b, default: () => 0 }),
   tokensSaida: Annotation<number>({ reducer: (a, b) => a + b, default: () => 0 }),
@@ -52,6 +70,11 @@ export function createAgentRuntime(deps: AgentRuntimeDeps): AgentRuntime {
       const deadline = inicio + input.limites.timeoutMs;
       const toolsPorNome = new Map(input.tools.map((t) => [t.name, t]));
       const toolDefs = paraToolDefs(input.tools);
+      const guardrailCtx = (state: State): GuardrailCtx => ({
+        traceId: input.session.traceId,
+        textoUsuario: input.textoUsuario,
+        toolResults: state.toolResults,
+      });
 
       const montarContexto = async (): Promise<Partial<State>> => {
         const system = renderPromptBase({
@@ -120,7 +143,10 @@ export function createAgentRuntime(deps: AgentRuntimeDeps): AgentRuntime {
       const executarTool = async (
         spec: ToolSpec,
         params: Record<string, unknown>,
-      ): Promise<{ resultado: unknown; erro?: string }> => {
+      ): Promise<{
+        resultado: { rows: readonly Record<string, unknown>[]; truncated: boolean } | null;
+        erro?: string;
+      }> => {
         let tentativas = 0;
         for (;;) {
           try {
@@ -129,10 +155,7 @@ export function createAgentRuntime(deps: AgentRuntimeDeps): AgentRuntime {
           } catch (err) {
             tentativas += 1;
             if (tentativas > input.limites.retriesPorTool) {
-              return {
-                resultado: null,
-                erro: err instanceof Error ? err.message : String(err),
-              };
+              return { resultado: null, erro: err instanceof Error ? err.message : String(err) };
             }
           }
         }
@@ -144,7 +167,11 @@ export function createAgentRuntime(deps: AgentRuntimeDeps): AgentRuntime {
         }
         const novasMensagens: ChatMessage[] = [];
         const eventos: TraceEvento[] = [];
+        const novosResults: ToolResultTurno[] = [];
         let escalado = false;
+        let escaladoTrigger: string | null = null;
+        let fallbackMotivo: string | null = null;
+        let falhas = 0;
 
         for (const call of state.pendingToolCalls) {
           const t0 = Date.now();
@@ -156,16 +183,75 @@ export function createAgentRuntime(deps: AgentRuntimeDeps): AgentRuntime {
           if (!spec) {
             erro = `tool desconhecida: ${call.name}`;
             corpo = JSON.stringify({ erro });
+            falhas += 1;
           } else {
             try {
               params = JSON.parse(call.argumentsJson || '{}') as Record<string, unknown>;
             } catch {
               params = {};
             }
-            if (call.name === NOME_ESCALAR) escalado = true;
-            const r = await executarTool(spec, params);
-            erro = r.erro;
-            corpo = erro ? JSON.stringify({ erro }) : JSON.stringify(r.resultado);
+            // guardrails beforeTool (006)
+            const antes = await runToolHooks(
+              guardrails,
+              'beforeTool',
+              { nome: call.name, params },
+              guardrailCtx(state),
+            );
+            for (const v of antes.verdicts) {
+              eventos.push({
+                tipo: 'verdict',
+                guardrail: v.guardrail,
+                hook: v.hook,
+                verdict: v.verdict,
+              });
+            }
+            if (antes.terminal) {
+              if (antes.terminal.tipo === 'escalate') {
+                escalado = true;
+                escaladoTrigger = antes.terminal.trigger;
+              }
+              erro = `tool bloqueada por guardrail`;
+              corpo = JSON.stringify({ erro });
+            } else {
+              if (call.name === NOME_ESCALAR) {
+                escalado = true;
+                escaladoTrigger = escaladoTrigger ?? 'pedido_do_agente';
+              }
+              const r = await executarTool(spec, params);
+              erro = r.erro;
+              if (erro) falhas += 1;
+              corpo = erro ? JSON.stringify({ erro }) : JSON.stringify(r.resultado);
+              if (!erro && r.resultado) {
+                const resultTurno: ToolResultTurno = {
+                  nome: call.name,
+                  priceSource: spec.priceSource,
+                  rows: r.resultado.rows,
+                };
+                novosResults.push(resultTurno);
+                // guardrails afterTool (006)
+                const depois = await runToolHooks(
+                  guardrails,
+                  'afterTool',
+                  resultTurno,
+                  guardrailCtx(state),
+                );
+                for (const v of depois.verdicts) {
+                  eventos.push({
+                    tipo: 'verdict',
+                    guardrail: v.guardrail,
+                    hook: v.hook,
+                    verdict: v.verdict,
+                  });
+                }
+                if (depois.terminal?.tipo === 'escalate') {
+                  escalado = true;
+                  escaladoTrigger = depois.terminal.trigger;
+                  fallbackMotivo = `guardrail afterTool: ${depois.terminal.trigger}`;
+                } else if (depois.terminal?.tipo === 'block') {
+                  fallbackMotivo = `guardrail afterTool: ${depois.terminal.reason}`;
+                }
+              }
+            }
           }
 
           eventos.push({
@@ -178,44 +264,54 @@ export function createAgentRuntime(deps: AgentRuntimeDeps): AgentRuntime {
           });
           novasMensagens.push({ role: 'tool', content: corpo, toolCallId: call.id });
         }
-        if (escalado) eventos.push({ tipo: 'escalado' });
+        if (escalado && !state.escalado) eventos.push({ tipo: 'escalado' });
+
+        // 2 falhas definitivas de tool no turno ⇒ escalar (006)
+        if (state.falhasTool + falhas >= MAX_FALHAS_TOOL && !fallbackMotivo) {
+          fallbackMotivo = `${MAX_FALHAS_TOOL} falhas de tool no turno`;
+          escalado = true;
+          escaladoTrigger = escaladoTrigger ?? 'falhas_tool';
+        }
 
         return {
           mensagens: novasMensagens,
           eventos,
           escalado,
+          escaladoTrigger,
+          falhasTool: falhas,
+          toolResults: novosResults,
           toolCallsFeitas: state.toolCallsFeitas + state.pendingToolCalls.length,
           pendingToolCalls: [],
+          ...(fallbackMotivo ? { fallbackMotivo } : {}),
         };
       };
 
       const guardrailsSaida = async (state: State): Promise<Partial<State>> => {
-        const eventos: TraceEvento[] = [];
-        let escalado = false;
-        for (const g of guardrails) {
-          const verdict = await g.avaliar(state.draft ?? '', { traceId: input.session.traceId });
-          eventos.push({
-            tipo: 'verdict',
-            guardrail: g.nome,
-            decisao: verdict.decisao,
-            motivo: verdict.motivo,
-          });
-          if (verdict.decisao !== 'permitir') {
-            if (verdict.decisao === 'escalar') escalado = true;
-            return {
-              eventos,
-              escalado,
-              fallbackMotivo: `guardrail ${g.nome}: ${verdict.decisao} (${verdict.motivo})`,
-            };
-          }
+        const r = await runBeforeReply(guardrails, state.draft ?? '', guardrailCtx(state));
+        const eventos: TraceEvento[] = r.verdicts.map((v) => ({
+          tipo: 'verdict',
+          guardrail: v.guardrail,
+          hook: v.hook,
+          verdict: v.verdict,
+        }));
+        if (r.terminal) {
+          const escalate = r.terminal.tipo === 'escalate';
+          return {
+            eventos,
+            escalado: escalate,
+            escaladoTrigger: escalate ? r.terminal.trigger : null,
+            fallbackMotivo: escalate
+              ? `guardrail: escalate(${r.terminal.trigger})`
+              : `guardrail: block(${r.terminal.reason})`,
+          };
         }
-        return { eventos };
+        return { eventos, draft: r.draft }; // rewrites aplicados
       };
 
       const fallback = async (state: State): Promise<Partial<State>> => {
         return {
           eventos: [{ tipo: 'fallback', motivo: state.fallbackMotivo ?? 'desconhecido' }],
-          draft: TEXTO_FALLBACK,
+          draft: state.escalado ? TEXTO_TRANSICAO : TEXTO_FALLBACK,
         };
       };
 
@@ -258,6 +354,7 @@ export function createAgentRuntime(deps: AgentRuntimeDeps): AgentRuntime {
       return {
         resposta: final.respostaFinal ?? TEXTO_FALLBACK,
         escalado: final.escalado,
+        escaladoTrigger: final.escaladoTrigger,
         fallback: final.fallbackMotivo !== null,
         fallbackMotivo: final.fallbackMotivo,
         eventos: final.eventos,
