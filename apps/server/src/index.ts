@@ -5,14 +5,15 @@ import { createLogger } from '@seta/observability';
 import { createExecutor, loadCatalog } from '@seta/query-catalog';
 import { createLogGateway, createMetaGateway, type OutboundGateway } from '@seta/wa-meta';
 import { buildApp } from './app.js';
+import { createAuth } from './auth.js';
 import { startBoss } from './boss.js';
 import { createDb } from './db/index.js';
 import { loadEnv } from './env.js';
 import { createDrizzleQueryEventSink } from './query-event-sink.js';
 import { registerDebounceWorker } from './wa/debounce.js';
 import { registerOutboxWorker } from './wa/outbox.js';
+import { ticketPermiteBot } from './wa/tickets.js';
 import { createAgentTurnoHandler } from './wa/turno-handler.js';
-import { loadVinculos } from './wa/vinculo.js';
 
 const env = loadEnv();
 const clientConfig = loadClientConfig(env.CLIENT_CONFIG_PATH);
@@ -47,10 +48,14 @@ const gateway: OutboundGateway =
     ? createMetaGateway({ accessToken: env.WA_ACCESS_TOKEN, phoneNumberId: env.WA_PHONE_NUMBER_ID })
     : createLogGateway(logger);
 
+const auth = createAuth(db, { secret: env.BETTER_AUTH_SECRET, baseURL: env.BETTER_AUTH_URL });
+
 await registerDebounceWorker({
   db,
   boss,
   debounceMs: env.WA_DEBOUNCE_MS,
+  // HITL (007): bot só responde com o ticket em bot_ativo (resolvido reabre)
+  ticketGate: (conversaId) => ticketPermiteBot(db, conversaId),
   handler: createAgentTurnoHandler({
     db,
     boss,
@@ -58,7 +63,6 @@ await registerDebounceWorker({
     catalog,
     executor,
     clientConfig,
-    vinculos: loadVinculos(env.CONTATOS_PATH),
     logger,
     turnoTimeoutMs: env.AGENT_TURN_TIMEOUT_MS,
     resumoACadaTurnos: env.AGENT_RESUMO_A_CADA_TURNOS,
@@ -67,7 +71,7 @@ await registerDebounceWorker({
 });
 await registerOutboxWorker({ db, boss, gateway, logger });
 
-const app = buildApp({ env, clientConfig, wa: { db, boss } });
+const app = buildApp({ env, clientConfig, wa: { db, boss }, console: { auth, executor } });
 
 try {
   await app.listen({ port: env.PORT, host: '0.0.0.0' });

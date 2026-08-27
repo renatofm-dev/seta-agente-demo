@@ -25,7 +25,7 @@ type Evento = { tipo: 'mensagem'; dados: MensagemEvento } | { tipo: 'turno'; dad
 
 const WA_ID_PADRAO = '5511999990001';
 
-export default function SimuladorPage() {
+export default function SimuladorClient() {
   const [waId, setWaId] = useState(WA_ID_PADRAO);
   const [conectado, setConectado] = useState(false);
   const [texto, setTexto] = useState('');

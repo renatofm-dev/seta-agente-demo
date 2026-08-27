@@ -14,10 +14,10 @@ import { and, asc, eq, ne, sql } from 'drizzle-orm';
 import type { PgBoss } from 'pg-boss';
 import type { Logger } from 'pino';
 import type { Db } from '../db/index.js';
-import { conversa, mensagem, traceTurno } from '../db/schema.js';
+import { contato, conversa, mensagem, traceTurno } from '../db/schema.js';
 import type { TurnoHandler, TurnoPronto } from './debounce.js';
 import { enqueueOutbound } from './outbox.js';
-import type { Vinculos } from './vinculo.js';
+import { aplicarTransicao, garantirTicket } from './tickets.js';
 
 /**
  * Handler real do turno (substitui o stub da 004): monta o contexto da conversa,
@@ -33,7 +33,6 @@ export interface AgentTurnoHandlerDeps {
   readonly catalog: CatalogIndex;
   readonly executor: Executor;
   readonly clientConfig: ClientConfig;
-  readonly vinculos: Vinculos;
   readonly logger: Logger;
   readonly turnoTimeoutMs: number;
   readonly resumoACadaTurnos: number;
@@ -47,6 +46,9 @@ export function createAgentTurnoHandler(deps: AgentTurnoHandlerDeps): TurnoHandl
       try {
         const resultado = await processarComAgente(deps, t, traceId);
         await gravarTrace(deps.db, t, traceId, resultado);
+        if (resultado.escalado) {
+          await escalarTicket(deps, t, resultado);
+        }
       } catch (err) {
         // trace persistido SEMPRE — inclusive na falha catastrófica do runtime
         deps.logger.error({ err, turnoId: t.id, traceId }, 'turno falhou — fallback de emergência');
@@ -83,8 +85,9 @@ async function processarComAgente(
   const [conv] = await deps.db.select().from(conversa).where(eq(conversa.id, t.conversaId));
   if (!conv) throw new Error(`turno ${t.id} sem conversa`);
 
-  // NOTA(007): quando o ticket existir, runtime não responde se status != bot ativo.
-  const clienteId = deps.vinculos.get(conv.waId) ?? '';
+  // vínculo verificado vem da tabela contato (seed grava — corte da 000)
+  const [vinculo] = await deps.db.select().from(contato).where(eq(contato.waId, conv.waId));
+  const clienteId = vinculo?.clienteErpId ?? '';
   const session = { traceId, clienteId };
 
   const efeitos = {
@@ -148,6 +151,26 @@ async function processarComAgente(
     },
     efeitos,
   });
+}
+
+/** Escalada do bot (007): ticket → aguardando_humano com o motivo da tool. */
+async function escalarTicket(
+  deps: AgentTurnoHandlerDeps,
+  t: TurnoPronto,
+  resultado: ResultadoTurno,
+): Promise<void> {
+  const atual = await garantirTicket(deps.db, t.conversaId);
+  if (atual.status !== 'bot_ativo') return; // já escalado/atendido — nada a fazer
+  const evTool = resultado.eventos.find(
+    (e) => e.tipo === 'tool' && e.nome === 'escalar_para_humano',
+  );
+  const motivo =
+    (evTool?.tipo === 'tool' && typeof evTool.params.motivo === 'string'
+      ? evTool.params.motivo
+      : null) ??
+    resultado.fallbackMotivo ??
+    'escalado pelo agente';
+  await aplicarTransicao(deps.db, atual, 'aguardando_humano', 'bot', { motivo });
 }
 
 /** Sumarização barata a cada K turnos (uma chamada curta ao provider). */
