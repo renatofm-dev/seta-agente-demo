@@ -1,4 +1,4 @@
-export { createAgentRuntime, TEXTO_FALLBACK } from './graph.js';
+export { createAgentRuntime, TEXTO_FALLBACK, TEXTO_TRANSICAO } from './graph.js';
 export { renderPromptBase } from './prompt.js';
 export {
   NOME_BUSCAR_CONHECIMENTO,
@@ -9,7 +9,6 @@ export {
 export type {
   AgentRuntime,
   AgentRuntimeDeps,
-  GuardrailSaida,
   LimitesTurno,
   ResponderEfeitos,
   ResultadoTurno,

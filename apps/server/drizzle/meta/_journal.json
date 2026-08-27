@@ -29,6 +29,20 @@
       "when": 1787827888309,
       "tag": "0003_trace-turno-resumo",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1787829335789,
+      "tag": "0004_crm-hitl-auth",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1787829922768,
+      "tag": "0005_account-issuer",
+      "breakpoints": true
     }
   ]
 }

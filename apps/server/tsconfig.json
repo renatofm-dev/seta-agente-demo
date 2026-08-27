@@ -15,7 +15,13 @@
       "path": "../../packages/ai-provider"
     },
     {
+      "path": "../../packages/crm"
+    },
+    {
       "path": "../../packages/client-config"
+    },
+    {
+      "path": "../../packages/guardrails"
     },
     {
       "path": "../../packages/erp-connector"

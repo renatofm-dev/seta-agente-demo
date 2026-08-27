@@ -18,25 +18,38 @@ export interface OutboxDeps {
   readonly boss: PgBoss;
 }
 
-export interface OutboundItem {
-  readonly conversaId: string;
-  readonly turnoId: string;
-  readonly seq: number;
-  readonly texto: string;
-}
+export type OutboundItem =
+  | {
+      /** Resposta do bot: dedupe por turno+seq. */
+      readonly conversaId: string;
+      readonly turnoId: string;
+      readonly seq: number;
+      readonly texto: string;
+      readonly autor?: 'bot';
+    }
+  | {
+      /** Resposta manual do atendente (007): sem turno; dedupe por chave do cliente. */
+      readonly conversaId: string;
+      readonly turnoId?: undefined;
+      readonly chave: string;
+      readonly texto: string;
+      readonly autor: 'atendente';
+    };
 
 export async function enqueueOutbound(
   deps: OutboxDeps,
   item: OutboundItem,
 ): Promise<{ duplicada: boolean; outboxId?: string }> {
+  const manual = item.turnoId === undefined;
   const [linha] = await deps.db
     .insert(outbox)
     .values({
       id: newTraceId(),
       conversaId: item.conversaId,
-      turnoId: item.turnoId,
-      seq: item.seq,
-      dedupeKey: `${item.turnoId}:${item.seq}`,
+      turnoId: manual ? null : item.turnoId,
+      seq: manual ? 1 : item.seq,
+      dedupeKey: manual ? `manual:${item.chave}` : `${item.turnoId}:${item.seq}`,
+      autor: item.autor ?? 'bot',
       texto: item.texto,
     })
     .onConflictDoNothing({ target: outbox.dedupeKey })
@@ -84,6 +97,7 @@ async function enviarLinha(deps: OutboxWorkerDeps, outboxId: string): Promise<vo
         id: newTraceId(),
         conversaId: conv.id,
         direcao: 'out',
+        autor: linha.autor,
         waMessageId,
         texto: linha.texto,
         status: 'enviada',

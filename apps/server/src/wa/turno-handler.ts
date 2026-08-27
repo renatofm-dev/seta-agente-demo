@@ -2,22 +2,24 @@ import {
   createAgentRuntime,
   type ResultadoTurno,
   TEXTO_FALLBACK,
+  TEXTO_TRANSICAO,
   type TraceEvento,
   toolBuscarConhecimentoStub,
   toolEscalarParaHumano,
 } from '@seta/agent';
 import type { AIProvider, ChatMessage } from '@seta/ai-provider';
 import type { ClientConfig } from '@seta/client-config';
+import { classificarIntencao, guardrailPreco, TRIGGER_POR_INTENCAO } from '@seta/guardrails';
 import { newTraceId } from '@seta/observability';
 import { buildToolSpecs, type CatalogIndex, type Executor } from '@seta/query-catalog';
 import { and, asc, eq, ne, sql } from 'drizzle-orm';
 import type { PgBoss } from 'pg-boss';
 import type { Logger } from 'pino';
 import type { Db } from '../db/index.js';
-import { conversa, mensagem, traceTurno } from '../db/schema.js';
+import { contato, conversa, mensagem, sinalAprendizado, traceTurno } from '../db/schema.js';
 import type { TurnoHandler, TurnoPronto } from './debounce.js';
 import { enqueueOutbound } from './outbox.js';
-import type { Vinculos } from './vinculo.js';
+import { aplicarTransicao, garantirTicket } from './tickets.js';
 
 /**
  * Handler real do turno (substitui o stub da 004): monta o contexto da conversa,
@@ -33,7 +35,6 @@ export interface AgentTurnoHandlerDeps {
   readonly catalog: CatalogIndex;
   readonly executor: Executor;
   readonly clientConfig: ClientConfig;
-  readonly vinculos: Vinculos;
   readonly logger: Logger;
   readonly turnoTimeoutMs: number;
   readonly resumoACadaTurnos: number;
@@ -47,6 +48,10 @@ export function createAgentTurnoHandler(deps: AgentTurnoHandlerDeps): TurnoHandl
       try {
         const resultado = await processarComAgente(deps, t, traceId);
         await gravarTrace(deps.db, t, traceId, resultado);
+        if (resultado.escalado) {
+          await escalarTicket(deps, t, resultado);
+        }
+        await gravarSinaisDeVerdict(deps, t, resultado);
       } catch (err) {
         // trace persistido SEMPRE — inclusive na falha catastrófica do runtime
         deps.logger.error({ err, turnoId: t.id, traceId }, 'turno falhou — fallback de emergência');
@@ -63,12 +68,16 @@ export function createAgentTurnoHandler(deps: AgentTurnoHandlerDeps): TurnoHandl
         await gravarTrace(deps.db, t, traceId, {
           resposta: TEXTO_FALLBACK,
           escalado: false,
+          escaladoTrigger: null,
           fallback: true,
           fallbackMotivo: 'erro no runtime',
           eventos,
           tokensEntrada: 0,
           tokensSaida: 0,
           latenciaMs: Date.now() - inicio,
+        }).catch((e) => {
+          // último recurso: nunca deixar o job re-tentar por falha do próprio trace
+          deps.logger.error({ e, turnoId: t.id }, 'falha ao gravar trace de emergência');
         });
       }
     },
@@ -83,8 +92,9 @@ async function processarComAgente(
   const [conv] = await deps.db.select().from(conversa).where(eq(conversa.id, t.conversaId));
   if (!conv) throw new Error(`turno ${t.id} sem conversa`);
 
-  // NOTA(007): quando o ticket existir, runtime não responde se status != bot ativo.
-  const clienteId = deps.vinculos.get(conv.waId) ?? '';
+  // vínculo verificado vem da tabela contato (seed grava — corte da 000)
+  const [vinculo] = await deps.db.select().from(contato).where(eq(contato.waId, conv.waId));
+  const clienteId = vinculo?.clienteErpId ?? '';
   const session = { traceId, clienteId };
 
   const efeitos = {
@@ -104,9 +114,40 @@ async function processarComAgente(
     return {
       resposta: TEXTO_FALLBACK,
       escalado: false,
+      escaladoTrigger: null,
       fallback: true,
       fallbackMotivo: 'LLM não configurado (LLM_BASE_URL/LLM_API_KEY/LLM_MODEL)',
       eventos: [{ tipo: 'fallback', motivo: 'LLM não configurado' }],
+      tokensEntrada: 0,
+      tokensSaida: 0,
+      latenciaMs: 0,
+    };
+  }
+
+  // guardrail de intenção (006): classificação curta ANTES de o agente responder
+  const intencao = await classificarIntencao(
+    deps.provider,
+    t.textoAgregado,
+    deps.clientConfig.guardrails.temasSensiveis,
+  ).catch(() => 'outro' as const);
+  if (intencao !== 'outro') {
+    const trigger = TRIGGER_POR_INTENCAO[intencao];
+    await efeitos.gravarResposta(TEXTO_TRANSICAO);
+    return {
+      resposta: TEXTO_TRANSICAO,
+      escalado: true,
+      escaladoTrigger: trigger,
+      fallback: false,
+      fallbackMotivo: null,
+      eventos: [
+        {
+          tipo: 'verdict',
+          guardrail: 'classificador_intencao',
+          hook: 'beforeReply',
+          verdict: { tipo: 'escalate', trigger, reason: `intenção classificada: ${intencao}` },
+        },
+        { tipo: 'escalado' },
+      ],
       tokensEntrada: 0,
       tokensSaida: 0,
       latenciaMs: 0,
@@ -132,7 +173,10 @@ async function processarComAgente(
     toolEscalarParaHumano(),
   ];
 
-  const runtime = createAgentRuntime({ provider: deps.provider });
+  const runtime = createAgentRuntime({
+    provider: deps.provider,
+    guardrails: [guardrailPreco()],
+  });
   return runtime.processarTurno({
     session,
     persona: deps.clientConfig.persona,
@@ -148,6 +192,52 @@ async function processarComAgente(
     },
     efeitos,
   });
+}
+
+/** Escalada do bot (007): ticket → aguardando_humano com o motivo da tool. */
+async function escalarTicket(
+  deps: AgentTurnoHandlerDeps,
+  t: TurnoPronto,
+  resultado: ResultadoTurno,
+): Promise<void> {
+  const atual = await garantirTicket(deps.db, t.conversaId);
+  if (atual.status !== 'bot_ativo') return; // já escalado/atendido — nada a fazer
+  const evTool = resultado.eventos.find(
+    (e) => e.tipo === 'tool' && e.nome === 'escalar_para_humano',
+  );
+  const motivoTool =
+    evTool?.tipo === 'tool' && typeof evTool.params.motivo === 'string'
+      ? evTool.params.motivo
+      : null;
+  // motivo textual da tool > trigger do guardrail > motivo do fallback
+  const motivo =
+    motivoTool ?? resultado.escaladoTrigger ?? resultado.fallbackMotivo ?? 'escalado pelo agente';
+  await aplicarTransicao(deps.db, atual, 'aguardando_humano', 'bot', { motivo });
+}
+
+/** 006: todo verdict != allow do turno vira sinal_aprendizado (a 009 consome). */
+async function gravarSinaisDeVerdict(
+  deps: AgentTurnoHandlerDeps,
+  t: TurnoPronto,
+  resultado: ResultadoTurno,
+): Promise<void> {
+  const verdicts = resultado.eventos.filter((e) => e.tipo === 'verdict');
+  for (const v of verdicts) {
+    if (v.tipo !== 'verdict') continue;
+    await deps.db.insert(sinalAprendizado).values({
+      id: newTraceId(),
+      tipo: 'guardrail_verdict',
+      conversaId: t.conversaId,
+      payload: {
+        guardrail: v.guardrail,
+        hook: v.hook,
+        verdict: v.verdict,
+        textoUsuario: t.textoAgregado,
+        resposta: resultado.resposta,
+        turnoId: t.id,
+      },
+    });
+  }
 }
 
 /** Sumarização barata a cada K turnos (uma chamada curta ao provider). */
@@ -202,7 +292,8 @@ async function gravarTrace(
   traceId: string,
   r: ResultadoTurno,
 ): Promise<void> {
-  const contexto = r.eventos.find((e) => e.tipo === 'contexto') ?? null;
+  // turnos sem nó de contexto (ex.: escalada pelo classificador) gravam {}
+  const contexto = r.eventos.find((e) => e.tipo === 'contexto') ?? {};
   await db.insert(traceTurno).values({
     id: newTraceId(),
     turnoId: t.id,

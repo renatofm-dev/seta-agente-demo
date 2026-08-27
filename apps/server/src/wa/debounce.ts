@@ -41,6 +41,11 @@ export interface DebounceDeps {
   readonly debounceMs: number;
   readonly handler: TurnoHandler;
   readonly logger: Logger;
+  /**
+   * Gate do HITL (007): retorna false para NÃO agregar turno (bot silenciado —
+   * ticket aguardando/atendido por humano). Ausente ⇒ sempre permite.
+   */
+  readonly ticketGate?: (conversaId: string) => Promise<boolean>;
 }
 
 export async function registerDebounceWorker(deps: DebounceDeps): Promise<void> {
@@ -64,6 +69,9 @@ async function processarDisparo(deps: DebounceDeps, conversaId: string): Promise
     )
     .orderBy(asc(mensagem.criadoEm));
   if (pendentes.length === 0) return;
+
+  // HITL: bot silenciado ⇒ mensagem NÃO gera turno; fica pendente até devolver
+  if (deps.ticketGate && !(await deps.ticketGate(conversaId))) return;
 
   const ultima = pendentes[pendentes.length - 1] as (typeof pendentes)[number];
   const silencioMs = Date.now() - ultima.criadoEm.getTime();

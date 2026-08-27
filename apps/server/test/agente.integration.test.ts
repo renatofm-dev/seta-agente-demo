@@ -12,12 +12,22 @@ import { adminUrl, applySchema, seedData } from '../../../infra/erp-mock/seed.ts
 import { type App, buildApp } from '../src/app.ts';
 import { FILA_DEBOUNCE, FILA_OUTBOX, startBoss } from '../src/boss.ts';
 import { createDb, type Db } from '../src/db/index.ts';
-import { conversa, eventoQuery, mensagem, outbox, traceTurno, turno } from '../src/db/schema.ts';
+import {
+  conversa,
+  eventoQuery,
+  eventoTicket,
+  mensagem,
+  outbox,
+  sinalAprendizado,
+  ticket,
+  traceTurno,
+  turno,
+} from '../src/db/schema.ts';
 import { type Env, loadEnv } from '../src/env.ts';
 import { createDrizzleQueryEventSink } from '../src/query-event-sink.ts';
+import { seedApp } from '../src/seed-app.ts';
 import { registerDebounceWorker } from '../src/wa/debounce.ts';
 import { createAgentTurnoHandler } from '../src/wa/turno-handler.ts';
-import { loadVinculos } from '../src/wa/vinculo.ts';
 
 /**
  * Critérios da spec 005, ponta a ponta VIA SIMULADOR (provider fake determinístico,
@@ -43,7 +53,6 @@ const clientConfig = loadClientConfig(
   join(import.meta.dirname, '../../../configs/demo/client.yaml'),
 );
 const catalog = loadCatalog(join(import.meta.dirname, '../../../catalog'));
-const vinculos = loadVinculos(join(import.meta.dirname, '../../../configs/demo/contatos.yaml'));
 
 async function aguardar(cond: () => Promise<boolean>, timeoutMs = 10_000): Promise<void> {
   const inicio = Date.now();
@@ -91,6 +100,7 @@ beforeAll(async () => {
         process.env.ERP_DATABASE_URL ?? 'postgres://erp_ro:erp_ro_dev@localhost:5432/erp_mock',
       LOG_LEVEL: 'silent',
       DEV_SIMULATOR: 'true',
+      CONTATOS_PATH: join(import.meta.dirname, '../../../configs/demo/contatos.yaml'),
     } as NodeJS.ProcessEnv),
     WA_DEBOUNCE_MS: DEBOUNCE_MS,
   };
@@ -98,6 +108,7 @@ beforeAll(async () => {
   db = criado.db;
   closeDb = criado.close;
   await migrate(db, { migrationsFolder: join(import.meta.dirname, '../drizzle') });
+  await seedApp(db, env); // vínculo contato↔cliente agora vem da tabela (007)
 
   connector = createPgConnector({ url: env.ERP_DATABASE_URL, poolMax: 3 });
   executor = createExecutor({
@@ -120,7 +131,6 @@ beforeAll(async () => {
       catalog,
       executor,
       clientConfig,
-      vinculos,
       logger,
       turnoTimeoutMs: 30_000,
       resumoACadaTurnos: 99, // sem sumarização nestes testes
@@ -132,6 +142,9 @@ beforeAll(async () => {
 
 beforeEach(async () => {
   fake = createFakeProvider();
+  await db.delete(sinalAprendizado);
+  await db.delete(eventoTicket);
+  await db.delete(ticket);
   await db.delete(traceTurno);
   await db.delete(eventoQuery);
   await db.delete(outbox);
@@ -153,6 +166,7 @@ afterAll(async () => {
 describe('critérios spec 005 (via simulador)', () => {
   it('pergunta de boletos → tool certa → resposta com dados do seed', async () => {
     fake
+      .respondeTexto('outro') // classificador de intenção (006)
       .chamaTool('titulos_abertos', {})
       .respondeTexto('Encontrei seus boletos em aberto! O primeiro vence em breve.');
 
@@ -160,7 +174,7 @@ describe('critérios spec 005 (via simulador)', () => {
     const { resposta, trace } = await aguardarResposta();
 
     // a tool certa rodou e o RESULTADO REAL DO SEED voltou ao modelo
-    const toolResult = fake.requests[1]?.messages.find((m) => m.role === 'tool');
+    const toolResult = fake.requests[2]?.messages.find((m) => m.role === 'tool');
     expect(toolResult?.content).toContain('valor_centavos');
     expect(toolResult?.content).toContain('linha_digitavel');
 
@@ -178,6 +192,7 @@ describe('critérios spec 005 (via simulador)', () => {
 
   it('pergunta sem caminho de dado → admite não saber e oferece humano (replay)', async () => {
     fake
+      .respondeTexto('outro') // classificador de intenção (006)
       .chamaTool('buscar_conhecimento', { consulta: 'política de trocas de barril' })
       .respondeTexto(
         'Não encontrei essa informação na nossa base. Quer que eu acione um atendente humano para te ajudar?',
@@ -186,14 +201,17 @@ describe('critérios spec 005 (via simulador)', () => {
     await enviarPeloSimulador(WA_ID_VINCULADO, 'como funciona a troca de barril retornável?');
     const { resposta, trace } = await aguardarResposta();
 
-    const toolResult = fake.requests[1]?.messages.find((m) => m.role === 'tool');
+    const toolResult = fake.requests[2]?.messages.find((m) => m.role === 'tool');
     expect(toolResult?.content).toBe('{"rows":[],"truncated":false}'); // stub honesto da 008
     expect(resposta).toMatch(/atendente humano/);
     expect(trace.resposta).toBe(resposta);
   }, 20_000);
 
   it('trace_turno reconstitui a decisão inteira', async () => {
-    fake.chamaTool('perfil_cliente', {}).respondeTexto('Você é o Depósito do Andrade!');
+    fake
+      .respondeTexto('outro') // classificador de intenção (006)
+      .chamaTool('perfil_cliente', {})
+      .respondeTexto('Você é o Depósito do Andrade!');
     await enviarPeloSimulador(WA_ID_VINCULADO, 'qual meu cadastro?');
     const { trace } = await aguardarResposta();
 
@@ -214,6 +232,7 @@ describe('critérios spec 005 (via simulador)', () => {
 
   it('wa_id SEM vínculo: tools de dado recusam e o modelo se explica', async () => {
     fake
+      .respondeTexto('outro') // classificador de intenção (006)
       .chamaTool('titulos_abertos', {})
       .respondeTexto('Não consegui localizar seu cadastro. Vou acionar um atendente.');
 
