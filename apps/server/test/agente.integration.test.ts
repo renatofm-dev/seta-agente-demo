@@ -131,6 +131,7 @@ beforeAll(async () => {
       catalog,
       executor,
       clientConfig,
+      registry: null, // skills fora destes cenários (009 tem suíte própria)
       logger,
       turnoTimeoutMs: 30_000,
       resumoACadaTurnos: 99, // sem sumarização nestes testes

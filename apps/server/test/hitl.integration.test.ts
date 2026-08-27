@@ -137,6 +137,7 @@ beforeAll(async () => {
       catalog,
       executor,
       clientConfig,
+      registry: null, // skills fora destes cenários (009 tem suíte própria)
       logger,
       turnoTimeoutMs: 30_000,
       resumoACadaTurnos: 99,
@@ -233,8 +234,9 @@ describe('critérios spec 007 (fluxo HITL completo)', () => {
     expect(resposta.statusCode).toBe(202);
 
     const sinais = await db.select().from(sinalAprendizado);
-    expect(sinais).toHaveLength(1);
-    const payload = sinais[0]?.payload as {
+    const correcoes = sinais.filter((sg) => sg.tipo === 'correcao_hitl');
+    expect(correcoes).toHaveLength(1);
+    const payload = correcoes[0]?.payload as {
       draftBot: string;
       respostaHumano: string;
       motivoEscalonamento: string;
@@ -248,7 +250,9 @@ describe('critérios spec 007 (fluxo HITL completo)', () => {
       texto: 'Novidades em breve!',
       chave: 'teste-chave-67890',
     });
-    expect((await db.select({ n: count() }).from(sinalAprendizado))[0]?.n).toBe(1);
+    expect(
+      (await db.select().from(sinalAprendizado)).filter((sg) => sg.tipo === 'correcao_hitl'),
+    ).toHaveLength(1);
 
     // resposta do atendente sai pela outbox com autor correto
     await aguardar(async () =>
