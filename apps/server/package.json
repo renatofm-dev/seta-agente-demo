@@ -17,6 +17,7 @@
     "@seta/guardrails": "workspace:*",
     "@seta/observability": "workspace:*",
     "@seta/query-catalog": "workspace:*",
+    "@seta/skills": "workspace:*",
     "@seta/wa-meta": "workspace:*",
     "better-auth": "^1.7.2",
     "drizzle-orm": "^0.45.2",
