@@ -118,7 +118,7 @@ export const eventoTicket = pgTable('evento_ticket', {
 /** Sinais para o loop de aprendizado (009 consome). */
 export const sinalAprendizado = pgTable('sinal_aprendizado', {
   id: uuid('id').primaryKey(),
-  tipo: text('tipo', { enum: ['correcao_hitl'] }).notNull(),
+  tipo: text('tipo', { enum: ['correcao_hitl', 'guardrail_verdict'] }).notNull(),
   ticketId: uuid('ticket_id').references(() => ticket.id),
   conversaId: uuid('conversa_id')
     .notNull()
