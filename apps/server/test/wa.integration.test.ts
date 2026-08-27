@@ -8,7 +8,16 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { type App, buildApp } from '../src/app.ts';
 import { FILA_DEBOUNCE, FILA_OUTBOX, startBoss } from '../src/boss.ts';
 import { createDb, type Db } from '../src/db/index.ts';
-import { conversa, mensagem, outbox, traceTurno, turno } from '../src/db/schema.ts';
+import {
+  conversa,
+  eventoTicket,
+  mensagem,
+  outbox,
+  sinalAprendizado,
+  ticket,
+  traceTurno,
+  turno,
+} from '../src/db/schema.ts';
 import { type Env, loadEnv } from '../src/env.ts';
 import { registerDebounceWorker, type TurnoPronto } from '../src/wa/debounce.ts';
 import { enqueueOutbound, registerOutboxWorker } from '../src/wa/outbox.ts';
@@ -118,6 +127,9 @@ beforeAll(async () => {
 }, 30_000);
 
 beforeEach(async () => {
+  await db.delete(sinalAprendizado);
+  await db.delete(eventoTicket);
+  await db.delete(ticket);
   await db.delete(traceTurno); // referencia turno (FK) — limpar primeiro
   await db.delete(outbox);
   await db.delete(mensagem);
