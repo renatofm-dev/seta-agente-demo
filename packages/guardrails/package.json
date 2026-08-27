@@ -10,6 +10,7 @@
     }
   },
   "dependencies": {
+    "@seta/ai-provider": "workspace:*",
     "zod": "^4.4.3"
   }
 }
