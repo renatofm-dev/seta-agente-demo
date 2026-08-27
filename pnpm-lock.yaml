@@ -111,6 +111,9 @@ importers:
       '@seta/query-catalog':
         specifier: workspace:*
         version: link:../../packages/query-catalog
+      '@seta/skills':
+        specifier: workspace:*
+        version: link:../../packages/skills
       '@seta/wa-meta':
         specifier: workspace:*
         version: link:../../packages/wa-meta
@@ -247,6 +250,9 @@ importers:
 
   packages/skills:
     dependencies:
+      yaml:
+        specifier: ^2.9.0
+        version: 2.9.0
       zod:
         specifier: ^4.4.3
         version: 4.4.3
