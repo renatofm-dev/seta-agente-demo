@@ -43,6 +43,14 @@ export default function ConsoleLayout({ children }: { children: React.ReactNode 
             >
               Inbox
             </Link>
+            {sessao.role === 'curador' && (
+              <Link
+                href="/aprendizado"
+                className={pathname === '/aprendizado' ? 'font-medium' : 'text-muted-foreground'}
+              >
+                Aprendizado
+              </Link>
+            )}
           </nav>
           <div className="ml-auto flex items-center gap-3 text-sm">
             <span className="text-muted-foreground">

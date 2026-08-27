@@ -10,6 +10,8 @@ import { startBoss } from './boss.js';
 import { createDb } from './db/index.js';
 import { loadEnv } from './env.js';
 import { createDrizzleQueryEventSink } from './query-event-sink.js';
+import { createSkillRegistry } from './skills/registry.js';
+import { registerSinaisDiarios } from './skills/sinais-job.js';
 import { registerDebounceWorker } from './wa/debounce.js';
 import { registerOutboxWorker } from './wa/outbox.js';
 import { ticketPermiteBot } from './wa/tickets.js';
@@ -49,6 +51,14 @@ const gateway: OutboundGateway =
     : createLogGateway(logger);
 
 const auth = createAuth(db, { secret: env.BETTER_AUTH_SECRET, baseURL: env.BETTER_AUTH_URL });
+const registry = createSkillRegistry({
+  db,
+  embed:
+    provider && env.EMBEDDING_MODEL
+      ? (texto) => provider.embed([texto]).then((v) => Array.from(v[0] ?? []))
+      : null,
+});
+await registerSinaisDiarios(boss, db, logger);
 
 await registerDebounceWorker({
   db,
@@ -63,6 +73,7 @@ await registerDebounceWorker({
     catalog,
     executor,
     clientConfig,
+    registry,
     logger,
     turnoTimeoutMs: env.AGENT_TURN_TIMEOUT_MS,
     resumoACadaTurnos: env.AGENT_RESUMO_A_CADA_TURNOS,
@@ -71,7 +82,12 @@ await registerDebounceWorker({
 });
 await registerOutboxWorker({ db, boss, gateway, logger });
 
-const app = buildApp({ env, clientConfig, wa: { db, boss }, console: { auth, executor } });
+const app = buildApp({
+  env,
+  clientConfig,
+  wa: { db, boss },
+  console: { auth, executor, registry, provider },
+});
 
 try {
   await app.listen({ port: env.PORT, host: '0.0.0.0' });

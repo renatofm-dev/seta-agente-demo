@@ -12,6 +12,7 @@ import type { ClientConfig } from '@seta/client-config';
 import { classificarIntencao, guardrailPreco, TRIGGER_POR_INTENCAO } from '@seta/guardrails';
 import { newTraceId } from '@seta/observability';
 import { buildToolSpecs, type CatalogIndex, type Executor } from '@seta/query-catalog';
+import type { SkillRegistry } from '@seta/skills';
 import { and, asc, eq, ne, sql } from 'drizzle-orm';
 import type { PgBoss } from 'pg-boss';
 import type { Logger } from 'pino';
@@ -35,6 +36,8 @@ export interface AgentTurnoHandlerDeps {
   readonly catalog: CatalogIndex;
   readonly executor: Executor;
   readonly clientConfig: ClientConfig;
+  /** null ⇒ turno roda sem skills (009). */
+  readonly registry: SkillRegistry | null;
   readonly logger: Logger;
   readonly turnoTimeoutMs: number;
   readonly resumoACadaTurnos: number;
@@ -173,6 +176,22 @@ async function processarComAgente(
     toolEscalarParaHumano(),
   ];
 
+  // skills top-2 no contexto (009); ids entram no trace p/ atribuição de uso
+  let skills: { id: string; conteudo: string }[] = [];
+  if (deps.registry) {
+    const embedding = await deps.provider
+      .embed([t.textoAgregado])
+      .then((v) => Array.from(v[0] ?? []))
+      .catch(() => undefined);
+    const ativas = await deps.registry
+      .activeFor({ texto: t.textoAgregado, ...(embedding?.length ? { embedding } : {}) }, 2)
+      .catch(() => []);
+    skills = ativas.map((sk) => ({
+      id: sk.skillId,
+      conteudo: `## ${sk.idLogico} (v${sk.versao})\n${sk.doc.corpo}`,
+    }));
+  }
+
   const runtime = createAgentRuntime({
     provider: deps.provider,
     guardrails: [guardrailPreco()],
@@ -181,7 +200,7 @@ async function processarComAgente(
     session,
     persona: deps.clientConfig.persona,
     resumo: conv.resumo,
-    skills: [], // top-k chega na 009
+    skills,
     historico,
     textoUsuario: t.textoAgregado,
     tools,
@@ -213,6 +232,19 @@ async function escalarTicket(
   const motivo =
     motivoTool ?? resultado.escaladoTrigger ?? resultado.fallbackMotivo ?? 'escalado pelo agente';
   await aplicarTransicao(deps.db, atual, 'aguardando_humano', 'bot', { motivo });
+  // escalonamento também é sinal de aprendizado (009)
+  await deps.db.insert(sinalAprendizado).values({
+    id: newTraceId(),
+    tipo: 'escalonamento',
+    ticketId: atual.id,
+    conversaId: t.conversaId,
+    payload: {
+      refId: t.id,
+      motivo,
+      trigger: resultado.escaladoTrigger,
+      textoUsuario: t.textoAgregado,
+    },
+  });
 }
 
 /** 006: todo verdict != allow do turno vira sinal_aprendizado (a 009 consome). */

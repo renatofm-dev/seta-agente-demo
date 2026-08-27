@@ -194,7 +194,11 @@ export const consoleRoutes: FastifyPluginCallback<ConsoleRoutesOpts> = (app, opt
           .select({ id: sinalAprendizado.id })
           .from(sinalAprendizado)
           .where(
-            and(eq(sinalAprendizado.ticketId, t.id), gt(sinalAprendizado.criadoEm, t.escaladoEm)),
+            and(
+              eq(sinalAprendizado.ticketId, t.id),
+              eq(sinalAprendizado.tipo, 'correcao_hitl'),
+              gt(sinalAprendizado.criadoEm, t.escaladoEm),
+            ),
           )
           .limit(1)
       : [];
