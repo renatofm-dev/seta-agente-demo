@@ -17,7 +17,7 @@
     "test": "tsc -b && vitest run",
     "lint": "biome check . && depcruise apps packages",
     "db:migrate": "pnpm --filter @seta/server db:migrate",
-    "db:seed": "pnpm db:seed:erp && node -e \"console.log('db:seed: seed do banco app (vínculos wa_id) chega na spec 007')\"",
+    "db:seed": "pnpm db:seed:erp && pnpm --filter @seta/server db:seed:app",
     "db:seed:erp": "tsc -b && node --env-file-if-exists=.env infra/erp-mock/seed.ts"
   },
   "devDependencies": {

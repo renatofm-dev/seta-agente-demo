@@ -12,7 +12,17 @@ import { adminUrl, applySchema, seedData } from '../../../infra/erp-mock/seed.ts
 import { type App, buildApp } from '../src/app.ts';
 import { FILA_DEBOUNCE, FILA_OUTBOX, startBoss } from '../src/boss.ts';
 import { createDb, type Db } from '../src/db/index.ts';
-import { conversa, eventoQuery, mensagem, outbox, traceTurno, turno } from '../src/db/schema.ts';
+import {
+  conversa,
+  eventoQuery,
+  eventoTicket,
+  mensagem,
+  outbox,
+  sinalAprendizado,
+  ticket,
+  traceTurno,
+  turno,
+} from '../src/db/schema.ts';
 import { type Env, loadEnv } from '../src/env.ts';
 import { createDrizzleQueryEventSink } from '../src/query-event-sink.ts';
 import { registerDebounceWorker } from '../src/wa/debounce.ts';
@@ -132,6 +142,9 @@ beforeAll(async () => {
 
 beforeEach(async () => {
   fake = createFakeProvider();
+  await db.delete(sinalAprendizado);
+  await db.delete(eventoTicket);
+  await db.delete(ticket);
   await db.delete(traceTurno);
   await db.delete(eventoQuery);
   await db.delete(outbox);

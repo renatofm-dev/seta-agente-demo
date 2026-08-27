@@ -32,8 +32,11 @@ export const EnvSchema = z.object({
   AGENT_RESUMO_A_CADA_TURNOS: z.coerce.number().int().min(1).default(4),
   /** Diretório das entradas do catálogo de queries. */
   CATALOG_DIR: z.string().min(1).default('catalog'),
-  /** Vínculos demo wa_id→cliente (formalizado em tabela na 007). */
+  /** Vínculos demo wa_id→cliente (seed grava na tabela contato — 007). */
   CONTATOS_PATH: z.string().min(1).default('configs/demo/contatos.yaml'),
+  /** Better Auth (console HITL). Trocar o secret fora de dev. */
+  BETTER_AUTH_SECRET: z.string().min(8).default('dev-secret-trocar-em-prod'),
+  BETTER_AUTH_URL: z.url().default('http://localhost:3001'),
 });
 export type Env = z.infer<typeof EnvSchema>;
 

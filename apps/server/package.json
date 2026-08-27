@@ -5,16 +5,19 @@
   "type": "module",
   "scripts": {
     "db:migrate": "drizzle-kit migrate",
-    "db:generate": "drizzle-kit generate"
+    "db:generate": "drizzle-kit generate",
+    "db:seed:app": "node --env-file-if-exists=../../.env dist/seed-app.js"
   },
   "dependencies": {
     "@seta/agent": "workspace:*",
     "@seta/ai-provider": "workspace:*",
     "@seta/client-config": "workspace:*",
+    "@seta/crm": "workspace:*",
     "@seta/erp-connector": "workspace:*",
     "@seta/observability": "workspace:*",
     "@seta/query-catalog": "workspace:*",
     "@seta/wa-meta": "workspace:*",
+    "better-auth": "^1.7.2",
     "drizzle-orm": "^0.45.2",
     "fastify": "^5.12.1",
     "pg": "^8.23.0",
