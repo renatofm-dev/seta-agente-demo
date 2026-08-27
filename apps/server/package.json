@@ -14,6 +14,7 @@
     "@seta/client-config": "workspace:*",
     "@seta/crm": "workspace:*",
     "@seta/erp-connector": "workspace:*",
+    "@seta/guardrails": "workspace:*",
     "@seta/observability": "workspace:*",
     "@seta/query-catalog": "workspace:*",
     "@seta/wa-meta": "workspace:*",
