@@ -2,6 +2,7 @@ import {
   createAgentRuntime,
   type ResponderEfeitos,
   TEXTO_FALLBACK,
+  TEXTO_TRANSICAO,
   type TurnoInput,
   toolEscalarParaHumano,
 } from '@seta/agent';
@@ -177,7 +178,7 @@ describe('grafo do agente', () => {
     expect(r.resposta).toBe(TEXTO_FALLBACK);
   });
 
-  it('guardrail que bloqueia leva ao fallback com verdict no trace', async () => {
+  it('guardrail escalate leva à mensagem de transição com verdict no trace', async () => {
     const fake = createFakeProvider().respondeTexto('Te dou 20% de desconto!');
     const { efeitos } = efeitosFake();
     const runtime = createAgentRuntime({
@@ -185,10 +186,10 @@ describe('grafo do agente', () => {
       guardrails: [
         {
           nome: 'sem-desconto',
-          async avaliar(draft) {
+          async beforeReply(draft) {
             return draft.includes('desconto')
-              ? { decisao: 'escalar', motivo: 'agente não negocia desconto' }
-              : { decisao: 'permitir', motivo: 'ok' };
+              ? { tipo: 'escalate', trigger: 'negociacao_preco' }
+              : { tipo: 'allow' };
           },
         },
       ],
@@ -198,8 +199,50 @@ describe('grafo do agente', () => {
 
     expect(r.fallback).toBe(true);
     expect(r.escalado).toBe(true);
-    expect(r.resposta).toBe(TEXTO_FALLBACK);
+    expect(r.escaladoTrigger).toBe('negociacao_preco');
+    expect(r.resposta).toBe(TEXTO_TRANSICAO);
     const verdict = r.eventos.find((e) => e.tipo === 'verdict');
-    expect(verdict).toMatchObject({ guardrail: 'sem-desconto', decisao: 'escalar' });
+    expect(verdict).toMatchObject({
+      guardrail: 'sem-desconto',
+      verdict: { tipo: 'escalate', trigger: 'negociacao_preco' },
+    });
+  });
+
+  it('guardrail rewrite ajusta o draft e a resposta segue', async () => {
+    const fake = createFakeProvider().respondeTexto('Segue seu pedido.');
+    const { efeitos } = efeitosFake();
+    const runtime = createAgentRuntime({
+      provider: fake,
+      guardrails: [
+        {
+          nome: 'assinatura',
+          async beforeReply(draft) {
+            return { tipo: 'rewrite', patch: `${draft} — Equipe TS Explorer` };
+          },
+        },
+      ],
+    });
+    const r = await runtime.processarTurno(inputBase({}, efeitos));
+    expect(r.resposta).toBe('Segue seu pedido. — Equipe TS Explorer');
+    expect(r.fallback).toBe(false);
+  });
+
+  it('2 falhas de tool no turno escalam (006)', async () => {
+    const toolQueFalha: ToolSpec = {
+      ...toolTitulos(),
+      async execute() {
+        throw new Error('ERP fora do ar');
+      },
+    };
+    const fake = createFakeProvider()
+      .chamaTool('titulos_abertos', {})
+      .chamaTool('titulos_abertos', {});
+    const { efeitos } = efeitosFake();
+    const runtime = createAgentRuntime({ provider: fake });
+    const r = await runtime.processarTurno(inputBase({ tools: [toolQueFalha] }, efeitos));
+    expect(r.fallback).toBe(true);
+    expect(r.escalado).toBe(true);
+    expect(r.escaladoTrigger).toBe('falhas_tool');
+    expect(r.resposta).toBe(TEXTO_TRANSICAO);
   });
 });

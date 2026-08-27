@@ -1,5 +1,5 @@
 import type { AIProvider, ChatMessage } from '@seta/ai-provider';
-import type { Verdict } from '@seta/guardrails';
+import type { GuardrailHooks, Verdict } from '@seta/guardrails';
 import type { SessionCtx, ToolSpec } from '@seta/query-catalog';
 
 /** Evento do trace do turno — persistido SEMPRE (trace_turno). */
@@ -26,15 +26,9 @@ export type TraceEvento =
       latencyMs: number;
       erro?: string;
     }
-  | { tipo: 'verdict'; guardrail: string; decisao: Verdict['decisao']; motivo: string }
+  | { tipo: 'verdict'; guardrail: string; hook: string; verdict: Verdict }
   | { tipo: 'fallback'; motivo: string }
   | { tipo: 'escalado' };
-
-/** Hook de guardrail de saída (a 006 traz as regras; aqui só o contrato). */
-export interface GuardrailSaida {
-  readonly nome: string;
-  avaliar(draft: string, ctx: { traceId: string }): Promise<Verdict>;
-}
 
 /** Efeitos do nó responder — implementados pelo server (outbox, resumo). */
 export interface ResponderEfeitos {
@@ -45,7 +39,7 @@ export interface ResponderEfeitos {
 export interface LimitesTurno {
   readonly maxToolCalls: number;
   readonly timeoutMs: number;
-  /** retries por tool que falhou (spec: 1). */
+  /** retries por tool que falhou (spec 005: 1). */
   readonly retriesPorTool: number;
 }
 
@@ -65,6 +59,8 @@ export interface TurnoInput {
 export interface ResultadoTurno {
   readonly resposta: string;
   readonly escalado: boolean;
+  /** Gatilho da escalada (006): negociacao_preco | tema_sensivel | pedido_explicito | falhas_tool | ... */
+  readonly escaladoTrigger: string | null;
   readonly fallback: boolean;
   readonly fallbackMotivo: string | null;
   readonly eventos: readonly TraceEvento[];
@@ -75,7 +71,8 @@ export interface ResultadoTurno {
 
 export interface AgentRuntimeDeps {
   readonly provider: AIProvider;
-  readonly guardrails?: readonly GuardrailSaida[];
+  /** Pipeline de guardrails (006): beforeTool/afterTool/beforeReply. */
+  readonly guardrails?: readonly GuardrailHooks[];
 }
 
 export interface AgentRuntime {
