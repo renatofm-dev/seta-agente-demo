@@ -21,6 +21,19 @@ export const EnvSchema = z.object({
   WA_PHONE_NUMBER_ID: z.string().optional(),
   /** Silêncio (ms) que fecha um turno no debouncer. */
   WA_DEBOUNCE_MS: z.coerce.number().int().min(100).default(4_000),
+  /** Provedor LLM OpenAI-compatible. Ausente ⇒ agente responde fallback honesto. */
+  LLM_BASE_URL: z.url().optional(),
+  LLM_API_KEY: z.string().min(1).optional(),
+  LLM_MODEL: z.string().min(1).optional(),
+  EMBEDDING_MODEL: z.string().min(1).optional(),
+  /** Timeout do turno do agente (spec 005: 60 s). */
+  AGENT_TURN_TIMEOUT_MS: z.coerce.number().int().min(1_000).default(60_000),
+  /** Sumarização barata do resumo rolante a cada K turnos. */
+  AGENT_RESUMO_A_CADA_TURNOS: z.coerce.number().int().min(1).default(4),
+  /** Diretório das entradas do catálogo de queries. */
+  CATALOG_DIR: z.string().min(1).default('catalog'),
+  /** Vínculos demo wa_id→cliente (formalizado em tabela na 007). */
+  CONTATOS_PATH: z.string().min(1).default('configs/demo/contatos.yaml'),
 });
 export type Env = z.infer<typeof EnvSchema>;
 
