@@ -198,6 +198,7 @@ describe('critérios spec 007 (fluxo HITL completo)', () => {
   it('escalada → fila; assumir silencia o bot; responder gera sinal; devolver reativa', async () => {
     // 1) contato pede desconto → agente escala
     fake
+      .respondeTexto('outro') // classificador (o fluxo testado aqui é a escalada via tool)
       .chamaTool('escalar_para_humano', { motivo: 'pedido de desconto' })
       .respondeTexto('Entendi! Vou te passar para um atendente.');
     await mensagemDoContato('consegue me dar 20% de desconto no chopp?');
@@ -255,7 +256,9 @@ describe('critérios spec 007 (fluxo HITL completo)', () => {
     );
 
     // 5) devolver ao bot → mensagens pendentes viram turno (bot reativado)
-    fake.respondeTexto('Sobre sua pergunta anterior: sim, consigo te ajudar!');
+    fake
+      .respondeTexto('outro')
+      .respondeTexto('Sobre sua pergunta anterior: sim, consigo te ajudar!');
     expect((await apiConsole('POST', `/api/console/ticket/${ticketId}/devolver`)).statusCode).toBe(
       200,
     );
@@ -265,7 +268,7 @@ describe('critérios spec 007 (fluxo HITL completo)', () => {
   }, 30_000);
 
   it('transições inválidas via API → 409 sem efeito', async () => {
-    fake.respondeTexto('Olá! Como posso ajudar?');
+    fake.respondeTexto('outro').respondeTexto('Olá! Como posso ajudar?');
     await mensagemDoContato('oi');
     await aguardar(async () => (await contarTurnos()) === 1);
     const [t] = await db.select().from(ticket);
@@ -283,7 +286,7 @@ describe('critérios spec 007 (fluxo HITL completo)', () => {
   });
 
   it('ticket resolvido reabre com nova mensagem do contato', async () => {
-    fake.respondeTexto('Certo!');
+    fake.respondeTexto('outro').respondeTexto('Certo!');
     await mensagemDoContato('primeira');
     await aguardar(async () => (await contarTurnos()) === 1);
     // resolve na marra: bot_ativo → resolvido (transição válida pelo próprio sistema)
@@ -291,7 +294,7 @@ describe('critérios spec 007 (fluxo HITL completo)', () => {
     const resolver = await apiConsole('POST', `/api/console/ticket/${t?.id}/resolver`);
     expect(resolver.statusCode).toBe(200);
 
-    fake.respondeTexto('Oi de novo!');
+    fake.respondeTexto('outro').respondeTexto('Oi de novo!');
     await mensagemDoContato('voltei');
     await aguardar(async () => (await contarTurnos()) === 2);
     expect((await db.select().from(ticket))[0]?.status).toBe('bot_ativo');
