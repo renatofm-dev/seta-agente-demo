@@ -127,16 +127,26 @@ beforeAll(async () => {
 }, 30_000);
 
 beforeEach(async () => {
-  await db.delete(sinalAprendizado);
-  await db.delete(eventoTicket);
-  await db.delete(ticket);
-  await db.delete(traceTurno); // referencia turno (FK) — limpar primeiro
-  await db.delete(outbox);
-  await db.delete(mensagem);
-  await db.delete(turno);
-  await db.delete(conversa);
   await boss.deleteQueuedJobs(FILA_DEBOUNCE);
   await boss.deleteQueuedJobs(FILA_OUTBOX);
+  // turno em voo do teste anterior pode gravar trace no meio da limpeza (FK);
+  // com as filas já limpas, repetir a limpeza resolve na 2ª tentativa
+  for (let tentativa = 0; ; tentativa++) {
+    try {
+      await db.delete(sinalAprendizado);
+      await db.delete(eventoTicket);
+      await db.delete(ticket);
+      await db.delete(traceTurno); // referencia turno (FK) — limpar primeiro
+      await db.delete(outbox);
+      await db.delete(mensagem);
+      await db.delete(turno);
+      await db.delete(conversa);
+      break;
+    } catch (err) {
+      if (tentativa >= 4) throw err;
+      await new Promise((r) => setTimeout(r, 250));
+    }
+  }
 });
 
 afterAll(async () => {

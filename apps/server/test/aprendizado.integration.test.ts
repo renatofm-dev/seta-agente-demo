@@ -4,7 +4,7 @@ import { loadClientConfig } from '@seta/client-config';
 import { createPgConnector, type DbConnector } from '@seta/erp-connector';
 import { createLogger } from '@seta/observability';
 import { createExecutor, type Executor, loadCatalog } from '@seta/query-catalog';
-import { count, eq } from 'drizzle-orm';
+import { and, count, eq } from 'drizzle-orm';
 import { migrate } from 'drizzle-orm/node-postgres/migrator';
 import pg from 'pg';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
@@ -15,7 +15,9 @@ import { FILA_DEBOUNCE, FILA_OUTBOX, startBoss } from '../src/boss.ts';
 import { createDb, type Db } from '../src/db/index.ts';
 import {
   casoEval,
+  chunk,
   conversa,
+  documento,
   eventoQuery,
   eventoTicket,
   mensagem,
@@ -30,6 +32,7 @@ import {
 } from '../src/db/schema.ts';
 import { type Env, loadEnv } from '../src/env.ts';
 import { createDrizzleQueryEventSink } from '../src/query-event-sink.ts';
+import { createPgVectorStore } from '../src/rag/pgvector-store.ts';
 import { seedApp, USUARIOS_DEMO } from '../src/seed-app.ts';
 import { createSkillRegistry } from '../src/skills/registry.ts';
 import { registerDebounceWorker } from '../src/wa/debounce.ts';
@@ -54,6 +57,7 @@ let admin: pg.Pool;
 let connector: DbConnector;
 let executor: Executor;
 let registry: ReturnType<typeof createSkillRegistry>;
+let store: ReturnType<typeof createPgVectorStore>;
 let fake = createFakeProvider();
 // referência ESTÁVEL: as rotas capturam o provider no register; o proxy delega ao fake corrente
 const providerProxy = {
@@ -151,6 +155,7 @@ beforeAll(async () => {
       DEV_SIMULATOR: 'true',
       CONTATOS_PATH: join(import.meta.dirname, '../../../configs/demo/contatos.yaml'),
       SKILLS_SEED_DIR: join(import.meta.dirname, '../../../skills-seed'),
+      EMBEDDING_DIM: '8', // fake provider embeda em 8 dims
     } as NodeJS.ProcessEnv),
     WA_DEBOUNCE_MS: DEBOUNCE_MS,
   };
@@ -162,7 +167,12 @@ beforeAll(async () => {
 
   connector = createPgConnector({ url: env.ERP_DATABASE_URL, poolMax: 3 });
   executor = createExecutor({ catalog, connector, sink: createDrizzleQueryEventSink(db) });
-  registry = createSkillRegistry({ db, embed: null });
+  store = createPgVectorStore({ db, dim: env.EMBEDDING_DIM });
+  // chunks de outra dimensão (ex.: dev com modelo real) quebrariam a recriação do índice
+  await db.delete(chunk);
+  await db.delete(documento);
+  await store.ensureIndex();
+  registry = createSkillRegistry({ db, store, embed: null });
   const auth = createAuth(db, { secret: env.BETTER_AUTH_SECRET, baseURL: env.BETTER_AUTH_URL });
 
   boss = await startBoss(env.DATABASE_URL, logger);
@@ -179,6 +189,7 @@ beforeAll(async () => {
       executor,
       clientConfig,
       registry,
+      store,
       logger,
       turnoTimeoutMs: 30_000,
       resumoACadaTurnos: 99,
@@ -200,21 +211,33 @@ beforeAll(async () => {
 
 beforeEach(async () => {
   fake = createFakeProvider();
-  await db.delete(casoEval);
-  await db.delete(skillVersao);
-  await db.delete(proposta);
-  await db.delete(skill);
-  await db.delete(sinalAprendizado);
-  await db.delete(eventoTicket);
-  await db.delete(ticket);
-  await db.delete(traceTurno);
-  await db.delete(eventoQuery);
-  await db.delete(outbox);
-  await db.delete(mensagem);
-  await db.delete(turno);
-  await db.delete(conversa);
   await boss.deleteQueuedJobs(FILA_DEBOUNCE);
   await boss.deleteQueuedJobs(FILA_OUTBOX);
+  // turno em voo do teste anterior pode gravar trace no meio da limpeza (FK);
+  // com as filas já limpas, repetir a limpeza resolve na 2ª tentativa
+  for (let tentativa = 0; ; tentativa++) {
+    try {
+      await db.delete(casoEval);
+      await db.delete(chunk);
+      await db.delete(documento);
+      await db.delete(skillVersao);
+      await db.delete(proposta);
+      await db.delete(skill);
+      await db.delete(sinalAprendizado);
+      await db.delete(eventoTicket);
+      await db.delete(ticket);
+      await db.delete(traceTurno);
+      await db.delete(eventoQuery);
+      await db.delete(outbox);
+      await db.delete(mensagem);
+      await db.delete(turno);
+      await db.delete(conversa);
+      break;
+    } catch (err) {
+      if (tentativa >= 4) throw err;
+      await new Promise((r) => setTimeout(r, 250));
+    }
+  }
   // repõe as skills do seed (o beforeEach limpa tudo)
   await seedApp(db, env);
 });
@@ -266,6 +289,12 @@ describe('critérios spec 009 (Ato 3)', () => {
       .where(eq(skillVersao.id, aprovar.json().versaoId));
     expect(versaoNova?.status).toBe('ativa');
     expect(versaoNova?.aprovadoPor).toBe(USUARIOS_DEMO[1]?.email);
+    // 008: ativação posiciona a skill no ns 'skills' do VectorStore
+    const [chunkSkill] = await db
+      .select()
+      .from(chunk)
+      .where(and(eq(chunk.ns, 'skills'), eq(chunk.id, versaoNova?.skillId ?? '')));
+    expect(chunkSkill?.fonte).toBe('responder-pedido-desconto');
 
     // 4) o ticket escalado precisa voltar ao bot para o próximo turno rodar
     const [tk] = await db.select().from(ticket);
@@ -386,6 +415,12 @@ describe('critérios spec 009 (Ato 3)', () => {
       2,
     );
     expect(depois.some((a) => a.skillId === s.id)).toBe(false);
+    // 008: kill-switch também removeu o vetor do ns 'skills'
+    const restos = await db
+      .select()
+      .from(chunk)
+      .where(and(eq(chunk.ns, 'skills'), eq(chunk.id, s.id)));
+    expect(restos).toHaveLength(0);
   }, 20_000);
 
   it('papel curador é obrigatório; cadeia de auditoria navegável', async () => {

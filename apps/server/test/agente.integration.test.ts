@@ -13,7 +13,9 @@ import { type App, buildApp } from '../src/app.ts';
 import { FILA_DEBOUNCE, FILA_OUTBOX, startBoss } from '../src/boss.ts';
 import { createDb, type Db } from '../src/db/index.ts';
 import {
+  chunk,
   conversa,
+  documento,
   eventoQuery,
   eventoTicket,
   mensagem,
@@ -25,6 +27,7 @@ import {
 } from '../src/db/schema.ts';
 import { type Env, loadEnv } from '../src/env.ts';
 import { createDrizzleQueryEventSink } from '../src/query-event-sink.ts';
+import { createPgVectorStore } from '../src/rag/pgvector-store.ts';
 import { seedApp } from '../src/seed-app.ts';
 import { registerDebounceWorker } from '../src/wa/debounce.ts';
 import { createAgentTurnoHandler } from '../src/wa/turno-handler.ts';
@@ -101,6 +104,7 @@ beforeAll(async () => {
       LOG_LEVEL: 'silent',
       DEV_SIMULATOR: 'true',
       CONTATOS_PATH: join(import.meta.dirname, '../../../configs/demo/contatos.yaml'),
+      EMBEDDING_DIM: '8', // fake provider embeda em 8 dims
     } as NodeJS.ProcessEnv),
     WA_DEBOUNCE_MS: DEBOUNCE_MS,
   };
@@ -132,6 +136,7 @@ beforeAll(async () => {
       executor,
       clientConfig,
       registry: null, // skills fora destes cenários (009 tem suíte própria)
+      store: createPgVectorStore({ db, dim: env.EMBEDDING_DIM }),
       logger,
       turnoTimeoutMs: 30_000,
       resumoACadaTurnos: 99, // sem sumarização nestes testes
@@ -143,17 +148,29 @@ beforeAll(async () => {
 
 beforeEach(async () => {
   fake = createFakeProvider();
-  await db.delete(sinalAprendizado);
-  await db.delete(eventoTicket);
-  await db.delete(ticket);
-  await db.delete(traceTurno);
-  await db.delete(eventoQuery);
-  await db.delete(outbox);
-  await db.delete(mensagem);
-  await db.delete(turno);
-  await db.delete(conversa);
   await boss.deleteQueuedJobs(FILA_DEBOUNCE);
   await boss.deleteQueuedJobs(FILA_OUTBOX);
+  // turno em voo do teste anterior pode gravar trace no meio da limpeza (FK);
+  // com as filas já limpas, repetir a limpeza resolve na 2ª tentativa
+  for (let tentativa = 0; ; tentativa++) {
+    try {
+      await db.delete(chunk); // KB vazia: buscar_conhecimento devolve [] nestes cenários
+      await db.delete(documento);
+      await db.delete(sinalAprendizado);
+      await db.delete(eventoTicket);
+      await db.delete(ticket);
+      await db.delete(traceTurno);
+      await db.delete(eventoQuery);
+      await db.delete(outbox);
+      await db.delete(mensagem);
+      await db.delete(turno);
+      await db.delete(conversa);
+      break;
+    } catch (err) {
+      if (tentativa >= 4) throw err;
+      await new Promise((r) => setTimeout(r, 250));
+    }
+  }
 });
 
 afterAll(async () => {
@@ -194,7 +211,7 @@ describe('critérios spec 005 (via simulador)', () => {
   it('pergunta sem caminho de dado → admite não saber e oferece humano (replay)', async () => {
     fake
       .respondeTexto('outro') // classificador de intenção (006)
-      .chamaTool('buscar_conhecimento', { consulta: 'política de trocas de barril' })
+      .chamaTool('buscar_conhecimento', { pergunta: 'política de trocas de barril' })
       .respondeTexto(
         'Não encontrei essa informação na nossa base. Quer que eu acione um atendente humano para te ajudar?',
       );
@@ -203,7 +220,7 @@ describe('critérios spec 005 (via simulador)', () => {
     const { resposta, trace } = await aguardarResposta();
 
     const toolResult = fake.requests[2]?.messages.find((m) => m.role === 'tool');
-    expect(toolResult?.content).toBe('{"rows":[],"truncated":false}'); // stub honesto da 008
+    expect(toolResult?.content).toBe('{"rows":[],"truncated":false}'); // KB vazia ⇒ [] honesto
     expect(resposta).toMatch(/atendente humano/);
     expect(trace.resposta).toBe(resposta);
   }, 20_000);
