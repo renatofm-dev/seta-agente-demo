@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { createFakeProvider } from '@seta/ai-provider/testing';
 import { loadClientConfig } from '@seta/client-config';
 import { createPgConnector, type DbConnector } from '@seta/erp-connector';
-import { newTraceId } from '@seta/observability';
+import { createNoopObsEmitter, newTraceId } from '@seta/observability';
 import { createExecutor, type Executor, loadCatalog } from '@seta/query-catalog';
 import { and, count, eq, sql } from 'drizzle-orm';
 import { migrate } from 'drizzle-orm/node-postgres/migrator';
@@ -136,6 +136,7 @@ beforeAll(async () => {
       clientConfig,
       registry: null, // skills fora destes cenários
       store,
+      obs: createNoopObsEmitter(),
       logger,
       turnoTimeoutMs: 30_000,
       resumoACadaTurnos: 99,

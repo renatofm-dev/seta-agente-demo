@@ -2,7 +2,7 @@ import { join } from 'node:path';
 import { createFakeProvider } from '@seta/ai-provider/testing';
 import { loadClientConfig } from '@seta/client-config';
 import { createPgConnector, type DbConnector } from '@seta/erp-connector';
-import { createLogger } from '@seta/observability';
+import { createLogger, createNoopObsEmitter } from '@seta/observability';
 import { createExecutor, type Executor, loadCatalog } from '@seta/query-catalog';
 import { count } from 'drizzle-orm';
 import { migrate } from 'drizzle-orm/node-postgres/migrator';
@@ -137,6 +137,7 @@ beforeAll(async () => {
       clientConfig,
       registry: null, // skills fora destes cenários (009 tem suíte própria)
       store: createPgVectorStore({ db, dim: env.EMBEDDING_DIM }),
+      obs: createNoopObsEmitter(),
       logger,
       turnoTimeoutMs: 30_000,
       resumoACadaTurnos: 99, // sem sumarização nestes testes
