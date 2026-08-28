@@ -37,6 +37,9 @@
     },
     {
       "path": "../../packages/skills"
+    },
+    {
+      "path": "../../packages/rag"
     }
   ]
 }

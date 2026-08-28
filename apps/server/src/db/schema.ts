@@ -1,5 +1,7 @@
 import {
   boolean,
+  customType,
+  index,
   integer,
   jsonb,
   pgTable,
@@ -160,8 +162,6 @@ export const skillVersao = pgTable(
     versao: integer('versao').notNull(),
     corpo: text('corpo').notNull(),
     frontmatter: jsonb('frontmatter').notNull(),
-    /** Embedding do skill (jsonb float[]; cosseno em JS — pgvector fica p/ kb na 008). */
-    embedding: jsonb('embedding'),
     status: text('status', {
       enum: ['proposta', 'em_revisao', 'ativa', 'arquivada', 'rejeitada'],
     }).notNull(),
@@ -201,6 +201,58 @@ export const casoEval = pgTable('caso_eval', {
   origem: jsonb('origem').notNull(), // { propostaId, traceTurnoId? }
   criadoEm: timestamp('criado_em', { withTimezone: true }).notNull().defaultNow(),
 });
+
+// --- RAG (008): documentos e chunks no pgvector ----------------------------
+
+/**
+ * `vector` SEM dimensão fixa: a dimensão vem do env (EMBEDDING_DIM), validada
+ * no store; o índice HNSW é de expressão (cast p/ vector(D)) criado em runtime.
+ */
+const vetor = customType<{ data: number[]; driverData: string }>({
+  dataType() {
+    return 'vector';
+  },
+  toDriver(value) {
+    return `[${value.join(',')}]`;
+  },
+  fromDriver(value) {
+    return JSON.parse(value) as number[];
+  },
+});
+
+/** Bookkeeping da ingestão da KB: hash decide re-embedar; versão incrementa. */
+export const documento = pgTable(
+  'documento',
+  {
+    id: uuid('id').primaryKey(),
+    ns: text('ns', { enum: ['kb', 'skills'] }).notNull(),
+    fonte: text('fonte').notNull(), // path relativo do .md
+    titulo: text('titulo').notNull(), // nome amigável (H1) — é o que o agente cita
+    hash: text('hash').notNull(), // sha256 do conteúdo
+    versao: integer('versao').notNull().default(1),
+    criadoEm: timestamp('criado_em', { withTimezone: true }).notNull().defaultNow(),
+    atualizadoEm: timestamp('atualizado_em', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [unique('documento_ns_fonte_unique').on(t.ns, t.fonte)],
+);
+
+/** Unidade de retrieval; tsv (tsvector generated, na migration) dá a busca lexical. */
+export const chunk = pgTable(
+  'chunk',
+  {
+    id: uuid('id').primaryKey(),
+    ns: text('ns', { enum: ['kb', 'skills'] }).notNull(),
+    documentoId: uuid('documento_id').references(() => documento.id, { onDelete: 'cascade' }),
+    fonte: text('fonte').notNull(),
+    titulo: text('titulo'),
+    seq: integer('seq').notNull().default(0),
+    texto: text('texto').notNull(),
+    metadados: jsonb('metadados').notNull().default({}),
+    embedding: vetor('embedding'), // null ⇒ participa só da busca lexical
+    criadoEm: timestamp('criado_em', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('chunk_ns_idx').on(t.ns), index('chunk_documento_idx').on(t.documentoId)],
+);
 
 // --- Better Auth (007): tabelas padrão + campo role -----------------------
 

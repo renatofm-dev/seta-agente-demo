@@ -6,7 +6,8 @@
   "scripts": {
     "db:migrate": "drizzle-kit migrate",
     "db:generate": "drizzle-kit generate",
-    "db:seed:app": "node --env-file-if-exists=../../.env dist/seed-app.js"
+    "db:seed:app": "node --env-file-if-exists=../../.env dist/seed-app.js",
+    "kb:ingest": "node --env-file-if-exists=../../.env dist/kb-ingest.js"
   },
   "dependencies": {
     "@seta/agent": "workspace:*",
@@ -17,6 +18,7 @@
     "@seta/guardrails": "workspace:*",
     "@seta/observability": "workspace:*",
     "@seta/query-catalog": "workspace:*",
+    "@seta/rag": "workspace:*",
     "@seta/skills": "workspace:*",
     "@seta/wa-meta": "workspace:*",
     "better-auth": "^1.7.2",

@@ -50,6 +50,13 @@
       "when": 1787846430863,
       "tag": "0006_skills-aprendizado",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1787953183605,
+      "tag": "0007_rag-pgvector",
+      "breakpoints": true
     }
   ]
 }

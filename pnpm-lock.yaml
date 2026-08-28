@@ -111,6 +111,9 @@ importers:
       '@seta/query-catalog':
         specifier: workspace:*
         version: link:../../packages/query-catalog
+      '@seta/rag':
+        specifier: workspace:*
+        version: link:../../packages/rag
       '@seta/skills':
         specifier: workspace:*
         version: link:../../packages/skills
