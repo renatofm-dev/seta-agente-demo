@@ -1,4 +1,13 @@
-import { boolean, integer, jsonb, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
+import {
+  boolean,
+  integer,
+  jsonb,
+  pgTable,
+  text,
+  timestamp,
+  unique,
+  uuid,
+} from 'drizzle-orm/pg-core';
 
 /**
  * Schema Drizzle do banco `app` (o produto). Demais tabelas chegam nas specs 005/007/009.
@@ -115,15 +124,81 @@ export const eventoTicket = pgTable('evento_ticket', {
   criadoEm: timestamp('criado_em', { withTimezone: true }).notNull().defaultNow(),
 });
 
-/** Sinais para o loop de aprendizado (009 consome). */
+/** Sinais para o loop de aprendizado (009: o distiller consome e marca processado). */
 export const sinalAprendizado = pgTable('sinal_aprendizado', {
   id: uuid('id').primaryKey(),
-  tipo: text('tipo', { enum: ['correcao_hitl', 'guardrail_verdict'] }).notNull(),
+  tipo: text('tipo', {
+    enum: ['correcao_hitl', 'guardrail_verdict', 'escalonamento', 'resolucao_limpa', 're_pergunta'],
+  }).notNull(),
   ticketId: uuid('ticket_id').references(() => ticket.id),
   conversaId: uuid('conversa_id')
     .notNull()
     .references(() => conversa.id),
   payload: jsonb('payload').notNull(),
+  processadoEm: timestamp('processado_em', { withTimezone: true }),
+  criadoEm: timestamp('criado_em', { withTimezone: true }).notNull().defaultNow(),
+});
+
+// --- Skills + loop de aprendizado (009) ------------------------------------
+
+export const skill = pgTable('skill', {
+  id: uuid('id').primaryKey(),
+  idLogico: text('id_logico').notNull().unique(), // name kebab-case do SKILL.md
+  escopo: text('escopo').notNull().default('local'),
+  forkDe: uuid('fork_de'),
+  criadoEm: timestamp('criado_em', { withTimezone: true }).notNull().defaultNow(),
+});
+
+/** Versões IMUTÁVEIS: aprovar edição cria versão nova; só uma `ativa` por skill. */
+export const skillVersao = pgTable(
+  'skill_versao',
+  {
+    id: uuid('id').primaryKey(),
+    skillId: uuid('skill_id')
+      .notNull()
+      .references(() => skill.id),
+    versao: integer('versao').notNull(),
+    corpo: text('corpo').notNull(),
+    frontmatter: jsonb('frontmatter').notNull(),
+    /** Embedding do skill (jsonb float[]; cosseno em JS — pgvector fica p/ kb na 008). */
+    embedding: jsonb('embedding'),
+    status: text('status', {
+      enum: ['proposta', 'em_revisao', 'ativa', 'arquivada', 'rejeitada'],
+    }).notNull(),
+    criadoPor: text('criado_por', { enum: ['distiller', 'humano'] }).notNull(),
+    aprovadoPor: text('aprovado_por'),
+    aprovadoEm: timestamp('aprovado_em', { withTimezone: true }),
+    propostaId: uuid('proposta_id'),
+    criadoEm: timestamp('criado_em', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [unique('skill_versao_skill_versao_unique').on(t.skillId, t.versao)],
+);
+
+export const proposta = pgTable('proposta', {
+  id: uuid('id').primaryKey(),
+  tipo: text('tipo', {
+    enum: ['skill_novo', 'skill_patch', 'exemplar', 'lacuna_kb', 'lacuna_catalogo'],
+  }).notNull(),
+  skillId: uuid('skill_id').references(() => skill.id),
+  /** Para skill_novo o diff é o corpo inteiro proposto. */
+  diff: text('diff').notNull(),
+  frontmatter: jsonb('frontmatter').notNull(),
+  evidencia: jsonb('evidencia').notNull(), // métricas do cluster + trechos
+  sinais: jsonb('sinais').notNull(), // uuid[] dos sinais de origem
+  status: text('status', { enum: ['aberta', 'aprovada', 'rejeitada'] })
+    .notNull()
+    .default('aberta'),
+  motivoRejeicao: text('motivo_rejeicao'),
+  revisadoPor: text('revisado_por'),
+  criadoEm: timestamp('criado_em', { withTimezone: true }).notNull().defaultNow(),
+});
+
+/** Caso de avaliação extraído do trace real (toda proposta gera um). */
+export const casoEval = pgTable('caso_eval', {
+  id: uuid('id').primaryKey(),
+  input: text('input').notNull(),
+  comportamentoEsperado: text('comportamento_esperado').notNull(),
+  origem: jsonb('origem').notNull(), // { propostaId, traceTurnoId? }
   criadoEm: timestamp('criado_em', { withTimezone: true }).notNull().defaultNow(),
 });
 

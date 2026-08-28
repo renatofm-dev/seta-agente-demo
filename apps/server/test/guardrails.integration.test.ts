@@ -128,6 +128,7 @@ beforeAll(async () => {
       catalog,
       executor,
       clientConfig,
+      registry: null, // skills fora destes cenários (009 tem suíte própria)
       logger,
       turnoTimeoutMs: 30_000,
       resumoACadaTurnos: 99,
@@ -175,10 +176,10 @@ describe('critérios spec 006', () => {
     expect(eventos.find((e) => e.tipo === 'verdict')?.guardrail).toBe('classificador_intencao');
     expect(fake.requests).toHaveLength(1); // só a classificação — sem chamada do agente
 
-    // verdict != allow virou sinal_aprendizado (insumo da 009)
+    // verdict != allow virou sinal_aprendizado (insumo da 009); a escalada também (009)
     const sinais = await db.select().from(sinalAprendizado);
-    expect(sinais).toHaveLength(1);
-    expect(sinais[0]?.tipo).toBe('guardrail_verdict');
+    expect(sinais.filter((sg) => sg.tipo === 'guardrail_verdict')).toHaveLength(1);
+    expect(sinais.filter((sg) => sg.tipo === 'escalonamento')).toHaveLength(1);
   }, 20_000);
 
   it('replay: classificador falha em pegar, mas o draft com desconto é bloqueado no beforeReply', async () => {

@@ -1,10 +1,13 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import type { AIProvider } from '@seta/ai-provider';
 import type { ClientConfig } from '@seta/client-config';
 import { createLogger, newTraceId } from '@seta/observability';
 import type { Executor } from '@seta/query-catalog';
+import type { SkillRegistry } from '@seta/skills';
 import { type FastifyInstance, fastify, LogController, type RawServerDefault } from 'fastify';
 import type { PgBoss } from 'pg-boss';
 import type { Logger } from 'pino';
+import { aprendizadoRoutes } from './aprendizado-routes.js';
 import type { Auth } from './auth.js';
 import { authRoutes } from './auth-routes.js';
 import { consoleRoutes } from './console-routes.js';
@@ -28,6 +31,9 @@ export interface WaDeps {
 export interface ConsoleDeps {
   readonly auth: Auth;
   readonly executor: Executor;
+  /** Aba Aprendizado (009); ausentes ⇒ rotas não registradas. */
+  readonly registry?: SkillRegistry;
+  readonly provider?: AIProvider | null;
 }
 
 export interface BuildAppOptions {
@@ -66,6 +72,14 @@ export function buildApp({ env, clientConfig, wa, console: consoleDeps }: BuildA
         executor: consoleDeps.executor,
         debounceMs: env.WA_DEBOUNCE_MS,
       });
+      if (consoleDeps.registry) {
+        app.register(aprendizadoRoutes, {
+          db: wa.db,
+          auth: consoleDeps.auth,
+          registry: consoleDeps.registry,
+          provider: consoleDeps.provider ?? null,
+        });
+      }
     }
   }
 

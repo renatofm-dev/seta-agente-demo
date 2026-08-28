@@ -1,0 +1,147 @@
+import type { AIProvider } from '@seta/ai-provider';
+import { newTraceId } from '@seta/observability';
+import { DISTILLER_OUTPUT_SCHEMA, renderPromptDistiller } from '@seta/skills';
+import { desc, eq, inArray, isNull } from 'drizzle-orm';
+import type { Db } from '../db/index.js';
+import { casoEval, proposta, sinalAprendizado, traceTurno } from '../db/schema.js';
+
+/**
+ * Distiller on-demand (009): agrupa sinais não processados, roda o prompt de
+ * destilação (saída estruturada Zod) e cria propostas com evidência + caso_eval.
+ */
+
+export interface DistillerDeps {
+  readonly db: Db;
+  readonly provider: AIProvider;
+}
+
+type Sinal = typeof sinalAprendizado.$inferSelect;
+
+/** Cluster simples da POC: tipo + chave do payload (motivo/trigger/guardrail). */
+function chaveCluster(s: Sinal): string {
+  const p = s.payload as Record<string, unknown>;
+  const detalhe =
+    (typeof p.motivoEscalonamento === 'string' && p.motivoEscalonamento) ||
+    (typeof p.motivo === 'string' && p.motivo) ||
+    (typeof (p.verdict as { trigger?: string } | undefined)?.trigger === 'string' &&
+      (p.verdict as { trigger: string }).trigger) ||
+    'geral';
+  return `${s.tipo}:${detalhe}`;
+}
+
+export interface ResultadoDistiller {
+  readonly clusters: number;
+  readonly propostasCriadas: number;
+  readonly sinaisProcessados: number;
+}
+
+export async function gerarPropostas(deps: DistillerDeps): Promise<ResultadoDistiller> {
+  const { db, provider } = deps;
+  const pendentes = await db
+    .select()
+    .from(sinalAprendizado)
+    .where(isNull(sinalAprendizado.processadoEm))
+    .orderBy(desc(sinalAprendizado.criadoEm))
+    .limit(200);
+  if (pendentes.length === 0) {
+    return { clusters: 0, propostasCriadas: 0, sinaisProcessados: 0 };
+  }
+
+  const clusters = new Map<string, Sinal[]>();
+  for (const s of pendentes) {
+    const chave = chaveCluster(s);
+    clusters.set(chave, [...(clusters.get(chave) ?? []), s]);
+  }
+
+  let propostasCriadas = 0;
+  for (const [chave, sinais] of clusters) {
+    const resumoSinais = sinais.slice(0, 10).map((s) => ({
+      tipo: s.tipo,
+      payload: s.payload,
+      criadoEm: s.criadoEm.toISOString(),
+    }));
+    const res = await provider.chat({
+      messages: [{ role: 'user', content: renderPromptDistiller(resumoSinais) }],
+      temperature: 0,
+      maxOutputTokens: 1024,
+    });
+    const parsed = DISTILLER_OUTPUT_SCHEMA.safeParse(extrairJson(res.content ?? ''));
+    if (!parsed.success || !parsed.data.proposta) continue;
+    const p = parsed.data.proposta;
+
+    const conversaId = sinais[0]?.conversaId;
+    const propostaId = newTraceId();
+    await db.insert(proposta).values({
+      id: propostaId,
+      tipo: 'skill_novo',
+      diff: p.corpo,
+      frontmatter: {
+        name: p.name,
+        description: p.description,
+        'x-seta': {
+          escopo: 'local',
+          gatilho: p.gatilho,
+          tools: p.tools,
+          metricas: { usos: 0, resolucoes: 0 },
+          proveniencia: 'distiller',
+        },
+      },
+      evidencia: {
+        cluster: chave,
+        nSinais: sinais.length,
+        nConversas: new Set(sinais.map((s) => s.conversaId)).size,
+        conversaId,
+        trechos: resumoSinais.slice(0, 3),
+      },
+      sinais: sinais.map((s) => s.id),
+    });
+    propostasCriadas += 1;
+
+    // toda proposta gera um caso_eval do trace real (spec 009)
+    const [trace] = conversaId
+      ? await db
+          .select()
+          .from(traceTurno)
+          .where(eq(traceTurno.conversaId, conversaId))
+          .orderBy(desc(traceTurno.criadoEm))
+          .limit(1)
+      : [];
+    const payload0 = (sinais[0]?.payload ?? {}) as {
+      textoUsuario?: string;
+      respostaHumano?: string;
+    };
+    await db.insert(casoEval).values({
+      id: newTraceId(),
+      input: payload0.textoUsuario ?? p.gatilho,
+      comportamentoEsperado: payload0.respostaHumano ?? p.description,
+      origem: { propostaId, traceTurnoId: trace?.id ?? null },
+    });
+  }
+
+  await db
+    .update(sinalAprendizado)
+    .set({ processadoEm: new Date() })
+    .where(
+      inArray(
+        sinalAprendizado.id,
+        pendentes.map((s) => s.id),
+      ),
+    );
+
+  return {
+    clusters: clusters.size,
+    propostasCriadas,
+    sinaisProcessados: pendentes.length,
+  };
+}
+
+/** O modelo pode devolver o JSON dentro de cerca ```json — extrai com tolerância. */
+function extrairJson(texto: string): unknown {
+  const m = texto.match(/\{[\s\S]*\}/);
+  if (!m) return null;
+  try {
+    return JSON.parse(m[0]);
+  } catch {
+    return null;
+  }
+}

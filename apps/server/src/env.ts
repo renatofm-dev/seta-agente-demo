@@ -34,6 +34,8 @@ export const EnvSchema = z.object({
   CATALOG_DIR: z.string().min(1).default('catalog'),
   /** Vínculos demo wa_id→cliente (seed grava na tabela contato — 007). */
   CONTATOS_PATH: z.string().min(1).default('configs/demo/contatos.yaml'),
+  /** Skills escritos à mão importados no seed (009). */
+  SKILLS_SEED_DIR: z.string().min(1).default('skills-seed'),
   /** Better Auth (console HITL). Trocar o secret fora de dev. */
   BETTER_AUTH_SECRET: z.string().min(8).default('dev-secret-trocar-em-prod'),
   BETTER_AUTH_URL: z.url().default('http://localhost:3001'),
