@@ -42,6 +42,58 @@ export interface TicketDetalhe extends TicketResumo {
   perfilErp: Record<string, unknown> | null;
 }
 
+// --- Observabilidade (010) -------------------------------------------------
+
+export type TraceEvento =
+  | { tipo: 'contexto'; [k: string]: unknown }
+  | { tipo: 'llm'; latencyMs?: number; [k: string]: unknown }
+  | {
+      tipo: 'tool';
+      nome: string;
+      params: Record<string, unknown>;
+      resultado: unknown;
+      latencyMs: number;
+      erro?: string;
+    }
+  | {
+      tipo: 'verdict';
+      guardrail: string;
+      hook: string;
+      verdict: { tipo: string; trigger?: string; reason?: string; patch?: string };
+    }
+  | { tipo: 'fallback'; motivo: string }
+  | { tipo: 'escalado' };
+
+export interface TraceTurnoView {
+  id: string;
+  traceId: string;
+  turnoId: string;
+  textoTurno: string | null;
+  contexto: Record<string, unknown>;
+  eventos: TraceEvento[];
+  resposta: string;
+  escalado: boolean;
+  fallback: boolean;
+  fallbackMotivo: string | null;
+  tokensEntrada: number;
+  tokensSaida: number;
+  latenciaMs: number;
+  criadoEm: string;
+}
+
+export interface Metricas {
+  dias: 7 | 30;
+  conversasPorDia: { dia: string; conversas: number }[];
+  tokensPorDia: { dia: string; entrada: number; saida: number; custo: number }[];
+  escalonamentosPorMotivo: { motivo: string; total: number }[];
+  totalConversas: number;
+  totalEscaladas: number;
+  taxaResolucaoSemHumano: number | null;
+  p95QueryMs: number | null;
+  p95TurnoMs: number | null;
+  custoTotal: number;
+}
+
 async function json<T>(res: Response): Promise<T> {
   if (!res.ok) throw new Error(`${res.status}: ${await res.text()}`);
   return res.json() as Promise<T>;
@@ -71,6 +123,10 @@ export const api = {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ texto, chave: crypto.randomUUID() }),
     }).then((r) => json<{ duplicada: boolean }>(r)),
+  traces: (id: string) =>
+    fetch(`/api/console/ticket/${id}/traces`).then((r) => json<{ traces: TraceTurnoView[] }>(r)),
+  metricas: (dias: 7 | 30) =>
+    fetch(`/api/console/metricas?dias=${dias}`).then((r) => json<Metricas>(r)),
 };
 
 export const STATUS_LABEL: Record<TicketResumo['status'], string> = {
