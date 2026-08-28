@@ -71,6 +71,7 @@ export function buildApp({ env, clientConfig, wa, console: consoleDeps }: BuildA
         auth: consoleDeps.auth,
         executor: consoleDeps.executor,
         debounceMs: env.WA_DEBOUNCE_MS,
+        precos: { inPor1M: env.LLM_PRECO_IN_POR_1M, outPor1M: env.LLM_PRECO_OUT_POR_1M },
       });
       if (consoleDeps.registry) {
         app.register(aprendizadoRoutes, {
