@@ -346,3 +346,45 @@ export const eventoQuery = pgTable('evento_query', {
   erro: text('erro'),
   criadoEm: timestamp('criado_em', { withTimezone: true }).notNull().defaultNow(),
 });
+
+// --- Observabilidade (010): eventos tipados por turno ----------------------
+// Sem FKs de propósito: escrita assíncrona nunca pode travar limpeza/turno.
+
+export const eventoLlm = pgTable('evento_llm', {
+  id: uuid('id').primaryKey(),
+  traceId: text('trace_id').notNull(),
+  conversaId: uuid('conversa_id').notNull(),
+  turnoId: uuid('turno_id'),
+  ticketId: uuid('ticket_id'),
+  modelo: text('modelo').notNull(),
+  tokensEntrada: integer('tokens_entrada').notNull(),
+  tokensSaida: integer('tokens_saida').notNull(),
+  latenciaMs: integer('latencia_ms').notNull(),
+  criadoEm: timestamp('criado_em', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const eventoGuardrail = pgTable('evento_guardrail', {
+  id: uuid('id').primaryKey(),
+  traceId: text('trace_id').notNull(),
+  conversaId: uuid('conversa_id').notNull(),
+  turnoId: uuid('turno_id'),
+  ticketId: uuid('ticket_id'),
+  guardrail: text('guardrail').notNull(), // preco, classificador_intencao, ...
+  hook: text('hook', { enum: ['beforeTool', 'afterTool', 'beforeReply'] }).notNull(),
+  verdict: text('verdict', { enum: ['allow', 'rewrite', 'block', 'escalate'] }).notNull(),
+  motivo: text('motivo'),
+  criadoEm: timestamp('criado_em', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const eventoEscalonamento = pgTable('evento_escalonamento', {
+  id: uuid('id').primaryKey(),
+  traceId: text('trace_id').notNull(),
+  conversaId: uuid('conversa_id').notNull(),
+  turnoId: uuid('turno_id'),
+  ticketId: uuid('ticket_id'),
+  motivo: text('motivo').notNull(), // trigger: negociacao_preco, tema_sensivel, ...
+  origem: text('origem', {
+    enum: ['guardrail', 'intencao', 'agente', 'falha_tool', 'erro'],
+  }).notNull(),
+  criadoEm: timestamp('criado_em', { withTimezone: true }).notNull().defaultNow(),
+});

@@ -9,7 +9,7 @@ import {
 import type { AIProvider, ChatMessage } from '@seta/ai-provider';
 import type { ClientConfig } from '@seta/client-config';
 import { classificarIntencao, guardrailPreco, TRIGGER_POR_INTENCAO } from '@seta/guardrails';
-import { newTraceId } from '@seta/observability';
+import { newTraceId, type ObsEmitter } from '@seta/observability';
 import { buildToolSpecs, type CatalogIndex, type Executor } from '@seta/query-catalog';
 import type { VectorStore } from '@seta/rag';
 import type { SkillRegistry } from '@seta/skills';
@@ -17,7 +17,7 @@ import { and, asc, eq, ne, sql } from 'drizzle-orm';
 import type { PgBoss } from 'pg-boss';
 import type { Logger } from 'pino';
 import type { Db } from '../db/index.js';
-import { contato, conversa, mensagem, sinalAprendizado, traceTurno } from '../db/schema.js';
+import { contato, conversa, mensagem, sinalAprendizado, ticket, traceTurno } from '../db/schema.js';
 import { toolBuscarConhecimento } from '../rag/tool-buscar-conhecimento.js';
 import type { TurnoHandler, TurnoPronto } from './debounce.js';
 import { enqueueOutbound } from './outbox.js';
@@ -41,6 +41,8 @@ export interface AgentTurnoHandlerDeps {
   readonly registry: SkillRegistry | null;
   /** VectorStore da KB (008) — buscar_conhecimento real. */
   readonly store: VectorStore;
+  /** Emissor de eventos de observabilidade (010) — fire-and-forget, nunca lança. */
+  readonly obs: ObsEmitter;
   readonly logger: Logger;
   readonly turnoTimeoutMs: number;
   readonly resumoACadaTurnos: number;
@@ -57,6 +59,7 @@ export function createAgentTurnoHandler(deps: AgentTurnoHandlerDeps): TurnoHandl
           await escalarTicket(deps, t, resultado);
         }
         await gravarSinaisDeVerdict(deps, t, resultado);
+        emitirObservabilidade(deps, t, traceId, resultado, await ticketIdDe(deps.db, t));
         // trace por ÚLTIMO: é o marcador de turno completo (ticket e sinais já visíveis)
         await gravarTrace(deps.db, t, traceId, resultado);
       } catch (err) {
@@ -222,6 +225,71 @@ async function processarComAgente(
 }
 
 /** Escalada do bot (007): ticket → aguardando_humano com o motivo da tool. */
+async function ticketIdDe(db: Db, t: TurnoPronto): Promise<string | null> {
+  const [tk] = await db
+    .select({ id: ticket.id })
+    .from(ticket)
+    .where(eq(ticket.conversaId, t.conversaId))
+    .limit(1);
+  return tk?.id ?? null;
+}
+
+/**
+ * Emissão da 010 (fire-and-forget dentro do emitter): 1 evento_llm por turno
+ * com o usage agregado, 1 evento_guardrail por verdict e 1 evento_escalonamento
+ * quando o turno escala — todos com traceId e ticketId (quando existe).
+ */
+function emitirObservabilidade(
+  deps: AgentTurnoHandlerDeps,
+  t: TurnoPronto,
+  traceId: string,
+  resultado: ResultadoTurno,
+  ticketId: string | null,
+): void {
+  const base = { traceId, conversaId: t.conversaId, turnoId: t.id, ticketId };
+
+  if (deps.provider) {
+    deps.obs.llm({
+      ...base,
+      modelo: deps.provider.modelId,
+      tokensEntrada: resultado.tokensEntrada,
+      tokensSaida: resultado.tokensSaida,
+      latenciaMs: resultado.latenciaMs,
+    });
+  }
+
+  const verdicts = resultado.eventos.filter((e) => e.tipo === 'verdict');
+  for (const v of verdicts) {
+    const hook = v.hook === 'beforeTool' || v.hook === 'afterTool' ? v.hook : 'beforeReply';
+    deps.obs.guardrail({
+      ...base,
+      guardrail: v.guardrail,
+      hook,
+      verdict: v.verdict.tipo,
+      motivo:
+        v.verdict.tipo === 'block' || v.verdict.tipo === 'escalate'
+          ? (v.verdict.reason ?? null)
+          : null,
+    });
+  }
+
+  if (resultado.escalado) {
+    const escalate = verdicts.find((v) => v.verdict.tipo === 'escalate');
+    const origem = escalate
+      ? escalate.guardrail === 'classificador_intencao'
+        ? 'intencao'
+        : 'guardrail'
+      : resultado.fallbackMotivo?.includes('falhas de tool')
+        ? 'falha_tool'
+        : 'agente';
+    deps.obs.escalonamento({
+      ...base,
+      motivo: resultado.escaladoTrigger ?? 'pedido_do_agente',
+      origem,
+    });
+  }
+}
+
 async function escalarTicket(
   deps: AgentTurnoHandlerDeps,
   t: TurnoPronto,

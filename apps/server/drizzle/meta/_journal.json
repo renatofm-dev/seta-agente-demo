@@ -57,6 +57,13 @@
       "when": 1787953183605,
       "tag": "0007_rag-pgvector",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1787956220116,
+      "tag": "0008_observabilidade",
+      "breakpoints": true
     }
   ]
 }
