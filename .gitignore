@@ -16,3 +16,6 @@ out/
 *.log
 .DS_Store
 coverage/
+
+# guia pessoal de teste local (não versionar)
+/TESTANDO-LOCAL.md
