@@ -10,6 +10,7 @@ import { startBoss } from './boss.js';
 import { createDb } from './db/index.js';
 import { loadEnv } from './env.js';
 import { createDrizzleQueryEventSink } from './query-event-sink.js';
+import { createPgVectorStore } from './rag/pgvector-store.js';
 import { createSkillRegistry } from './skills/registry.js';
 import { registerSinaisDiarios } from './skills/sinais-job.js';
 import { registerDebounceWorker } from './wa/debounce.js';
@@ -51,13 +52,20 @@ const gateway: OutboundGateway =
     : createLogGateway(logger);
 
 const auth = createAuth(db, { secret: env.BETTER_AUTH_SECRET, baseURL: env.BETTER_AUTH_URL });
+
+// VectorStore pgvector (008): retrieval da KB e das skills (ns separados)
+const store = createPgVectorStore({ db, dim: env.EMBEDDING_DIM });
+await store.ensureIndex();
+
 const registry = createSkillRegistry({
   db,
+  store,
   embed:
     provider && env.EMBEDDING_MODEL
       ? (texto) => provider.embed([texto]).then((v) => Array.from(v[0] ?? []))
       : null,
 });
+await registry.sincronizar(); // reposiciona skills ativas no store (DBs pré-008)
 await registerSinaisDiarios(boss, db, logger);
 
 await registerDebounceWorker({
@@ -74,6 +82,7 @@ await registerDebounceWorker({
     executor,
     clientConfig,
     registry,
+    store,
     logger,
     turnoTimeoutMs: env.AGENT_TURN_TIMEOUT_MS,
     resumoACadaTurnos: env.AGENT_RESUMO_A_CADA_TURNOS,

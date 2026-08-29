@@ -4,7 +4,6 @@ import {
   TEXTO_FALLBACK,
   TEXTO_TRANSICAO,
   type TraceEvento,
-  toolBuscarConhecimentoStub,
   toolEscalarParaHumano,
 } from '@seta/agent';
 import type { AIProvider, ChatMessage } from '@seta/ai-provider';
@@ -12,12 +11,14 @@ import type { ClientConfig } from '@seta/client-config';
 import { classificarIntencao, guardrailPreco, TRIGGER_POR_INTENCAO } from '@seta/guardrails';
 import { newTraceId } from '@seta/observability';
 import { buildToolSpecs, type CatalogIndex, type Executor } from '@seta/query-catalog';
+import type { VectorStore } from '@seta/rag';
 import type { SkillRegistry } from '@seta/skills';
 import { and, asc, eq, ne, sql } from 'drizzle-orm';
 import type { PgBoss } from 'pg-boss';
 import type { Logger } from 'pino';
 import type { Db } from '../db/index.js';
 import { contato, conversa, mensagem, sinalAprendizado, traceTurno } from '../db/schema.js';
+import { toolBuscarConhecimento } from '../rag/tool-buscar-conhecimento.js';
 import type { TurnoHandler, TurnoPronto } from './debounce.js';
 import { enqueueOutbound } from './outbox.js';
 import { aplicarTransicao, garantirTicket } from './tickets.js';
@@ -38,6 +39,8 @@ export interface AgentTurnoHandlerDeps {
   readonly clientConfig: ClientConfig;
   /** null ⇒ turno roda sem skills (009). */
   readonly registry: SkillRegistry | null;
+  /** VectorStore da KB (008) — buscar_conhecimento real. */
+  readonly store: VectorStore;
   readonly logger: Logger;
   readonly turnoTimeoutMs: number;
   readonly resumoACadaTurnos: number;
@@ -169,11 +172,15 @@ async function processarComAgente(
     content: m.texto,
   }));
 
+  const provider = deps.provider;
   const tools = [
     ...buildToolSpecs(deps.catalog, deps.executor, {
       modulosHabilitados: deps.clientConfig.modulos,
     }),
-    toolBuscarConhecimentoStub(),
+    toolBuscarConhecimento({
+      store: deps.store,
+      embed: (texto) => provider.embed([texto]).then((v) => Array.from(v[0] ?? [])),
+    }),
     toolEscalarParaHumano(),
   ];
 

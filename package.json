@@ -18,7 +18,8 @@
     "lint": "biome check . && depcruise apps packages",
     "db:migrate": "pnpm --filter @seta/server db:migrate",
     "db:seed": "pnpm db:seed:erp && pnpm --filter @seta/server db:seed:app",
-    "db:seed:erp": "tsc -b && node --env-file-if-exists=.env infra/erp-mock/seed.ts"
+    "db:seed:erp": "tsc -b && node --env-file-if-exists=.env infra/erp-mock/seed.ts",
+    "kb:ingest": "tsc -b && pnpm --filter @seta/server kb:ingest"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.10",

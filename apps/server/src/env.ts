@@ -26,6 +26,10 @@ export const EnvSchema = z.object({
   LLM_API_KEY: z.string().min(1).optional(),
   LLM_MODEL: z.string().min(1).optional(),
   EMBEDDING_MODEL: z.string().min(1).optional(),
+  /** Dimensão dos embeddings (coluna vector é sem typmod; cast/índice usam isto). */
+  EMBEDDING_DIM: z.coerce.number().int().positive().default(1536),
+  /** Diretório da base de conhecimento ingerida por `pnpm kb:ingest` (008). */
+  KB_DIR: z.string().min(1).default('kb'),
   /** Timeout do turno do agente (spec 005: 60 s). */
   AGENT_TURN_TIMEOUT_MS: z.coerce.number().int().min(1_000).default(60_000),
   /** Sumarização barata do resumo rolante a cada K turnos. */

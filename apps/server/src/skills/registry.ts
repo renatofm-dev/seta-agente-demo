@@ -1,6 +1,6 @@
 import { newTraceId } from '@seta/observability';
+import type { VectorStore } from '@seta/rag';
 import {
-  cosine,
   overlapTermos,
   parseSkillMd,
   type SkillAtiva,
@@ -16,10 +16,13 @@ import { proposta, sinalAprendizado, skill, skillVersao, traceTurno } from '../d
 /**
  * Implementação drizzle do SkillRegistry (009). Versões imutáveis: toda
  * aprovação cria versão nova; só uma `ativa` por skill; kill-switch arquiva.
+ * Retrieval denso via VectorStore ns 'skills' (008): 1 item por skill,
+ * substituído a cada ativação e removido no kill-switch.
  */
 
 export interface RegistryDeps {
   readonly db: Db;
+  readonly store: VectorStore;
   /** Gera embedding do texto; null quando EMBEDDING_MODEL não configurado. */
   readonly embed: ((texto: string) => Promise<number[]>) | null;
 }
@@ -31,8 +34,10 @@ export function createSkillRegistry(deps: RegistryDeps): SkillRegistry & {
     doc: SkillDoc,
     criadoPor: 'distiller' | 'humano',
   ): Promise<{ skillId: string; versaoId: string }>;
+  /** Reposiciona todas as versões ativas no store (boot / DBs anteriores à 008). */
+  sincronizar(): Promise<void>;
 } {
-  const { db } = deps;
+  const { db, store } = deps;
 
   async function embeddingDe(texto: string): Promise<number[] | null> {
     if (!deps.embed) return null;
@@ -41,6 +46,24 @@ export function createSkillRegistry(deps: RegistryDeps): SkillRegistry & {
     } catch {
       return null; // retrieval cai no fallback por termos
     }
+  }
+
+  function textoDeRetrieval(doc: SkillDoc): string {
+    return `${doc.frontmatter.description}\n${doc.frontmatter['x-seta'].gatilho}\n${doc.corpo}`;
+  }
+
+  async function upsertNoStore(skillId: string, idLogico: string, doc: SkillDoc): Promise<void> {
+    const texto = textoDeRetrieval(doc);
+    await store.upsert('skills', [
+      {
+        id: skillId, // 1 item por skill ⇒ ativação nova substitui a anterior
+        texto,
+        fonte: idLogico,
+        titulo: idLogico,
+        metadados: {},
+        embedding: await embeddingDe(texto),
+      },
+    ]);
   }
 
   async function taxaResolucao(skillId: string): Promise<number> {
@@ -79,6 +102,7 @@ export function createSkillRegistry(deps: RegistryDeps): SkillRegistry & {
 
   async function inserirVersaoAtiva(
     skillId: string,
+    idLogico: string,
     doc: SkillDoc,
     extras: {
       criadoPor: 'distiller' | 'humano';
@@ -94,15 +118,13 @@ export function createSkillRegistry(deps: RegistryDeps): SkillRegistry & {
       versao: await proximaVersao(skillId),
       corpo: doc.corpo,
       frontmatter: doc.frontmatter,
-      embedding: await embeddingDe(
-        `${doc.frontmatter.description}\n${doc.frontmatter['x-seta'].gatilho}\n${doc.corpo}`,
-      ),
       status: 'ativa',
       criadoPor: extras.criadoPor,
       aprovadoPor: extras.aprovadoPor ?? null,
       aprovadoEm: extras.aprovadoPor ? new Date() : null,
       propostaId: extras.propostaId ?? null,
     });
+    await upsertNoStore(skillId, idLogico, doc);
     return id;
   }
 
@@ -114,7 +136,7 @@ export function createSkillRegistry(deps: RegistryDeps): SkillRegistry & {
       if (!existente) {
         await db.insert(skill).values({ id: skillId, idLogico });
       }
-      const versaoId = await inserirVersaoAtiva(skillId, doc, { criadoPor });
+      const versaoId = await inserirVersaoAtiva(skillId, idLogico, doc, { criadoPor });
       return { skillId, versaoId };
     },
 
@@ -126,29 +148,43 @@ export function createSkillRegistry(deps: RegistryDeps): SkillRegistry & {
           versao: skillVersao.versao,
           corpo: skillVersao.corpo,
           frontmatter: skillVersao.frontmatter,
-          embedding: skillVersao.embedding,
           idLogico: skill.idLogico,
         })
         .from(skillVersao)
         .innerJoin(skill, eq(skill.id, skillVersao.skillId))
         .where(eq(skillVersao.status, 'ativa'));
+      const porSkillId = new Map(ativas.map((v) => [v.skillId, v]));
+
+      const montar = async (
+        v: (typeof ativas)[number],
+        similaridade: number,
+      ): Promise<SkillAtiva> => ({
+        skillId: v.skillId,
+        idLogico: v.idLogico,
+        versaoId: v.versaoId,
+        versao: v.versao,
+        doc: { frontmatter: v.frontmatter as SkillFrontmatter, corpo: v.corpo },
+        score: similaridade + BOOST_METRICA * (await taxaResolucao(v.skillId)),
+      });
 
       const pontuadas: SkillAtiva[] = [];
-      for (const v of ativas) {
-        const fm = v.frontmatter as SkillFrontmatter;
-        const referencia = `${fm.description} ${fm['x-seta'].gatilho}`;
-        const emb = v.embedding as number[] | null;
-        const similaridade =
-          ctx.embedding && emb ? cosine(ctx.embedding, emb) : overlapTermos(ctx.texto, referencia);
-        const score = similaridade + BOOST_METRICA * (await taxaResolucao(v.skillId));
-        pontuadas.push({
-          skillId: v.skillId,
-          idLogico: v.idLogico,
-          versaoId: v.versaoId,
-          versao: v.versao,
-          doc: { frontmatter: fm, corpo: v.corpo },
-          score,
-        });
+      // caminho denso: ns 'skills' do store (hit.id = skillId; score = cosseno)
+      const hits = ctx.embedding
+        ? await store.search('skills', ctx.embedding, Math.max(k * 2, k + 2))
+        : [];
+      if (hits.length > 0) {
+        for (const h of hits) {
+          const v = porSkillId.get(h.id);
+          if (v) pontuadas.push(await montar(v, h.score));
+        }
+      } else {
+        // fallback lexical: sem embedding (ou store sem vetores) — sobreposição
+        // de termos preserva o comportamento da 009 com embed: null
+        for (const v of ativas) {
+          const fm = v.frontmatter as SkillFrontmatter;
+          const referencia = `${fm.description} ${fm['x-seta'].gatilho}`;
+          pontuadas.push(await montar(v, overlapTermos(ctx.texto, referencia)));
+        }
       }
       return pontuadas
         .filter((s) => s.score > 0)
@@ -171,7 +207,7 @@ export function createSkillRegistry(deps: RegistryDeps): SkillRegistry & {
       if (!existente && !p.skillId) {
         await db.insert(skill).values({ id: skillId, idLogico });
       }
-      const versaoId = await inserirVersaoAtiva(skillId, doc, {
+      const versaoId = await inserirVersaoAtiva(skillId, idLogico, doc, {
         criadoPor: 'distiller',
         aprovadoPor: revisor,
         propostaId,
@@ -211,12 +247,39 @@ export function createSkillRegistry(deps: RegistryDeps): SkillRegistry & {
       await arquivarAtiva(skillId);
       // imutável: só o status muda; autoria original da versão é preservada
       await db.update(skillVersao).set({ status: 'ativa' }).where(eq(skillVersao.id, alvo.id));
+      const [s] = await db.select().from(skill).where(eq(skill.id, skillId));
+      if (s) {
+        await upsertNoStore(skillId, s.idLogico, {
+          frontmatter: alvo.frontmatter as SkillFrontmatter,
+          corpo: alvo.corpo,
+        });
+      }
       void motivo; // motivo vai no log estruturado da rota
     },
 
     async deactivate(skillId, motivo) {
       await arquivarAtiva(skillId);
+      await store.delete('skills', [skillId]); // kill-switch: some do retrieval na hora
       void motivo; // auditoria fica no evento da rota (log estruturado)
+    },
+
+    async sincronizar() {
+      const ativas = await db
+        .select({
+          skillId: skillVersao.skillId,
+          corpo: skillVersao.corpo,
+          frontmatter: skillVersao.frontmatter,
+          idLogico: skill.idLogico,
+        })
+        .from(skillVersao)
+        .innerJoin(skill, eq(skill.id, skillVersao.skillId))
+        .where(eq(skillVersao.status, 'ativa'));
+      for (const v of ativas) {
+        await upsertNoStore(v.skillId, v.idLogico, {
+          frontmatter: v.frontmatter as SkillFrontmatter,
+          corpo: v.corpo,
+        });
+      }
     },
   };
 }
