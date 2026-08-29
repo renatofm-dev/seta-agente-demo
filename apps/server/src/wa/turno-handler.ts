@@ -196,6 +196,7 @@ async function processarComAgente(
   const tools = [
     ...buildToolSpecs(deps.catalog, deps.executor, {
       modulosHabilitados: deps.clientConfig.modulos,
+      temVinculo: clienteId !== '', // #35: sem vínculo, tools de dado nem aparecem
     }),
     toolBuscarConhecimento({
       store: deps.store,
@@ -213,7 +214,10 @@ async function processarComAgente(
       .catch(() => undefined);
     const ativas = await deps.registry
       .activeFor({ texto: t.textoAgregado, ...(embedding?.length ? { embedding } : {}) }, 2)
-      .catch(() => []);
+      .catch((err) => {
+        deps.logger.warn({ err }, 'retrieval de skills falhou — turno segue sem skills (#32)');
+        return [];
+      });
     skills = ativas.map((sk) => ({
       id: sk.skillId,
       conteudo: `## ${sk.idLogico} (v${sk.versao})\n${sk.doc.corpo}`,

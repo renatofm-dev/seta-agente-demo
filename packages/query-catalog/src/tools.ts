@@ -22,6 +22,12 @@ export interface ToolSpec {
 export interface BuildToolSpecsOptions {
   /** Módulos habilitados na config da implantação (client-config). */
   readonly modulosHabilitados: Readonly<Record<string, boolean>>;
+  /**
+   * Spec 003 (#35): tools de dado só aparecem COM vínculo contato↔cliente na
+   * sessão — sem vínculo o modelo nem as vê (em vez de colher erros).
+   * Ausente ⇒ true (compatibilidade com chamadas existentes).
+   */
+  readonly temVinculo?: boolean;
 }
 
 export function buildToolSpecs(
@@ -29,6 +35,7 @@ export function buildToolSpecs(
   executor: Executor,
   opts: BuildToolSpecsOptions,
 ): ToolSpec[] {
+  if (opts.temVinculo === false) return [];
   return catalog
     .list()
     .filter((entry) => entry.tool.expose)

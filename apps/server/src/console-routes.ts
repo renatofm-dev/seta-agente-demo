@@ -1,7 +1,7 @@
 import { TransicaoInvalidaError } from '@seta/crm';
 import { newTraceId } from '@seta/observability';
 import type { Executor } from '@seta/query-catalog';
-import { and, asc, desc, eq, gt, inArray, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gt, sql } from 'drizzle-orm';
 import type { FastifyPluginCallback, FastifyReply, FastifyRequest } from 'fastify';
 import type { PgBoss } from 'pg-boss';
 import { z } from 'zod';
@@ -38,6 +38,17 @@ export interface ConsoleRoutesOpts {
 
 const sessoes = new WeakMap<FastifyRequest, SessaoConsole>();
 
+/** Último draft descartado por block/escalate nos eventos do trace (#34). */
+function draftDescartadoDe(eventos: unknown): string | null {
+  if (!Array.isArray(eventos)) return null;
+  const verdicts = eventos.filter(
+    (e): e is { tipo: string; draftDescartado?: string } =>
+      typeof e === 'object' && e !== null && (e as { tipo?: string }).tipo === 'verdict',
+  );
+  const ultimo = verdicts.at(-1)?.draftDescartado;
+  return typeof ultimo === 'string' && ultimo.length > 0 ? ultimo : null;
+}
+
 async function ticketComContexto(db: Db, t: typeof ticket.$inferSelect) {
   const [conv] = await db.select().from(conversa).where(eq(conversa.id, t.conversaId));
   const [vinculo] = conv
@@ -62,6 +73,81 @@ async function ticketComContexto(db: Db, t: typeof ticket.$inferSelect) {
     ultimaMensagem: ultima
       ? { texto: ultima.texto, autor: ultima.autor, em: ultima.criadoEm }
       : null,
+  };
+}
+
+interface HubConsole {
+  assinar(fn: (pacote: string) => void): () => void;
+}
+
+/** #31: broadcaster único de eventos do console (tickets + mensagens). */
+function criarHubConsole(db: Db, avisar: (obj: unknown, msg: string) => void): HubConsole {
+  const assinantes = new Set<(pacote: string) => void>();
+  const vistos = new Set<string>();
+  let cursorTicket = new Date();
+  let cursorMsg = new Date();
+  let timer: NodeJS.Timeout | null = null;
+  const recuo = (d: Date) => new Date(d.getTime() - 1_000);
+
+  const emitir = (pacote: string) => {
+    for (const fn of assinantes) fn(pacote);
+  };
+  const lembrar = (chave: string): boolean => {
+    if (vistos.has(chave)) return false;
+    vistos.add(chave);
+    if (vistos.size > 2_000) vistos.clear(); // cursor + recuo seguram o dedupe
+    return true;
+  };
+
+  const tick = async () => {
+    try {
+      const tickets = await db
+        .select()
+        .from(ticket)
+        .where(gt(ticket.atualizadoEm, recuo(cursorTicket)))
+        .orderBy(asc(ticket.atualizadoEm))
+        .limit(200);
+      for (const t of tickets) {
+        cursorTicket = t.atualizadoEm;
+        if (!lembrar(`${t.id}:${t.atualizadoEm.getTime()}:${t.status}`)) continue;
+        emitir(`event: ticket\ndata: ${JSON.stringify(await ticketComContexto(db, t))}\n\n`);
+      }
+      const msgs = await db
+        .select()
+        .from(mensagem)
+        .where(gt(mensagem.criadoEm, recuo(cursorMsg)))
+        .orderBy(asc(mensagem.criadoEm))
+        .limit(200);
+      for (const m of msgs) {
+        cursorMsg = m.criadoEm;
+        if (!lembrar(m.id)) continue;
+        emitir(
+          `event: mensagem\ndata: ${JSON.stringify({
+            id: m.id,
+            conversaId: m.conversaId,
+            autor: m.autor,
+            texto: m.texto,
+            criadoEm: m.criadoEm,
+          })}\n\n`,
+        );
+      }
+    } catch (err) {
+      avisar({ err }, 'sse console: falha na consulta');
+    }
+  };
+
+  return {
+    assinar(fn) {
+      assinantes.add(fn);
+      if (!timer) timer = setInterval(tick, 1_000); // só roda com alguém ouvindo
+      return () => {
+        assinantes.delete(fn);
+        if (assinantes.size === 0 && timer) {
+          clearInterval(timer);
+          timer = null;
+        }
+      };
+    },
   };
 }
 
@@ -91,12 +177,55 @@ export const consoleRoutes: FastifyPluginCallback<ConsoleRoutesOpts> = (app, opt
 
   app.get('/api/console/inbox', async (req) => {
     const sessao = sessaoDe(req);
-    const tickets = await db
-      .select()
-      .from(ticket)
-      .where(inArray(ticket.status, ['bot_ativo', 'aguardando_humano', 'humano_ativo']))
-      .orderBy(desc(ticket.atualizadoEm));
-    const enriquecidos = await Promise.all(tickets.map((t) => ticketComContexto(db, t)));
+    // #31: era 1 + 3 queries POR ticket a cada poll de cada atendente — agora
+    // 1 query com lateral p/ a última mensagem, com teto de 200 tickets
+    const r = await db.execute(sql`
+      SELECT t.id, t.conversa_id, t.status, t.atendente_id, t.motivo_escalonamento,
+             t.escalado_em, c.wa_id, ct.nome AS contato_nome, ct.cliente_erp_id,
+             um.texto AS ultima_texto, um.autor AS ultima_autor, um.criado_em AS ultima_em
+      FROM ticket t
+      JOIN conversa c ON c.id = t.conversa_id
+      LEFT JOIN contato ct ON ct.wa_id = c.wa_id
+      LEFT JOIN LATERAL (
+        SELECT m.texto, m.autor, m.criado_em FROM mensagem m
+        WHERE m.conversa_id = t.conversa_id ORDER BY m.criado_em DESC LIMIT 1
+      ) um ON true
+      WHERE t.status IN ('bot_ativo', 'aguardando_humano', 'humano_ativo')
+      ORDER BY t.atualizado_em DESC
+      LIMIT 200
+    `);
+    const agora = Date.now();
+    const enriquecidos = (
+      r.rows as {
+        id: string;
+        conversa_id: string;
+        status: 'bot_ativo' | 'aguardando_humano' | 'humano_ativo' | 'resolvido';
+        atendente_id: string | null;
+        motivo_escalonamento: string | null;
+        escalado_em: Date | null;
+        wa_id: string;
+        contato_nome: string | null;
+        cliente_erp_id: string | null;
+        ultima_texto: string | null;
+        ultima_autor: string | null;
+        ultima_em: Date | null;
+      }[]
+    ).map((linha) => ({
+      id: linha.id,
+      conversaId: linha.conversa_id,
+      status: linha.status,
+      atendenteId: linha.atendente_id,
+      motivoEscalonamento: linha.motivo_escalonamento,
+      esperaSegundos: linha.escalado_em
+        ? Math.round((agora - new Date(linha.escalado_em).getTime()) / 1000)
+        : null,
+      waId: linha.wa_id,
+      contatoNome: linha.contato_nome,
+      clienteErpId: linha.cliente_erp_id,
+      ultimaMensagem: linha.ultima_texto
+        ? { texto: linha.ultima_texto, autor: linha.ultima_autor, em: linha.ultima_em }
+        : null,
+    }));
     return {
       botAtivo: enriquecidos.filter((t) => t.status === 'bot_ativo'),
       aguardando: enriquecidos.filter((t) => t.status === 'aguardando_humano'),
@@ -225,7 +354,9 @@ export const consoleRoutes: FastifyPluginCallback<ConsoleRoutesOpts> = (app, opt
         ticketId: t.id,
         conversaId: t.conversaId,
         payload: {
-          draftBot: ultimoTrace?.resposta ?? null,
+          // #34: bloqueio/escalate descarta o draft real — parear com ELE, não
+          // com o texto boilerplate de transição que foi ao contato
+          draftBot: draftDescartadoDe(ultimoTrace?.eventos) ?? ultimoTrace?.resposta ?? null,
           traceTurnoId: ultimoTrace?.id ?? null,
           respostaHumano: body.texto,
           motivoEscalonamento: t.motivoEscalonamento,
@@ -347,6 +478,10 @@ export const consoleRoutes: FastifyPluginCallback<ConsoleRoutesOpts> = (app, opt
     };
   });
 
+  // #31: UM poller por processo (não por conexão) — N atendentes deixam de
+  // multiplicar queries; cursores nascem em AGORA (nada de despejar a tabela
+  // inteira na conexão) e toda consulta tem LIMIT.
+  const hub = criarHubConsole(db, (obj, msg) => app.log.warn(obj, msg));
   app.get('/api/console/events', async (req, reply) => {
     reply.raw.writeHead(200, {
       'content-type': 'text/event-stream',
@@ -354,50 +489,8 @@ export const consoleRoutes: FastifyPluginCallback<ConsoleRoutesOpts> = (app, opt
       connection: 'keep-alive',
     });
     reply.raw.write(': conectado\n\n');
-    const vistos = new Set<string>();
-    let cursorTicket = new Date(0);
-    let cursorMsg = new Date(0);
-    const recuo = (d: Date) => new Date(d.getTime() - 1_000);
-    const timer = setInterval(async () => {
-      try {
-        const tickets = await db
-          .select()
-          .from(ticket)
-          .where(gt(ticket.atualizadoEm, recuo(cursorTicket)))
-          .orderBy(asc(ticket.atualizadoEm));
-        for (const t of tickets) {
-          cursorTicket = t.atualizadoEm;
-          const chave = `${t.id}:${t.atualizadoEm.getTime()}:${t.status}`;
-          if (vistos.has(chave)) continue;
-          vistos.add(chave);
-          reply.raw.write(
-            `event: ticket\ndata: ${JSON.stringify(await ticketComContexto(db, t))}\n\n`,
-          );
-        }
-        const msgs = await db
-          .select()
-          .from(mensagem)
-          .where(gt(mensagem.criadoEm, recuo(cursorMsg)))
-          .orderBy(asc(mensagem.criadoEm));
-        for (const m of msgs) {
-          cursorMsg = m.criadoEm;
-          if (vistos.has(m.id)) continue;
-          vistos.add(m.id);
-          reply.raw.write(
-            `event: mensagem\ndata: ${JSON.stringify({
-              id: m.id,
-              conversaId: m.conversaId,
-              autor: m.autor,
-              texto: m.texto,
-              criadoEm: m.criadoEm,
-            })}\n\n`,
-          );
-        }
-      } catch (err) {
-        req.log.warn({ err }, 'sse console: falha na consulta');
-      }
-    }, 1_000);
-    req.raw.on('close', () => clearInterval(timer));
+    const cancelar = hub.assinar((pacote) => reply.raw.write(pacote));
+    req.raw.on('close', cancelar);
   });
 
   done();

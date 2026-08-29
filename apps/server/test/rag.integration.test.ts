@@ -187,7 +187,7 @@ describe('008 — ingestão da KB', () => {
     try {
       cpSync(FIXTURES, dir, { recursive: true });
 
-      const r1 = await ingestKb({ db, store, embed: embedContando, dir });
+      const r1 = await ingestKb({ db, dim: DIM, embed: embedContando, dir });
       expect(r1).toMatchObject({ arquivos: 3, inalterados: 0, reingeridos: 3 });
       expect(embedTextos).toBeGreaterThan(0);
       const docs = await db.select().from(documento).where(eq(documento.ns, 'kb'));
@@ -197,7 +197,7 @@ describe('008 — ingestão da KB', () => {
 
       // rodada 2: nada mudou ⇒ zero chamadas de embed, mesmos chunk ids
       const antes = embedTextos;
-      const r2 = await ingestKb({ db, store, embed: embedContando, dir });
+      const r2 = await ingestKb({ db, dim: DIM, embed: embedContando, dir });
       expect(r2).toMatchObject({ arquivos: 3, inalterados: 3, reingeridos: 0, chunks: 0 });
       expect(embedTextos).toBe(antes);
       const chunks2 = await db.select().from(chunk).where(eq(chunk.ns, 'kb'));
@@ -208,7 +208,7 @@ describe('008 — ingestão da KB', () => {
         join(dir, 'entrega.md'),
         '# Política de entrega e prazos\n\nPrazo novo: 3 dias.\n',
       );
-      const r3 = await ingestKb({ db, store, embed: embedContando, dir });
+      const r3 = await ingestKb({ db, dim: DIM, embed: embedContando, dir });
       expect(r3).toMatchObject({ arquivos: 3, inalterados: 2, reingeridos: 1 });
       const [docEntrega] = await db
         .select()
@@ -264,9 +264,19 @@ describe('008 — busca híbrida', () => {
   });
 });
 
+describe('#32 — robustez do retrieval', () => {
+  it('embedding de dimensão errada DEGRADA para lexical — não derruba a tool', async () => {
+    await ingestKb({ db, dim: DIM, embed: embedContando, dir: FIXTURES });
+    const dimErrada = new Array(16).fill(0.5); // provider real mal configurado
+    expect(await store.search('kb', dimErrada, 3)).toEqual([]); // densa vira vazia (com warn)
+    const hibrida = await store.hybrid('kb', 'TSX-9012', dimErrada, 3);
+    expect(hibrida[0]?.texto).toContain('TSX-9012'); // lexical segura a resposta
+  }, 15_000);
+});
+
 describe('008 — pergunta de política via turno', () => {
   it('buscar_conhecimento responde com trecho da KB e a resposta cita a fonte', async () => {
-    await ingestKb({ db, store, embed: embedContando, dir: FIXTURES });
+    await ingestKb({ db, dim: DIM, embed: embedContando, dir: FIXTURES });
 
     fake
       .respondeTexto('outro') // classificador de intenção (006)

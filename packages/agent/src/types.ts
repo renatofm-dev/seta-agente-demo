@@ -26,7 +26,14 @@ export type TraceEvento =
       latencyMs: number;
       erro?: string;
     }
-  | { tipo: 'verdict'; guardrail: string; hook: string; verdict: Verdict }
+  | {
+      tipo: 'verdict';
+      guardrail: string;
+      hook: string;
+      verdict: Verdict;
+      /** #34: draft que o block/escalate descartou — insumo do correcao_hitl. */
+      draftDescartado?: string;
+    }
   | { tipo: 'fallback'; motivo: string }
   | { tipo: 'escalado' };
 

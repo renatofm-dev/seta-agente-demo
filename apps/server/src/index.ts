@@ -55,7 +55,7 @@ const gateway: OutboundGateway =
 const auth = createAuth(db, { secret: env.BETTER_AUTH_SECRET, baseURL: env.BETTER_AUTH_URL });
 
 // VectorStore pgvector (008): retrieval da KB e das skills (ns separados)
-const store = createPgVectorStore({ db, dim: env.EMBEDDING_DIM });
+const store = createPgVectorStore({ db, dim: env.EMBEDDING_DIM, logger });
 await store.ensureIndex();
 
 const registry = createSkillRegistry({

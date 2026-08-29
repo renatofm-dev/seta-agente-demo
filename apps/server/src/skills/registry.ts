@@ -11,7 +11,7 @@ import {
 } from '@seta/skills';
 import { and, desc, sql as dsql, eq } from 'drizzle-orm';
 import type { Db } from '../db/index.js';
-import { proposta, sinalAprendizado, skill, skillVersao, traceTurno } from '../db/schema.js';
+import { chunk, proposta, sinalAprendizado, skill, skillVersao, traceTurno } from '../db/schema.js';
 
 /**
  * Implementação drizzle do SkillRegistry (009). Versões imutáveis: toda
@@ -54,6 +54,14 @@ export function createSkillRegistry(deps: RegistryDeps): SkillRegistry & {
 
   async function upsertNoStore(skillId: string, idLogico: string, doc: SkillDoc): Promise<void> {
     const texto = textoDeRetrieval(doc);
+    // #32: sincronizar() roda em TODO boot — sem mudança, nada de chamada de
+    // embedding; e API de embed fora do ar nunca apaga um vetor bom (null só
+    // entra quando não existe nada melhor)
+    const [existente] = await db.select().from(chunk).where(eq(chunk.id, skillId));
+    const embExistente = (existente?.embedding as number[] | null) ?? null;
+    if (existente?.texto === texto && embExistente !== null) return; // já sincronizada
+    const embNovo = await embeddingDe(texto);
+    if (existente?.texto === texto && embNovo === null) return; // nada melhor a gravar
     await store.upsert('skills', [
       {
         id: skillId, // 1 item por skill ⇒ ativação nova substitui a anterior
@@ -61,7 +69,8 @@ export function createSkillRegistry(deps: RegistryDeps): SkillRegistry & {
         fonte: idLogico,
         titulo: idLogico,
         metadados: {},
-        embedding: await embeddingDe(texto),
+        // texto mudou e embed falhou: vetor antigo (stale) > skill invisível
+        embedding: embNovo ?? embExistente,
       },
     ]);
   }

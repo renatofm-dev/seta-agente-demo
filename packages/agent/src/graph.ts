@@ -309,6 +309,11 @@ export function createAgentRuntime(deps: AgentRuntimeDeps): AgentRuntime {
           guardrail: v.guardrail,
           hook: v.hook,
           verdict: v.verdict,
+          // #34: o draft real descartado fica no trace — sem ele o sinal de
+          // correção HITL pareava o humano com o texto boilerplate de transição
+          ...(v.verdict.tipo === 'block' || v.verdict.tipo === 'escalate'
+            ? { draftDescartado: state.draft ?? '' }
+            : {}),
         }));
         if (r.terminal) {
           const escalate = r.terminal.tipo === 'escalate';

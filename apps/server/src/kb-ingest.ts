@@ -4,7 +4,7 @@ import { isAbsolute, join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { createOpenAICompatibleProvider } from '@seta/ai-provider';
 import { newTraceId } from '@seta/observability';
-import { chunkMarkdown, tituloDoMarkdown, type VectorStore } from '@seta/rag';
+import { chunkMarkdown, tituloDoMarkdown } from '@seta/rag';
 import { and, eq } from 'drizzle-orm';
 import { createDb, type Db } from './db/index.js';
 import { chunk as chunkTable, documento } from './db/schema.js';
@@ -18,7 +18,8 @@ import { createPgVectorStore } from './rag/pgvector-store.js';
 
 export interface IngestDeps {
   readonly db: Db;
-  readonly store: VectorStore;
+  /** Dimensão dos embeddings — o store é criado POR TRANSAÇÃO (#32). */
+  readonly dim: number;
   /** Embeddings em batch; null ⇒ ingere só para busca lexical (com aviso). */
   readonly embed: ((textos: readonly string[]) => Promise<number[][]>) | null;
   readonly dir: string;
@@ -33,7 +34,7 @@ export interface IngestResultado {
 }
 
 export async function ingestKb(deps: IngestDeps): Promise<IngestResultado> {
-  const { db, store, dir } = deps;
+  const { db, dir } = deps;
   const log = deps.log ?? (() => {});
   const resultado: IngestResultado = { arquivos: 0, inalterados: 0, reingeridos: 0, chunks: 0 };
 
@@ -61,33 +62,39 @@ export async function ingestKb(deps: IngestDeps): Promise<IngestResultado> {
     const embeddings = deps.embed ? await deps.embed(pedacos.map((p) => p.texto)) : null;
 
     const documentoId = existente?.id ?? newTraceId();
-    if (existente) {
-      // versão nova: remove chunks antigos (cascade não ajuda — doc é o mesmo)
-      await db.delete(chunkTable).where(eq(chunkTable.documentoId, documentoId));
-      await db
-        .update(documento)
-        .set({ hash, titulo, versao: existente.versao + 1, atualizadoEm: new Date() })
-        .where(eq(documento.id, documentoId));
-    } else {
-      await db.insert(documento).values({ id: documentoId, ns: 'kb', fonte, titulo, hash });
-    }
+    // #32: mutação do arquivo é ATÔMICA — crash não deixa mais doc com hash
+    // novo e zero chunks (irreparável pelo skip de hash) nem chunks órfãos.
+    // Embeddings (rede) já foram computados FORA da transação.
+    await db.transaction(async (tx) => {
+      const storeTx = createPgVectorStore({ db: tx as unknown as Db, dim: deps.dim });
+      if (existente) {
+        // versão nova: remove chunks antigos (cascade não ajuda — doc é o mesmo)
+        await tx.delete(chunkTable).where(eq(chunkTable.documentoId, documentoId));
+        await tx
+          .update(documento)
+          .set({ hash, titulo, versao: existente.versao + 1, atualizadoEm: new Date() })
+          .where(eq(documento.id, documentoId));
+      } else {
+        await tx.insert(documento).values({ id: documentoId, ns: 'kb', fonte, titulo, hash });
+      }
 
-    await store.upsert(
-      'kb',
-      pedacos.map((p, i) => ({
-        id: newTraceId(),
-        texto: p.texto,
-        fonte,
-        titulo,
-        metadados: (p.heading ? { heading: p.heading } : {}) as Record<string, string>,
-        embedding: embeddings?.[i] ?? null,
-      })),
-    );
-    // amarra os chunks ao documento (store não conhece a tabela documento)
-    await db
-      .update(chunkTable)
-      .set({ documentoId })
-      .where(and(eq(chunkTable.ns, 'kb'), eq(chunkTable.fonte, fonte)));
+      await storeTx.upsert(
+        'kb',
+        pedacos.map((p, i) => ({
+          id: newTraceId(),
+          texto: p.texto,
+          fonte,
+          titulo,
+          metadados: (p.heading ? { heading: p.heading } : {}) as Record<string, string>,
+          embedding: embeddings?.[i] ?? null,
+        })),
+      );
+      // amarra os chunks ao documento (store não conhece a tabela documento)
+      await tx
+        .update(chunkTable)
+        .set({ documentoId })
+        .where(and(eq(chunkTable.ns, 'kb'), eq(chunkTable.fonte, fonte)));
+    });
     resultado.reingeridos += 1;
     resultado.chunks += pedacos.length;
     log(`${fonte}: ${pedacos.length} chunks (${existente ? 'atualizado' : 'novo'})`);
@@ -120,7 +127,7 @@ async function main(): Promise<void> {
   try {
     const r = await ingestKb({
       db,
-      store,
+      dim: env.EMBEDDING_DIM,
       dir,
       embed: provider
         ? (textos) => provider.embed(textos).then((vs) => vs.map((v) => Array.from(v)))

@@ -99,23 +99,40 @@ async function processarDisparo(deps: DebounceDeps, conversaId: string): Promise
     return;
   }
 
-  const novoTurno: TurnoPronto = {
-    id: newTraceId(),
-    conversaId,
-    textoAgregado: pendentes.map((m) => m.texto).join('\n'),
-  };
-  await deps.db.transaction(async (tx) => {
-    await tx.insert(turno).values(novoTurno);
+  // #33: agregação sob lock — outra instância disparando junto pega 0 linhas
+  // (FOR UPDATE SKIP LOCKED) e não cria turno/resposta duplicados
+  const novoTurno = await deps.db.transaction(async (tx) => {
+    const travadas = await tx
+      .select()
+      .from(mensagem)
+      .where(
+        and(
+          eq(mensagem.conversaId, conversaId),
+          eq(mensagem.direcao, 'in'),
+          isNull(mensagem.turnoId),
+        ),
+      )
+      .orderBy(asc(mensagem.criadoEm))
+      .for('update', { skipLocked: true });
+    if (travadas.length === 0) return null;
+    const criado: TurnoPronto = {
+      id: newTraceId(),
+      conversaId,
+      textoAgregado: travadas.map((m) => m.texto).join('\n'),
+    };
+    await tx.insert(turno).values(criado);
     await tx
       .update(mensagem)
-      .set({ turnoId: novoTurno.id })
+      .set({ turnoId: criado.id })
       .where(
         inArray(
           mensagem.id,
-          pendentes.map((m) => m.id),
+          travadas.map((m) => m.id),
         ),
       );
+    return criado;
   });
+  if (!novoTurno) return;
 
   try {
     await deps.handler.processar(novoTurno);
