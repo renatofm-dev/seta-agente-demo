@@ -130,7 +130,16 @@ export const eventoTicket = pgTable('evento_ticket', {
 export const sinalAprendizado = pgTable('sinal_aprendizado', {
   id: uuid('id').primaryKey(),
   tipo: text('tipo', {
-    enum: ['correcao_hitl', 'guardrail_verdict', 'escalonamento', 'resolucao_limpa', 're_pergunta'],
+    // verdict_guardrail: nome da spec 009 (#36); rejeicao_proposta: feedback do
+    // curador — auditável, mas FORA do clustering do distiller
+    enum: [
+      'correcao_hitl',
+      'verdict_guardrail',
+      'escalonamento',
+      'resolucao_limpa',
+      're_pergunta',
+      'rejeicao_proposta',
+    ],
   }).notNull(),
   ticketId: uuid('ticket_id').references(() => ticket.id),
   conversaId: uuid('conversa_id')

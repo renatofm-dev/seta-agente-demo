@@ -360,7 +360,7 @@ async function gravarSinaisDeVerdict(
     if (v.tipo !== 'verdict') continue;
     await deps.db.insert(sinalAprendizado).values({
       id: newTraceId(),
-      tipo: 'guardrail_verdict',
+      tipo: 'verdict_guardrail',
       conversaId: t.conversaId,
       payload: {
         guardrail: v.guardrail,

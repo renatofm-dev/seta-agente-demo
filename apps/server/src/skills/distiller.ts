@@ -1,7 +1,7 @@
 import type { AIProvider } from '@seta/ai-provider';
 import { newTraceId, type ObsEmitter } from '@seta/observability';
 import { DISTILLER_OUTPUT_SCHEMA, renderPromptDistiller } from '@seta/skills';
-import { desc, eq, inArray, isNull } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNull, ne } from 'drizzle-orm';
 import type { Db } from '../db/index.js';
 import { casoEval, proposta, sinalAprendizado, traceTurno } from '../db/schema.js';
 
@@ -40,10 +40,14 @@ export interface ResultadoDistiller {
 export async function gerarPropostas(deps: DistillerDeps): Promise<ResultadoDistiller> {
   const { db, provider } = deps;
   const traceIdRodada = newTraceId(); // agrupa os evento_llm desta rodada
+  // #36: rejeicao_proposta é feedback de curadoria — auditável, mas não pode
+  // voltar ao clustering (regeraria proposta parecida da que o curador negou)
   const pendentes = await db
     .select()
     .from(sinalAprendizado)
-    .where(isNull(sinalAprendizado.processadoEm))
+    .where(
+      and(isNull(sinalAprendizado.processadoEm), ne(sinalAprendizado.tipo, 'rejeicao_proposta')),
+    )
     .orderBy(desc(sinalAprendizado.criadoEm))
     .limit(200);
   if (pendentes.length === 0) {
@@ -57,6 +61,7 @@ export async function gerarPropostas(deps: DistillerDeps): Promise<ResultadoDist
   }
 
   let propostasCriadas = 0;
+  let sinaisProcessados = 0;
   for (const [chave, sinais] of clusters) {
     const resumoSinais = sinais.slice(0, 10).map((s) => ({
       tipo: s.tipo,
@@ -80,72 +85,94 @@ export async function gerarPropostas(deps: DistillerDeps): Promise<ResultadoDist
       latenciaMs: Date.now() - t0,
     });
     const parsed = DISTILLER_OUTPUT_SCHEMA.safeParse(extrairJson(res.content ?? ''));
-    if (!parsed.success || !parsed.data.proposta) continue;
+    if (!parsed.success) {
+      // #36: saída inválida (transiente) NÃO consome os sinais — ficam
+      // pendentes p/ a próxima rodada em vez de sumirem sem virar proposta
+      continue;
+    }
+    if (!parsed.data.proposta) {
+      // decisão deliberada do distiller ("nada a propor"): consome os sinais
+      await db
+        .update(sinalAprendizado)
+        .set({ processadoEm: new Date() })
+        .where(
+          inArray(
+            sinalAprendizado.id,
+            sinais.map((s) => s.id),
+          ),
+        );
+      sinaisProcessados += sinais.length;
+      continue;
+    }
     const p = parsed.data.proposta;
 
     const conversaId = sinais[0]?.conversaId;
     const propostaId = newTraceId();
-    await db.insert(proposta).values({
-      id: propostaId,
-      tipo: 'skill_novo',
-      diff: p.corpo,
-      frontmatter: {
-        name: p.name,
-        description: p.description,
-        'x-seta': {
-          escopo: 'local',
-          gatilho: p.gatilho,
-          tools: p.tools,
-          metricas: { usos: 0, resolucoes: 0 },
-          proveniencia: 'distiller',
+    // #36: proposta + caso_eval + marcação dos sinais são ATÔMICOS por cluster —
+    // crash no meio da rodada não duplica propostas na execução seguinte
+    await db.transaction(async (tx) => {
+      await tx.insert(proposta).values({
+        id: propostaId,
+        tipo: 'skill_novo',
+        diff: p.corpo,
+        frontmatter: {
+          name: p.name,
+          description: p.description,
+          'x-seta': {
+            escopo: 'local',
+            gatilho: p.gatilho,
+            tools: p.tools,
+            metricas: { usos: 0, resolucoes: 0 },
+            proveniencia: 'distiller',
+          },
         },
-      },
-      evidencia: {
-        cluster: chave,
-        nSinais: sinais.length,
-        nConversas: new Set(sinais.map((s) => s.conversaId)).size,
-        conversaId,
-        trechos: resumoSinais.slice(0, 3),
-      },
-      sinais: sinais.map((s) => s.id),
-    });
-    propostasCriadas += 1;
+        evidencia: {
+          cluster: chave,
+          nSinais: sinais.length,
+          nConversas: new Set(sinais.map((s) => s.conversaId)).size,
+          conversaId,
+          trechos: resumoSinais.slice(0, 3),
+        },
+        sinais: sinais.map((s) => s.id),
+      });
+      propostasCriadas += 1;
 
-    // toda proposta gera um caso_eval do trace real (spec 009)
-    const [trace] = conversaId
-      ? await db
-          .select()
-          .from(traceTurno)
-          .where(eq(traceTurno.conversaId, conversaId))
-          .orderBy(desc(traceTurno.criadoEm))
-          .limit(1)
-      : [];
-    const payload0 = (sinais[0]?.payload ?? {}) as {
-      textoUsuario?: string;
-      respostaHumano?: string;
-    };
-    await db.insert(casoEval).values({
-      id: newTraceId(),
-      input: payload0.textoUsuario ?? p.gatilho,
-      comportamentoEsperado: payload0.respostaHumano ?? p.description,
-      origem: { propostaId, traceTurnoId: trace?.id ?? null },
+      // toda proposta gera um caso_eval do trace real (spec 009)
+      const [trace] = conversaId
+        ? await tx
+            .select()
+            .from(traceTurno)
+            .where(eq(traceTurno.conversaId, conversaId))
+            .orderBy(desc(traceTurno.criadoEm))
+            .limit(1)
+        : [];
+      const payload0 = (sinais[0]?.payload ?? {}) as {
+        textoUsuario?: string;
+        respostaHumano?: string;
+      };
+      await tx.insert(casoEval).values({
+        id: newTraceId(),
+        input: payload0.textoUsuario ?? p.gatilho,
+        comportamentoEsperado: payload0.respostaHumano ?? p.description,
+        origem: { propostaId, traceTurnoId: trace?.id ?? null },
+      });
+      await tx
+        .update(sinalAprendizado)
+        .set({ processadoEm: new Date() })
+        .where(
+          inArray(
+            sinalAprendizado.id,
+            sinais.map((s) => s.id),
+          ),
+        );
     });
+    sinaisProcessados += sinais.length;
   }
-
-  await db
-    .update(sinalAprendizado)
-    .set({ processadoEm: new Date() })
-    .where(
-      inArray(
-        sinalAprendizado.id,
-        pendentes.map((s) => s.id),
-      ),
-    );
 
   return {
     clusters: clusters.size,
     propostasCriadas,
-    sinaisProcessados: pendentes.length,
+    sinaisProcessados,
   };
 }
 

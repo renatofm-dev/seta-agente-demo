@@ -410,12 +410,15 @@ describe('critérios spec 009 (Ato 3)', () => {
       motivo: 'genérico demais, não ensina nada',
     });
     expect(rejeitar.statusCode).toBe(204);
+    // #36: tipo próprio (auditável) que o distiller NÃO recicla em proposta nova
     const sinaisRejeicao = await db.select().from(sinalAprendizado);
-    expect(
-      sinaisRejeicao.some(
-        (sig) => (sig.payload as { origem?: string }).origem === 'rejeicao_proposta',
-      ),
-    ).toBe(true);
+    expect(sinaisRejeicao.some((sig) => sig.tipo === 'rejeicao_proposta')).toBe(true);
+
+    // #36: rejeitar de novo (já rejeitada) não sobrescreve a auditoria
+    const deNovo = await apiCurador('POST', `/api/aprendizado/proposta/${pid}/rejeitar`, {
+      motivo: 'tentando de novo',
+    });
+    expect(deNovo.statusCode).toBeGreaterThanOrEqual(400);
 
     // kill-switch: skill do seed some do retrieval na hora
     const [s] = await db.select().from(skill).where(eq(skill.idLogico, 'status-pedido-proativo'));
@@ -441,6 +444,33 @@ describe('critérios spec 009 (Ato 3)', () => {
       .where(and(eq(chunk.ns, 'skills'), eq(chunk.id, s.id)));
     expect(restos).toHaveLength(0);
   }, 20_000);
+
+  it('#36: JSON inválido do distiller NÃO consome os sinais (ficam pendentes)', async () => {
+    fake = createFakeProvider().respondeTexto('negociar_preco'); // classificador escala → gera sinais
+    await turnoCompleto('quero um desconto agressivo');
+    await aguardar(
+      async () =>
+        (await db.select().from(sinalAprendizado).where(isNull(sinalAprendizado.processadoEm)))
+          .length > 0,
+    );
+    const pendentesAntes = await db
+      .select()
+      .from(sinalAprendizado)
+      .where(isNull(sinalAprendizado.processadoEm));
+
+    fake = createFakeProvider();
+    for (let i = 0; i < 6; i++) fake.respondeTexto(`resposta sem json nenhum ${i} 🙃`);
+    const gerar = await apiCurador('POST', '/api/aprendizado/gerar');
+    expect(gerar.statusCode).toBe(200);
+    expect(gerar.json().propostasCriadas).toBe(0);
+    expect(gerar.json().sinaisProcessados).toBe(0); // nada foi consumido às cegas
+
+    const pendentesDepois = await db
+      .select()
+      .from(sinalAprendizado)
+      .where(isNull(sinalAprendizado.processadoEm));
+    expect(pendentesDepois.length).toBe(pendentesAntes.length); // prontos p/ retry
+  }, 30_000);
 
   it('#32: sincronizar não re-embeda inalteradas nem apaga vetor bom', async () => {
     let chamadas = 0;
