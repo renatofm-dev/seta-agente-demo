@@ -228,13 +228,16 @@ describe('critérios spec 010', () => {
   it('eventos tipados com traceId/ticketId; métricas batem o cenário controlado', async () => {
     await cenarioControlado();
 
-    // evento_llm do turno 1: usage agregado do fake (2 chats × 10/5)
+    // evento_llm do turno 1 (#30): classificador (10/5) + 2 chats do grafo (20/10)
     const llms = await db.select().from(eventoLlm).orderBy(eventoLlm.criadoEm);
     expect(llms[0]?.modelo).toBe('proxy-fake');
-    expect(llms[0]?.tokensEntrada).toBe(20);
-    expect(llms[0]?.tokensSaida).toBe(10);
+    expect(llms[0]?.tokensEntrada).toBe(30);
+    expect(llms[0]?.tokensSaida).toBe(15);
     expect(llms[0]?.traceId).toBeTruthy();
     expect(llms[0]?.turnoId).toBeTruthy();
+    // turno 2 (escala pré-grafo): tokens do classificador contam — nada de 0/0
+    expect(llms[1]?.tokensEntrada).toBe(10);
+    expect(llms[1]?.tokensSaida).toBe(5);
 
     // turno 2: guardrail de intenção + escalonamento com ticketId preenchido
     const [g] = await db.select().from(eventoGuardrail);
@@ -261,12 +264,12 @@ describe('critérios spec 010', () => {
     expect(m.escalonamentosPorMotivo).toEqual([{ motivo: 'negociacao_preco', total: 1 }]);
     expect(m.conversasPorDia).toHaveLength(1);
     expect(m.conversasPorDia[0].conversas).toBe(1);
-    // tokens: turno 1 = 20/10; turno 2 (escala pré-grafo) = 0/0
+    // tokens (#30): turno 1 = 30/15 (com classificador); turno 2 = 10/5
     expect(m.tokensPorDia).toHaveLength(1);
-    expect(m.tokensPorDia[0].entrada).toBe(20);
-    expect(m.tokensPorDia[0].saida).toBe(10);
+    expect(m.tokensPorDia[0].entrada).toBe(40);
+    expect(m.tokensPorDia[0].saida).toBe(20);
     // custo com preços do env (in=10, out=20 por 1M)
-    expect(m.custoTotal).toBeCloseTo((20 / 1e6) * 10 + (10 / 1e6) * 20, 10);
+    expect(m.custoTotal).toBeCloseTo((40 / 1e6) * 10 + (20 / 1e6) * 20, 10);
     expect(m.p95TurnoMs).not.toBeNull();
     expect(m.p95QueryMs).not.toBeNull(); // turno 1 rodou query do catálogo
   }, 30_000);
@@ -293,7 +296,7 @@ describe('critérios spec 010', () => {
     expect(tool.nome).toBe('titulos_abertos');
     expect(tool.resultado.rows.length).toBeGreaterThan(0);
     expect(t1.resposta).toBe('Seus boletos em aberto estão aqui!');
-    expect(t1.tokensEntrada).toBe(20);
+    expect(t1.tokensEntrada).toBe(30); // trace também inclui o classificador (#30)
     expect(t1.latenciaMs).toBeGreaterThanOrEqual(0);
 
     // turno 2: verdict do classificador + escalada visíveis
@@ -348,5 +351,44 @@ describe('critérios spec 010', () => {
     expect(saida?.texto).toBe('Tudo ótimo! Como posso ajudar?'); // ...e a resposta saiu
     const [trace] = await db.select().from(traceTurno).where(eq(traceTurno.conversaId, conversaId));
     expect(trace?.fallback).toBe(false); // turno normal, sem fallback de emergência
+  }, 20_000);
+
+  it('#30: tokens do RESUMO rolante também entram na conta do turno', async () => {
+    const handler = createAgentTurnoHandler({
+      db,
+      boss,
+      provider: providerProxy,
+      catalog,
+      executor,
+      clientConfig,
+      registry: null,
+      store,
+      obs: createDrizzleObsEmitter(db, logger),
+      logger,
+      turnoTimeoutMs: 30_000,
+      resumoACadaTurnos: 1, // resumo roda já no primeiro turno
+    });
+
+    const conversaId = newTraceId();
+    const turnoId = newTraceId();
+    await db.insert(conversa).values({ id: conversaId, waId: '5511999990003' });
+    await db.insert(turno).values({ id: turnoId, conversaId, textoAgregado: 'oi de novo' });
+    // 3 chamadas: classificador, resposta do grafo e sumarização (10/5 cada)
+    fake
+      .respondeTexto('outro')
+      .respondeTexto('Oi! Tudo certo por aqui.')
+      .respondeTexto('Resumo: cliente cumprimentou; sem pendências.');
+
+    await handler.processar({ id: turnoId, conversaId, textoAgregado: 'oi de novo' });
+
+    await aguardar(async () => {
+      const [ev] = await db.select().from(eventoLlm).where(eq(eventoLlm.conversaId, conversaId));
+      return ev !== undefined;
+    });
+    const [ev] = await db.select().from(eventoLlm).where(eq(eventoLlm.conversaId, conversaId));
+    expect(ev?.tokensEntrada).toBe(30); // 10 (classificador) + 10 (grafo) + 10 (resumo)
+    expect(ev?.tokensSaida).toBe(15);
+    const [conv] = await db.select().from(conversa).where(eq(conversa.id, conversaId));
+    expect(conv?.resumo).toContain('Resumo');
   }, 20_000);
 });

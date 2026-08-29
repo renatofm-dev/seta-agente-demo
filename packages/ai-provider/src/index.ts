@@ -12,6 +12,9 @@ export const AIProviderConfigSchema = z.object({
   embeddingModel: z.string().min(1).optional(),
   temperature: z.number().min(0).max(2).default(0.2),
   maxOutputTokens: z.number().int().min(1).default(1024),
+  /** Timeout de rede por chamada (chat/embed) — request pendurada nunca segura
+   * um turno além disso (#27). */
+  timeoutMs: z.number().int().min(1_000).default(60_000),
 });
 export type AIProviderConfig = z.infer<typeof AIProviderConfigSchema>;
 export type AIProviderConfigInput = z.input<typeof AIProviderConfigSchema>;
@@ -40,6 +43,8 @@ export interface ChatRequest {
   readonly tools?: readonly ToolDef[];
   readonly temperature?: number;
   readonly maxOutputTokens?: number;
+  /** Cancela a chamada em voo (deadline do turno — #27). */
+  readonly signal?: AbortSignal;
 }
 
 export interface ToolCall {

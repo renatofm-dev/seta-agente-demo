@@ -1,0 +1,1 @@
+ALTER TABLE "evento_llm" ALTER COLUMN "conversa_id" DROP NOT NULL;

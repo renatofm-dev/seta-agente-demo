@@ -49,7 +49,14 @@ export function createOpenAICompatibleProvider(
   const config = AIProviderConfigSchema.parse(configInput);
   const base = config.baseUrl.replace(/\/+$/, '');
 
-  async function post(path: string, body: Record<string, unknown>): Promise<unknown> {
+  async function post(
+    path: string,
+    body: Record<string, unknown>,
+    signal?: AbortSignal,
+  ): Promise<unknown> {
+    // timeout próprio SEMPRE presente; sinal externo (deadline do turno) compõe
+    const sinais = [AbortSignal.timeout(config.timeoutMs)];
+    if (signal) sinais.push(signal);
     const res = await fetchFn(`${base}${path}`, {
       method: 'POST',
       headers: {
@@ -57,6 +64,7 @@ export function createOpenAICompatibleProvider(
         'content-type': 'application/json',
       },
       body: JSON.stringify(body),
+      signal: AbortSignal.any(sinais),
     });
     if (!res.ok) {
       throw new Error(`AIProvider ${path} ${res.status}: ${(await res.text()).slice(0, 300)}`);
@@ -80,7 +88,7 @@ export function createOpenAICompatibleProvider(
           function: { name: t.name, description: t.description, parameters: t.parameters },
         }));
       }
-      const data = (await post('/chat/completions', corpo)) as OpenAIChatResponse;
+      const data = (await post('/chat/completions', corpo, req.signal)) as OpenAIChatResponse;
       const escolha = data.choices[0];
       if (!escolha) throw new Error('AIProvider: resposta sem choices');
       return {

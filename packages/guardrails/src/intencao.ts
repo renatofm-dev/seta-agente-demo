@@ -16,12 +16,23 @@ export const TRIGGER_POR_INTENCAO: Readonly<Record<Exclude<Intencao, 'outro'>, s
   pedir_humano: 'pedido_explicito',
 };
 
+export interface ClassificacaoIntencao {
+  readonly intencao: Intencao;
+  /** Usage do provider — a 010 exige contabilizar TODA chamada (#30). */
+  readonly tokensEntrada: number;
+  readonly tokensSaida: number;
+}
+
+const TIMEOUT_CLASSIFICADOR_MS = 10_000;
+
 export async function classificarIntencao(
   provider: AIProvider,
   textoUsuario: string,
   temasSensiveis: readonly string[],
-): Promise<Intencao> {
+): Promise<ClassificacaoIntencao> {
   const res = await provider.chat({
+    // chamada curta merece timeout curto — pendurada não segura o turno (#27)
+    signal: AbortSignal.timeout(TIMEOUT_CLASSIFICADOR_MS),
     messages: [
       {
         role: 'system',
@@ -43,5 +54,9 @@ export async function classificarIntencao(
     .replaceAll(/[^a-z_]/g, '');
   const parsed = IntencaoSchema.safeParse(bruto);
   // classificador em dúvida nunca bloqueia o fluxo: cai em 'outro'
-  return parsed.success ? parsed.data : 'outro';
+  return {
+    intencao: parsed.success ? parsed.data : 'outro',
+    tokensEntrada: res.tokensEntrada,
+    tokensSaida: res.tokensSaida,
+  };
 }

@@ -33,6 +33,8 @@ export const EnvSchema = z.object({
   EMBEDDING_DIM: z.coerce.number().int().positive().default(1536),
   /** Diretório da base de conhecimento ingerida por `pnpm kb:ingest` (008). */
   KB_DIR: z.string().min(1).default('kb'),
+  /** Turnos processados em paralelo (conversas diferentes) — #28. */
+  AGENT_TURNOS_CONCORRENTES: z.coerce.number().int().min(1).default(3),
   /** Timeout do turno do agente (spec 005: 60 s). */
   AGENT_TURN_TIMEOUT_MS: z.coerce.number().int().min(1_000).default(60_000),
   /** Sumarização barata do resumo rolante a cada K turnos. */

@@ -107,6 +107,10 @@ async function processarComAgente(
   const clienteId = vinculo?.clienteErpId ?? '';
   const session = { traceId, clienteId };
 
+  const inicioTurno = Date.now();
+  // #30: tokens de TODA chamada do turno (classificador + resumo) entram no
+  // trace e no evento_llm — o custo do /metricas deixa de subcontar
+  const usageExtra = { entrada: 0, saida: 0 };
   const efeitos = {
     gravarResposta: async (texto: string) => {
       await enqueueOutbound(
@@ -115,7 +119,9 @@ async function processarComAgente(
       );
     },
     atualizarResumoSePreciso: async () => {
-      await atualizarResumo(deps, conv.id);
+      const uso = await atualizarResumo(deps, conv.id);
+      usageExtra.entrada += uso.tokensEntrada;
+      usageExtra.saida += uso.tokensSaida;
     },
   };
 
@@ -135,11 +141,14 @@ async function processarComAgente(
   }
 
   // guardrail de intenção (006): classificação curta ANTES de o agente responder
-  const intencao = await classificarIntencao(
+  const cls = await classificarIntencao(
     deps.provider,
     t.textoAgregado,
     deps.clientConfig.guardrails.temasSensiveis,
-  ).catch(() => 'outro' as const);
+  ).catch(() => ({ intencao: 'outro' as const, tokensEntrada: 0, tokensSaida: 0 }));
+  const intencao = cls.intencao;
+  usageExtra.entrada += cls.tokensEntrada;
+  usageExtra.saida += cls.tokensSaida;
   if (intencao !== 'outro') {
     const trigger = TRIGGER_POR_INTENCAO[intencao];
     await efeitos.gravarResposta(TEXTO_TRANSICAO);
@@ -158,9 +167,9 @@ async function processarComAgente(
         },
         { tipo: 'escalado' },
       ],
-      tokensEntrada: 0,
-      tokensSaida: 0,
-      latenciaMs: 0,
+      tokensEntrada: usageExtra.entrada,
+      tokensSaida: usageExtra.saida,
+      latenciaMs: Date.now() - inicioTurno, // latência REAL — 0 distorcia o p95
     };
   }
 
@@ -215,7 +224,7 @@ async function processarComAgente(
     provider: deps.provider,
     guardrails: [guardrailPreco()],
   });
-  return runtime.processarTurno({
+  const resultado = await runtime.processarTurno({
     session,
     persona: deps.clientConfig.persona,
     resumo: conv.resumo,
@@ -230,6 +239,11 @@ async function processarComAgente(
     },
     efeitos,
   });
+  return {
+    ...resultado,
+    tokensEntrada: resultado.tokensEntrada + usageExtra.entrada,
+    tokensSaida: resultado.tokensSaida + usageExtra.saida,
+  };
 }
 
 /** Escalada do bot (007): ticket → aguardando_humano com o motivo da tool. */
@@ -357,13 +371,19 @@ async function gravarSinaisDeVerdict(
 }
 
 /** Sumarização barata a cada K turnos (uma chamada curta ao provider). */
-async function atualizarResumo(deps: AgentTurnoHandlerDeps, conversaId: string): Promise<void> {
+const SEM_USO = { tokensEntrada: 0, tokensSaida: 0 } as const;
+const TIMEOUT_RESUMO_MS = 20_000;
+
+async function atualizarResumo(
+  deps: AgentTurnoHandlerDeps,
+  conversaId: string,
+): Promise<{ tokensEntrada: number; tokensSaida: number }> {
   const [conv] = await deps.db
     .update(conversa)
     .set({ turnosDesdeResumo: sql`${conversa.turnosDesdeResumo} + 1` })
     .where(eq(conversa.id, conversaId))
     .returning();
-  if (!conv || !deps.provider || conv.turnosDesdeResumo < deps.resumoACadaTurnos) return;
+  if (!conv || !deps.provider || conv.turnosDesdeResumo < deps.resumoACadaTurnos) return SEM_USO;
 
   const ultimas = await deps.db
     .select()
@@ -378,6 +398,7 @@ async function atualizarResumo(deps: AgentTurnoHandlerDeps, conversaId: string):
 
   try {
     const res = await deps.provider.chat({
+      signal: AbortSignal.timeout(TIMEOUT_RESUMO_MS), // pendurado não segura o turno (#27)
       messages: [
         {
           role: 'system',
@@ -398,8 +419,10 @@ async function atualizarResumo(deps: AgentTurnoHandlerDeps, conversaId: string):
         .set({ resumo: res.content, turnosDesdeResumo: 0 })
         .where(eq(conversa.id, conversaId));
     }
+    return { tokensEntrada: res.tokensEntrada, tokensSaida: res.tokensSaida };
   } catch (err) {
     deps.logger.warn({ err, conversaId }, 'sumarização do resumo falhou — segue sem atualizar');
+    return SEM_USO;
   }
 }
 

@@ -64,6 +64,13 @@
       "when": 1787956220116,
       "tag": "0008_observabilidade",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1788015144902,
+      "tag": "0009_evento-llm-fora-de-conversa",
+      "breakpoints": true
     }
   ]
 }

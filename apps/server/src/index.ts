@@ -15,7 +15,7 @@ import { createPgVectorStore } from './rag/pgvector-store.js';
 import { createSkillRegistry } from './skills/registry.js';
 import { registerSinaisDiarios } from './skills/sinais-job.js';
 import { registerDebounceWorker } from './wa/debounce.js';
-import { registerOutboxWorker } from './wa/outbox.js';
+import { registerOutboxSweeper, registerOutboxWorker } from './wa/outbox.js';
 import { ticketPermiteBot } from './wa/tickets.js';
 import { createAgentTurnoHandler } from './wa/turno-handler.js';
 
@@ -73,6 +73,7 @@ await registerDebounceWorker({
   db,
   boss,
   debounceMs: env.WA_DEBOUNCE_MS,
+  turnosConcorrentes: env.AGENT_TURNOS_CONCORRENTES,
   // HITL (007): bot só responde com o ticket em bot_ativo (resolvido reabre)
   ticketGate: (conversaId) => ticketPermiteBot(db, conversaId),
   handler: createAgentTurnoHandler({
@@ -92,6 +93,7 @@ await registerDebounceWorker({
   logger,
 });
 await registerOutboxWorker({ db, boss, gateway, logger });
+await registerOutboxSweeper({ db, boss, gateway, logger });
 
 const app = buildApp({
   env,

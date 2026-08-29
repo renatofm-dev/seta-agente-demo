@@ -4,7 +4,7 @@ import { loadClientConfig } from '@seta/client-config';
 import { createPgConnector, type DbConnector } from '@seta/erp-connector';
 import { createLogger, createNoopObsEmitter } from '@seta/observability';
 import { createExecutor, type Executor, loadCatalog } from '@seta/query-catalog';
-import { and, count, eq } from 'drizzle-orm';
+import { and, count, eq, isNull } from 'drizzle-orm';
 import { migrate } from 'drizzle-orm/node-postgres/migrator';
 import pg from 'pg';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
@@ -18,6 +18,7 @@ import {
   chunk,
   conversa,
   documento,
+  eventoLlm,
   eventoQuery,
   eventoTicket,
   mensagem,
@@ -31,6 +32,7 @@ import {
   turno,
 } from '../src/db/schema.ts';
 import { type Env, loadEnv } from '../src/env.ts';
+import { createDrizzleObsEmitter } from '../src/obs-emitter.ts';
 import { createDrizzleQueryEventSink } from '../src/query-event-sink.ts';
 import { createPgVectorStore } from '../src/rag/pgvector-store.ts';
 import { seedApp, USUARIOS_DEMO } from '../src/seed-app.ts';
@@ -202,7 +204,13 @@ beforeAll(async () => {
     env,
     clientConfig,
     wa: { db, boss },
-    console: { auth, executor, registry, provider: providerProxy },
+    console: {
+      auth,
+      executor,
+      registry,
+      provider: providerProxy,
+      obs: createDrizzleObsEmitter(db, logger), // #30: tokens do distiller
+    },
   });
 
   const curador = USUARIOS_DEMO[1];
@@ -220,6 +228,7 @@ beforeEach(async () => {
   for (let tentativa = 0; ; tentativa++) {
     try {
       await db.delete(casoEval);
+      await db.delete(eventoLlm);
       await db.delete(chunk);
       await db.delete(documento);
       await db.delete(skillVersao);
@@ -274,6 +283,14 @@ describe('critérios spec 009 (Ato 3)', () => {
     expect(gerar.statusCode, gerar.body).toBe(200);
     expect(gerar.json().propostasCriadas).toBe(1);
     expect(gerar.json().sinaisProcessados).toBeGreaterThanOrEqual(sinais.length);
+    // #30: a chamada do distiller entra no evento_llm (fora de conversa)
+    await aguardar(async () => {
+      const rows = await db.select().from(eventoLlm).where(isNull(eventoLlm.conversaId));
+      return rows.length >= 1;
+    });
+    const [evDistiller] = await db.select().from(eventoLlm).where(isNull(eventoLlm.conversaId));
+    expect(evDistiller?.tokensEntrada).toBe(10);
+    expect(evDistiller?.turnoId).toBeNull();
 
     // proposta com evidência + caso_eval do trace real
     const propostas = await apiCurador('GET', '/api/aprendizado/propostas');
