@@ -46,14 +46,33 @@ export interface DebounceDeps {
    * ticket aguardando/atendido por humano). Ausente ⇒ sempre permite.
    */
   readonly ticketGate?: (conversaId: string) => Promise<boolean>;
+  /** #28: turnos processados em paralelo (conversas diferentes). Default 3. */
+  readonly turnosConcorrentes?: number;
 }
 
 export async function registerDebounceWorker(deps: DebounceDeps): Promise<void> {
-  await deps.boss.work<{ conversaId: string }>(FILA_DEBOUNCE, async (jobs) => {
-    for (const job of jobs) {
-      await processarDisparo(deps, job.data.conversaId);
-    }
-  });
+  const concorrencia = Math.max(1, deps.turnosConcorrentes ?? 3);
+  // #28: N pollers independentes (padrão pg-boss v12 p/ concorrência) — um
+  // turno lento não segura mais as outras conversas. MESMA conversa continua
+  // serial via fila em memória (processo único na POC; multi-instância: #33).
+  const filaPorConversa = new Map<string, Promise<void>>();
+  const processarSerialPorConversa = (conversaId: string): Promise<void> => {
+    const anterior = filaPorConversa.get(conversaId) ?? Promise.resolve();
+    const atual = anterior.then(() => processarDisparo(deps, conversaId));
+    const corrente = atual.catch(() => {});
+    filaPorConversa.set(conversaId, corrente);
+    void corrente.then(() => {
+      if (filaPorConversa.get(conversaId) === corrente) filaPorConversa.delete(conversaId);
+    });
+    return atual;
+  };
+  for (let i = 0; i < concorrencia; i++) {
+    await deps.boss.work<{ conversaId: string }>(FILA_DEBOUNCE, async (jobs) => {
+      for (const job of jobs) {
+        await processarSerialPorConversa(job.data.conversaId);
+      }
+    });
+  }
 }
 
 async function processarDisparo(deps: DebounceDeps, conversaId: string): Promise<void> {
