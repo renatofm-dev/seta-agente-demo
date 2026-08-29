@@ -83,6 +83,7 @@ async function turnoCompleto(texto: string): Promise<void> {
   const res = await app.inject({
     method: 'POST',
     url: '/dev/inbound',
+    headers: { cookie: cookie }, // simulador exige sessão (011)
     payload: { waId: WA_ID, text: texto },
   });
   expect(res.statusCode).toBe(202);

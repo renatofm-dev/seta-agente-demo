@@ -120,6 +120,7 @@ async function turnoCompleto(texto: string): Promise<typeof traceTurno.$inferSel
   const res = await app.inject({
     method: 'POST',
     url: '/dev/inbound',
+    headers: { cookie: cookieAtendente }, // simulador exige sessão (011)
     payload: { waId: WA_ID, text: texto },
   });
   expect(res.statusCode).toBe(202);

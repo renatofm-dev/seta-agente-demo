@@ -9,7 +9,7 @@ const configDemo = join(import.meta.dirname, '../../../configs/demo/client.yaml'
 describe('client-config', () => {
   it('valida o client.yaml da demo (o arquivo real do repo)', () => {
     const cfg = loadClientConfig(configDemo);
-    expect(cfg.nome).toBe('TS Explorer Demo');
+    expect(cfg.nome).toBe('Distribuidora Aurora');
     expect(cfg.modulos.financeiro).toBe(true);
     expect(cfg.limites.maxToolCallsPorTurno).toBeGreaterThan(0);
   });

@@ -74,6 +74,7 @@ async function mensagemDoContato(text: string) {
   const res = await app.inject({
     method: 'POST',
     url: '/dev/inbound',
+    headers: { cookie: cookieAtendente }, // simulador exige sessão (011)
     payload: { waId: WA_ID, text },
   });
   expect(res.statusCode).toBe(202);
