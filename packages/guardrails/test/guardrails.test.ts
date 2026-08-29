@@ -152,3 +152,24 @@ describe('classificador de intenção', () => {
     expect(fake.requests[0]?.messages[0]?.content).toContain('jurídico, imprensa');
   });
 });
+
+describe('#34: valores sem o símbolo R$', () => {
+  const g = guardrailPreco();
+
+  it('"1234 reais" órfão escala; com origem monetária passa', async () => {
+    const semOrigem = await g.beforeReply?.('Fica 1234 reais no total.', CTX_VAZIO);
+    expect(semOrigem?.tipo).toBe('escalate');
+
+    const ctx: GuardrailCtx = {
+      ...CTX_VAZIO,
+      toolResults: [
+        { nome: 'titulos_abertos', priceSource: false, rows: [{ valor_centavos: '123400' }] },
+      ],
+    };
+    expect(await g.beforeReply?.('Fica 1234 reais no total.', ctx)).toEqual(ALLOW);
+  });
+
+  it('extrai centavos de "12,50 reais"', () => {
+    expect(extrairValoresMonetarios('custa 12,50 reais')).toContain(1250);
+  });
+});

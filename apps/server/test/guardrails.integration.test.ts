@@ -211,11 +211,24 @@ describe('critérios spec 006', () => {
       tipo: string;
       guardrail?: string;
       verdict?: { tipo: string; trigger?: string };
+      draftDescartado?: string;
     }[];
     const verdict = eventos.find((e) => e.tipo === 'verdict');
     expect(verdict?.guardrail).toBe('preco');
     expect(verdict?.verdict).toMatchObject({ tipo: 'escalate', trigger: 'negociacao_preco' });
+    // #34: o draft REAL descartado fica no trace (insumo do correcao_hitl/009)
+    expect(verdict?.draftDescartado).toBe('Claro! Te dou 10% de desconto: fica R$ 99,90.');
     expect(eventos.some((e) => e.tipo === 'fallback')).toBe(true);
+  }, 20_000);
+
+  it('#34: valor sem "R$" ("1234 reais") também é pego pelo guardrail', async () => {
+    fake.respondeTexto('outro').respondeTexto('Consigo fazer por 1234 reais à vista!'); // sem R$, valor órfão
+    const { trace, resposta, ticket: t } = await turnoCompleto('quanto fica aquele item?');
+
+    expect(resposta).toBe(TEXTO_TRANSICAO);
+    expect(t?.status).toBe('aguardando_humano');
+    const eventos = trace.eventos as { tipo: string; guardrail?: string }[];
+    expect(eventos.find((e) => e.tipo === 'verdict')?.guardrail).toBe('preco');
   }, 20_000);
 
   it('valores rastreáveis a tool do turno passam pelo guardrail (boletos com R$)', async () => {

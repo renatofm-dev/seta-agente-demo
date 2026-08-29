@@ -11,6 +11,9 @@ import { ALLOW, type GuardrailCtx, type GuardrailHooks, type Verdict } from './i
 
 // milhar exige ≥1 ponto; senão `\d{1,3}` casaria só o prefixo de "2854,30"
 const RE_REAIS = /R\$\s?(\d{1,3}(?:\.\d{3})+|\d+)(?:,(\d{2}))?/g;
+// #34: LLM varia a grafia — "1234 reais" / "12,50 real" também é valor
+// (número por extenso, ex. "mil e duzentos reais", fica fora — premissa)
+const RE_REAIS_SUFIXO = /\b(\d{1,3}(?:\.\d{3})+|\d+)(?:,(\d{2}))?\s*(?:reais|real)\b/gi;
 const RE_PERCENTUAL = /\d+(?:[.,]\d+)?\s?(?:%|por\s?cento)/gi;
 const RE_CONDICAO_ESPECIAL =
   /\b(desconto|abatimento|cortesia|por conta da casa|pre[cç]o especial|condi[cç][aã]o especial|baixar o pre[cç]o|fa[cç]o por)\b/i;
@@ -18,10 +21,12 @@ const RE_CONDICAO_ESPECIAL =
 /** Valores monetários do texto, em centavos. */
 export function extrairValoresMonetarios(texto: string): number[] {
   const valores: number[] = [];
-  for (const m of texto.matchAll(RE_REAIS)) {
-    const inteiros = Number((m[1] ?? '0').replaceAll('.', ''));
-    const centavos = Number(m[2] ?? '0');
-    valores.push(inteiros * 100 + centavos);
+  for (const re of [RE_REAIS, RE_REAIS_SUFIXO]) {
+    for (const m of texto.matchAll(re)) {
+      const inteiros = Number((m[1] ?? '0').replaceAll('.', ''));
+      const centavos = Number(m[2] ?? '0');
+      valores.push(inteiros * 100 + centavos);
+    }
   }
   return valores;
 }
