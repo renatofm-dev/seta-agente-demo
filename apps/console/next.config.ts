@@ -5,6 +5,8 @@ const SERVER_URL = process.env.SERVER_INTERNAL_URL ?? 'http://localhost:3001';
 const nextConfig: NextConfig = {
   // regras de agente vivem no CLAUDE.md da raiz do monorepo
   agentRules: false,
+  // imagem de produção mínima (011): server.js autocontido + .next/static
+  output: 'standalone',
   // proxy → server (same-origin: cookies de sessão e SSE sem CORS)
   async rewrites() {
     return [

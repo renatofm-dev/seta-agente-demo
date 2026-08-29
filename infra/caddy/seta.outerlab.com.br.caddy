@@ -1,0 +1,25 @@
+# Site block da POC (011) — incluir no Caddyfile do host:
+#   import /caminho/para/seta-agente/infra/caddy/seta.outerlab.com.br.caddy
+# TLS automático via Cloudflare (proxy laranja ligado funciona para o webhook Meta).
+
+seta.outerlab.com.br {
+	encode gzip
+
+	# webhook Meta + APIs do server (console consome /api via rewrite do Next,
+	# mas expor direto economiza um hop e serve o smoke com curl)
+	@server path /webhook* /api/auth/* /api/console/* /api/aprendizado/* /healthz
+	handle @server {
+		reverse_proxy 127.0.0.1:3001 {
+			# /api/console/events é SSE — sem buffering
+			flush_interval -1
+		}
+	}
+
+	# todo o resto (páginas, /api-dev via rewrite interno do Next) → console
+	handle {
+		reverse_proxy 127.0.0.1:3000 {
+			# SSE do simulador/console atravessa o proxy sem buffering
+			flush_interval -1
+		}
+	}
+}
