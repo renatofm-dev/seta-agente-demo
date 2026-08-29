@@ -13,7 +13,7 @@ import { newTraceId, type ObsEmitter } from '@seta/observability';
 import { buildToolSpecs, type CatalogIndex, type Executor } from '@seta/query-catalog';
 import type { VectorStore } from '@seta/rag';
 import type { SkillRegistry } from '@seta/skills';
-import { and, asc, eq, ne, sql } from 'drizzle-orm';
+import { and, desc, eq, isNull, ne, or, sql } from 'drizzle-orm';
 import type { PgBoss } from 'pg-boss';
 import type { Logger } from 'pino';
 import type { Db } from '../db/index.js';
@@ -164,12 +164,20 @@ async function processarComAgente(
     };
   }
 
+  // as N mais RECENTES, em ordem cronológica; turno_id IS NULL (mensagem manual
+  // do atendente) também entra — ne() sozinho descartaria essas linhas (NULL <> x)
   const historicoDb = await deps.db
     .select()
     .from(mensagem)
-    .where(and(eq(mensagem.conversaId, conv.id), ne(mensagem.turnoId, t.id)))
-    .orderBy(asc(mensagem.criadoEm))
+    .where(
+      and(
+        eq(mensagem.conversaId, conv.id),
+        or(isNull(mensagem.turnoId), ne(mensagem.turnoId, t.id)),
+      ),
+    )
+    .orderBy(desc(mensagem.criadoEm))
     .limit(deps.clientConfig.limites.maxMensagensContexto);
+  historicoDb.reverse();
   const historico: ChatMessage[] = historicoDb.map((m) => ({
     role: m.direcao === 'in' ? ('user' as const) : ('assistant' as const),
     content: m.texto,
@@ -361,8 +369,9 @@ async function atualizarResumo(deps: AgentTurnoHandlerDeps, conversaId: string):
     .select()
     .from(mensagem)
     .where(eq(mensagem.conversaId, conversaId))
-    .orderBy(asc(mensagem.criadoEm))
+    .orderBy(desc(mensagem.criadoEm)) // as mais recentes — senão o resumo nunca avança
     .limit(deps.clientConfig.limites.maxMensagensContexto);
+  ultimas.reverse();
   const transcricao = ultimas
     .map((m) => `${m.direcao === 'in' ? 'Cliente' : 'Agente'}: ${m.texto}`)
     .join('\n');

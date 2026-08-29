@@ -2,7 +2,7 @@ import { join } from 'node:path';
 import { createFakeProvider } from '@seta/ai-provider/testing';
 import { loadClientConfig } from '@seta/client-config';
 import { createPgConnector, type DbConnector } from '@seta/erp-connector';
-import { createLogger, createNoopObsEmitter } from '@seta/observability';
+import { createLogger, createNoopObsEmitter, newTraceId } from '@seta/observability';
 import { createExecutor, type Executor, loadCatalog } from '@seta/query-catalog';
 import { count } from 'drizzle-orm';
 import { migrate } from 'drizzle-orm/node-postgres/migrator';
@@ -261,5 +261,43 @@ describe('critérios spec 005 (via simulador)', () => {
     const eventos = trace.eventos as { tipo: string; erro?: string }[];
     const evTool = eventos.find((e) => e.tipo === 'tool');
     expect(evTool?.erro).toMatch(/sem vínculo/);
+  }, 20_000);
+
+  it('contexto usa as N mensagens mais RECENTES e enxerga respostas do atendente', async () => {
+    // conversa longeva: mais mensagens que a janela de contexto (fix do review)
+    const conversaId = newTraceId();
+    await db.insert(conversa).values({ id: conversaId, waId: WA_ID_VINCULADO });
+    const max = clientConfig.limites.maxMensagensContexto;
+    const base = Date.now() - 600_000;
+    for (let i = 1; i <= max + 5; i++) {
+      await db.insert(mensagem).values({
+        id: newTraceId(),
+        conversaId,
+        direcao: 'in',
+        autor: 'contato',
+        texto: `msg-${i}`,
+        status: 'recebida',
+        criadoEm: new Date(base + i * 1000),
+      });
+    }
+    // mensagem manual do atendente: turno_id NULL — antes do fix era invisível
+    await db.insert(mensagem).values({
+      id: newTraceId(),
+      conversaId,
+      direcao: 'out',
+      autor: 'atendente',
+      texto: 'combinei reenvio da nota fiscal',
+      status: 'enviada',
+      criadoEm: new Date(base + (max + 6) * 1000),
+    });
+
+    fake.respondeTexto('outro').respondeTexto('Perfeito, seguimos de onde paramos!');
+    await enviarPeloSimulador(WA_ID_VINCULADO, 'continuando nossa conversa');
+    await aguardarResposta();
+
+    const conteudos = (fake.requests[1]?.messages ?? []).map((m) => String(m.content));
+    expect(conteudos.some((c) => c.includes('combinei reenvio da nota fiscal'))).toBe(true);
+    expect(conteudos.some((c) => c.includes(`msg-${max + 5}`))).toBe(true); // recente entra
+    expect(conteudos.some((c) => c === 'msg-1')).toBe(false); // antiga sai da janela
   }, 20_000);
 });
