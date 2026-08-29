@@ -31,6 +31,7 @@ export function createPgConnector(configInput: ConnectorConfigInput): DbConnecto
     connectionString: config.url,
     max: config.poolMax,
     application_name: 'seta-erp-connector',
+    connectionTimeoutMillis: 5_000, // #37: ERP fora do ar não pendura o turno
   });
 
   return {

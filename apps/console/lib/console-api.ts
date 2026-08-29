@@ -46,7 +46,13 @@ export interface TicketDetalhe extends TicketResumo {
 
 export type TraceEvento =
   | { tipo: 'contexto'; [k: string]: unknown }
-  | { tipo: 'llm'; latencyMs?: number; [k: string]: unknown }
+  | {
+      tipo: 'llm';
+      tokensEntrada?: number;
+      tokensSaida?: number;
+      finishReason?: string;
+      [k: string]: unknown;
+    }
   | {
       tipo: 'tool';
       nome: string;

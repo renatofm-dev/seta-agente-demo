@@ -28,8 +28,11 @@ export async function coletarSinaisDiarios(
   let resolucaoLimpa = 0;
   let rePergunta = 0;
 
-  // resolucao_limpa: ticket resolvido, sem atendente, sem mensagem nova em 48h
+  // resolucao_limpa: ticket resolvido, sem atendente, sem mensagem nova em 48h.
+  // #37: corte inferior de 7 dias — o job é diário; sem isso o scan revisitava
+  // TODOS os resolvidos da história a cada rodada (com um jaTemSinal por ticket)
   const limite = new Date(Date.now() - JANELA_RECONTATO_MS);
+  const corteInferior = new Date(Date.now() - 7 * 24 * 3600 * 1000);
   const resolvidos = await db
     .select()
     .from(ticket)
@@ -38,6 +41,7 @@ export async function coletarSinaisDiarios(
         eq(ticket.status, 'resolvido'),
         isNull(ticket.atendenteId),
         lt(ticket.atualizadoEm, limite),
+        gt(ticket.atualizadoEm, corteInferior),
       ),
     );
   for (const t of resolvidos) {

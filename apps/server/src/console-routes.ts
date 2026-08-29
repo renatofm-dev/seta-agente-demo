@@ -4,7 +4,7 @@ import type { Executor } from '@seta/query-catalog';
 import { and, asc, desc, eq, gt, sql } from 'drizzle-orm';
 import type { FastifyPluginCallback, FastifyReply, FastifyRequest } from 'fastify';
 import type { PgBoss } from 'pg-boss';
-import { z } from 'zod';
+import { ZodError, z } from 'zod';
 import { type Auth, type SessaoConsole, sessaoDaRequest } from './auth.js';
 import type { Db } from './db/index.js';
 import {
@@ -37,6 +37,9 @@ export interface ConsoleRoutesOpts {
 }
 
 const sessoes = new WeakMap<FastifyRequest, SessaoConsole>();
+
+// #37: dia "de negócio" do cliente demo (POC 1 cliente; multi-TZ fica p/ produto)
+const TZ_METRICAS = 'America/Sao_Paulo';
 
 /** Último draft descartado por block/escalate nos eventos do trace (#34). */
 function draftDescartadoDe(eventos: unknown): string | null {
@@ -163,6 +166,10 @@ export const consoleRoutes: FastifyPluginCallback<ConsoleRoutesOpts> = (app, opt
   app.setErrorHandler((err, req, reply) => {
     if (err instanceof TransicaoInvalidaError) {
       return reply.code(409).send({ erro: err.message });
+    }
+    if (err instanceof ZodError) {
+      // #37: input inválido é 400 do cliente, não 500 no log de erro
+      return reply.code(400).send({ erro: 'entrada inválida', detalhe: z.prettifyError(err) });
     }
     req.log.error(err, 'erro na api do console');
     return reply.code(500).send({ erro: 'erro interno' });
@@ -376,6 +383,9 @@ export const consoleRoutes: FastifyPluginCallback<ConsoleRoutesOpts> = (app, opt
   app.get('/api/console/ticket/:id/traces', async (req, reply) => {
     const t = await carregarTicket(req, reply);
     if (!t) return;
+    const { limite } = z
+      .object({ limite: z.coerce.number().int().min(1).max(500).default(100) })
+      .parse(req.query ?? {});
     const traces = await db
       .select({
         id: traceTurno.id,
@@ -396,7 +406,9 @@ export const consoleRoutes: FastifyPluginCallback<ConsoleRoutesOpts> = (app, opt
       .from(traceTurno)
       .leftJoin(turno, eq(turno.id, traceTurno.turnoId))
       .where(eq(traceTurno.conversaId, t.conversaId))
-      .orderBy(asc(traceTurno.criadoEm));
+      .orderBy(desc(traceTurno.criadoEm)) // #37: os N mais RECENTES…
+      .limit(limite);
+    traces.reverse(); // …em ordem cronológica p/ o viewer
     return { traces };
   });
 
@@ -412,9 +424,10 @@ export const consoleRoutes: FastifyPluginCallback<ConsoleRoutesOpts> = (app, opt
       .parse({ dias: (req.query as { dias?: string }).dias ?? '7' });
     const desde = sql`now() - make_interval(days => ${dias})`;
 
+    // #37: bucket de "dia" no fuso do cliente, não em UTC (virava às 21h)
     const conversasPorDia = (
       await db.execute(sql`
-        SELECT to_char(date_trunc('day', criado_em), 'YYYY-MM-DD') AS dia,
+        SELECT to_char(date_trunc('day', criado_em AT TIME ZONE ${TZ_METRICAS}), 'YYYY-MM-DD') AS dia,
                count(DISTINCT conversa_id)::int AS conversas
         FROM trace_turno WHERE criado_em >= ${desde} GROUP BY 1 ORDER BY 1
       `)
@@ -423,7 +436,7 @@ export const consoleRoutes: FastifyPluginCallback<ConsoleRoutesOpts> = (app, opt
     const tokensPorDia = (
       (
         await db.execute(sql`
-          SELECT to_char(date_trunc('day', criado_em), 'YYYY-MM-DD') AS dia,
+          SELECT to_char(date_trunc('day', criado_em AT TIME ZONE ${TZ_METRICAS}), 'YYYY-MM-DD') AS dia,
                  sum(tokens_entrada)::int AS entrada, sum(tokens_saida)::int AS saida
           FROM evento_llm WHERE criado_em >= ${desde} GROUP BY 1 ORDER BY 1
         `)
@@ -447,7 +460,13 @@ export const consoleRoutes: FastifyPluginCallback<ConsoleRoutesOpts> = (app, opt
       await db.execute(sql`
         SELECT
           (SELECT count(DISTINCT conversa_id)::int FROM trace_turno WHERE criado_em >= ${desde}) AS conversas,
-          (SELECT count(DISTINCT conversa_id)::int FROM evento_escalonamento WHERE criado_em >= ${desde}) AS escaladas,
+          (SELECT count(DISTINCT cid)::int FROM (
+             SELECT conversa_id AS cid FROM evento_escalonamento WHERE criado_em >= ${desde}
+             UNION
+             SELECT tk.conversa_id FROM evento_ticket et
+             JOIN ticket tk ON tk.id = et.ticket_id
+             WHERE et.para_status = 'humano_ativo' AND et.criado_em >= ${desde}
+           ) com_humano) AS escaladas,
           (SELECT percentile_cont(0.95) WITHIN GROUP (ORDER BY latency_ms)
              FROM evento_query WHERE criado_em >= ${desde}) AS p95_query_ms,
           (SELECT percentile_cont(0.95) WITHIN GROUP (ORDER BY latencia_ms)
@@ -467,7 +486,8 @@ export const consoleRoutes: FastifyPluginCallback<ConsoleRoutesOpts> = (app, opt
       escalonamentosPorMotivo,
       totalConversas: totais?.conversas ?? 0,
       totalEscaladas: totais?.escaladas ?? 0,
-      // premissa: "resolução sem humano" = conversas do período sem escalonamento
+      // premissa (#37): "sem humano" = sem escalonamento E sem assumir direto
+      // (humano_ativo); conversas em andamento ainda contam — corte consciente
       taxaResolucaoSemHumano:
         totais && totais.conversas > 0
           ? (totais.conversas - totais.escaladas) / totais.conversas

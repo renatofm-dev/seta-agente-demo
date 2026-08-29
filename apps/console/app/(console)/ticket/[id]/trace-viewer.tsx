@@ -29,11 +29,17 @@ function Evento({ e }: { e: TraceEvento }) {
     );
   }
   if (e.tipo === 'llm') {
+    const chamada = e as { tokensEntrada?: number; tokensSaida?: number; finishReason?: string };
     return (
       <li className="rounded border p-2">
         <span className="font-medium">llm</span>
-        {typeof e.latencyMs === 'number' && (
-          <span className="ml-2 text-muted-foreground">{e.latencyMs} ms</span>
+        {typeof chamada.tokensEntrada === 'number' && (
+          <span className="ml-2 text-muted-foreground">
+            {chamada.tokensEntrada}/{chamada.tokensSaida ?? 0} tok
+          </span>
+        )}
+        {chamada.finishReason && (
+          <span className="ml-2 text-muted-foreground">{chamada.finishReason}</span>
         )}
       </li>
     );

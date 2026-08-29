@@ -299,6 +299,12 @@ describe('critérios spec 007 (fluxo HITL completo)', () => {
     expect((await db.select().from(ticket))[0]?.status).toBe('bot_ativo');
   }, 20_000);
 
+  it('#37: id malformado responde 400 (não 500)', async () => {
+    const res = await apiConsole('GET', '/api/console/ticket/nao-e-uuid');
+    expect(res.statusCode).toBe(400);
+    expect(res.json().erro).toBe('entrada inválida');
+  });
+
   it('API do console exige sessão', async () => {
     const semCookie = await app.inject({ method: 'GET', url: '/api/console/inbox' });
     expect(semCookie.statusCode).toBe(401);

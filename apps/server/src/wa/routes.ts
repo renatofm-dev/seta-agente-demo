@@ -7,6 +7,7 @@ import {
 import { eq } from 'drizzle-orm';
 import type { FastifyPluginCallback } from 'fastify';
 import type { PgBoss } from 'pg-boss';
+import { z } from 'zod';
 import type { Db } from '../db/index.js';
 import { mensagem } from '../db/schema.js';
 import type { Env } from '../env.js';
@@ -38,8 +39,14 @@ export const waRoutes: FastifyPluginCallback<WaRoutesOpts> = (app, opts, done) =
     cb(null, body),
   );
 
+  const HandshakeSchema = z.object({
+    'hub.mode': z.string().optional(),
+    'hub.verify_token': z.string().optional(),
+    'hub.challenge': z.string().optional(),
+  });
   app.get('/webhook', async (req, reply) => {
-    const q = req.query as Record<string, string | undefined>;
+    // #37: última fronteira sem Zod — handshake da Meta validado como as demais
+    const q = HandshakeSchema.parse(req.query ?? {});
     if (q['hub.mode'] === 'subscribe' && q['hub.verify_token'] === env.WA_VERIFY_TOKEN) {
       return reply.code(200).send(q['hub.challenge'] ?? '');
     }
