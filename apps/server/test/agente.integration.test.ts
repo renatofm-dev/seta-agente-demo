@@ -249,18 +249,18 @@ describe('critérios spec 005 (via simulador)', () => {
     expect(trace.traceId).toMatch(/^[0-9a-f-]{36}$/);
   }, 20_000);
 
-  it('wa_id SEM vínculo: tools de dado recusam e o modelo se explica', async () => {
+  it('wa_id SEM vínculo: tools de dado NEM SÃO EXPOSTAS ao modelo (#35)', async () => {
     fake
       .respondeTexto('outro') // classificador de intenção (006)
-      .chamaTool('titulos_abertos', {})
-      .respondeTexto('Não consegui localizar seu cadastro. Vou acionar um atendente.');
+      .respondeTexto('Não localizei seu cadastro por aqui. Quer que eu acione um atendente?');
 
     await enviarPeloSimulador('5511888880000', 'quais boletos tenho?');
     const { trace } = await aguardarResposta();
 
-    const eventos = trace.eventos as { tipo: string; erro?: string }[];
-    const evTool = eventos.find((e) => e.tipo === 'tool');
-    expect(evTool?.erro).toMatch(/sem vínculo/);
+    // spec 003: sem vínculo na sessão, o modelo só vê KB + escalar — nada de
+    // colher erros de tool de dado
+    const contexto = trace.contexto as { tools: string[] };
+    expect(contexto.tools).toEqual(['buscar_conhecimento', 'escalar_para_humano']);
   }, 20_000);
 
   it('contexto usa as N mensagens mais RECENTES e enxerga respostas do atendente', async () => {

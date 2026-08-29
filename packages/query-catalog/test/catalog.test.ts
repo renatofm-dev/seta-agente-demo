@@ -1,4 +1,11 @@
-import { CatalogEntryIdSchema, CatalogEntrySchema, ParamSourceSchema } from '@seta/query-catalog';
+import { join } from 'node:path';
+import {
+  buildToolSpecs,
+  CatalogEntryIdSchema,
+  CatalogEntrySchema,
+  loadCatalog,
+  ParamSourceSchema,
+} from '@seta/query-catalog';
 import { describe, expect, it } from 'vitest';
 
 describe('query-catalog (schemas)', () => {
@@ -47,5 +54,21 @@ describe('query-catalog (schemas)', () => {
         tool: { expose: false, name: 'x' },
       }).success,
     ).toBe(false);
+  });
+});
+
+describe('#35: tools filtradas por vínculo na sessão', () => {
+  it('sem vínculo, nenhuma tool de dado é exposta', async () => {
+    const catalog = loadCatalog(join(import.meta.dirname, '../../../catalog'));
+    const executor = { run: async () => ({ rows: [], rowCount: 0, truncated: false }) };
+    const todas = buildToolSpecs(catalog, executor as never, {
+      modulosHabilitados: { financeiro: true, pedidos: true, suporte: true },
+    });
+    expect(todas.length).toBeGreaterThan(0);
+    const semVinculo = buildToolSpecs(catalog, executor as never, {
+      modulosHabilitados: { financeiro: true, pedidos: true, suporte: true },
+      temVinculo: false,
+    });
+    expect(semVinculo).toEqual([]);
   });
 });
