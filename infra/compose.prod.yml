@@ -1,0 +1,69 @@
+# Produção homelab (011) — CX23, Caddy do host faz TLS/proxy.
+# Uso: docker compose -f infra/compose.prod.yml --env-file .env.prod ...
+# Imagens vêm do GHCR (CI builda; a VPS só faz pull) — ver docs/deploy-homelab.md.
+
+name: seta-agente
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: '10m'
+    max-file: '3'
+
+services:
+  db:
+    image: pgvector/pgvector:pg17
+    restart: unless-stopped
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?defina no .env.prod}
+    volumes:
+      - seta_pg_prod:/var/lib/postgresql/data
+      # cria bancos app + erp_mock, usuários e extensão pgvector no 1º boot
+      - ./postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    logging: *logging
+    # sem ports: o banco só existe na rede interna do compose
+
+  server:
+    image: ghcr.io/renatofm-dev/seta-agente-server:${TAG:-latest}
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file:
+      - ../.env.prod
+    environment:
+      NODE_ENV: production
+      NODE_OPTIONS: --max-old-space-size=512
+      PORT: '3001'
+      DATABASE_URL: postgres://app_owner:app_owner_dev@db:5432/app
+      ERP_DATABASE_URL: postgres://erp_ro:erp_ro_dev@db:5432/erp_mock
+      ERP_MOCK_ADMIN_URL: postgres://postgres:${POSTGRES_PASSWORD}@db:5432/erp_mock
+      # paths absolutos dentro da imagem
+      CLIENT_CONFIG_PATH: /app/configs/demo/client.yaml
+      CONTATOS_PATH: /app/configs/demo/contatos.yaml
+      CATALOG_DIR: /app/catalog
+      SKILLS_SEED_DIR: /app/skills-seed
+      KB_DIR: /app/kb
+    ports:
+      - '127.0.0.1:3001:3001' # só o Caddy do host enxerga
+    logging: *logging
+
+  console:
+    image: ghcr.io/renatofm-dev/seta-agente-console:${TAG:-latest}
+    restart: unless-stopped
+    depends_on:
+      - server
+    environment:
+      NODE_OPTIONS: --max-old-space-size=512
+      SERVER_INTERNAL_URL: http://server:3001
+    ports:
+      - '127.0.0.1:3000:3000'
+    logging: *logging
+
+volumes:
+  seta_pg_prod:

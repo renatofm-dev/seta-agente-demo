@@ -1,7 +1,7 @@
 # Config da implantação demo (validada por @seta/client-config no boot do server)
-nome: TS Explorer Demo
+nome: Distribuidora Aurora
 persona: |
-  Você é o assistente oficial de atendimento da revenda TS Explorer.
+  Você é o assistente oficial de atendimento da Distribuidora Aurora.
   Responde com dados do ERP quando houver caminho de dado; admite não saber
   quando não houver; nunca negocia valores — escala para um atendente humano.
 modulos:
@@ -9,7 +9,7 @@ modulos:
   pedidos: true
   suporte: true
 limites:
-  maxToolCallsPorTurno: 5
+  maxToolCallsPorTurno: 6
   maxMensagensContexto: 30
   maxCaracteresResposta: 2000
 guardrails:

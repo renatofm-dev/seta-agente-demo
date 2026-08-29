@@ -2,7 +2,7 @@ import { join } from 'node:path';
 import { createFakeProvider } from '@seta/ai-provider/testing';
 import { loadClientConfig } from '@seta/client-config';
 import { createPgConnector, type DbConnector } from '@seta/erp-connector';
-import { createLogger } from '@seta/observability';
+import { createLogger, createNoopObsEmitter } from '@seta/observability';
 import { createExecutor, type Executor, loadCatalog } from '@seta/query-catalog';
 import { and, count, eq } from 'drizzle-orm';
 import { migrate } from 'drizzle-orm/node-postgres/migrator';
@@ -120,6 +120,7 @@ async function turnoCompleto(texto: string): Promise<typeof traceTurno.$inferSel
   const res = await app.inject({
     method: 'POST',
     url: '/dev/inbound',
+    headers: { cookie: cookieAtendente }, // simulador exige sessão (011)
     payload: { waId: WA_ID, text: texto },
   });
   expect(res.statusCode).toBe(202);
@@ -190,6 +191,7 @@ beforeAll(async () => {
       clientConfig,
       registry,
       store,
+      obs: createNoopObsEmitter(),
       logger,
       turnoTimeoutMs: 30_000,
       resumoACadaTurnos: 99,

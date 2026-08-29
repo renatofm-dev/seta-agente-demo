@@ -19,7 +19,8 @@
     "db:migrate": "pnpm --filter @seta/server db:migrate",
     "db:seed": "pnpm db:seed:erp && pnpm --filter @seta/server db:seed:app",
     "db:seed:erp": "tsc -b && node --env-file-if-exists=.env infra/erp-mock/seed.ts",
-    "kb:ingest": "tsc -b && pnpm --filter @seta/server kb:ingest"
+    "kb:ingest": "tsc -b && pnpm --filter @seta/server kb:ingest",
+    "demo:seed": "pnpm db:seed && pnpm kb:ingest"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.10",

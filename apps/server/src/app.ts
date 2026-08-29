@@ -61,7 +61,9 @@ export function buildApp({ env, clientConfig, wa, console: consoleDeps }: BuildA
   if (wa) {
     app.register(waRoutes, { env, db: wa.db, boss: wa.boss });
     if (env.DEV_SIMULATOR) {
-      app.register(devRoutes, { env, db: wa.db, boss: wa.boss });
+      // com console (auth) presente, o simulador exige sessão — plano B da
+      // demo fica atrás de login quando exposto em produção (011)
+      app.register(devRoutes, { env, db: wa.db, boss: wa.boss, auth: consoleDeps?.auth });
     }
     if (consoleDeps) {
       app.register(authRoutes, { auth: consoleDeps.auth });
@@ -71,6 +73,7 @@ export function buildApp({ env, clientConfig, wa, console: consoleDeps }: BuildA
         auth: consoleDeps.auth,
         executor: consoleDeps.executor,
         debounceMs: env.WA_DEBOUNCE_MS,
+        precos: { inPor1M: env.LLM_PRECO_IN_POR_1M, outPor1M: env.LLM_PRECO_OUT_POR_1M },
       });
       if (consoleDeps.registry) {
         app.register(aprendizadoRoutes, {

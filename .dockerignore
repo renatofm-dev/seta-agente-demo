@@ -1,0 +1,17 @@
+node_modules
+**/node_modules
+**/dist
+**/.next
+**/tsconfig.tsbuildinfo
+.git
+.env
+.env.*
+!.env.example
+infra/compose.dev.yml
+docs
+specs
+*.md
+!kb/*.md
+!skills-seed/*.md
+!packages/agent/prompts/*.md
+!packages/skills/prompts/*.md

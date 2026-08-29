@@ -27,3 +27,14 @@ export function createLogger(
   };
   return destination ? pino(options, destination) : pino(options);
 }
+
+export {
+  createNoopObsEmitter,
+  type EventoEscalonamento,
+  EventoEscalonamentoSchema,
+  type EventoGuardrail,
+  EventoGuardrailSchema,
+  type EventoLlm,
+  EventoLlmSchema,
+  type ObsEmitter,
+} from './emitter.js';

@@ -46,7 +46,7 @@ async function aguardar(cond: () => Promise<boolean>, timeoutMs = 8_000): Promis
   throw new Error('condição não atingida no tempo');
 }
 
-function payloadTexto(waId: string, waMessageId: string, texto: string) {
+function payloadTexto(waId: string, waMessageId: string, texto: string, tsSegundos?: number) {
   return JSON.stringify({
     object: 'whatsapp_business_account',
     entry: [
@@ -60,7 +60,7 @@ function payloadTexto(waId: string, waMessageId: string, texto: string) {
                 {
                   from: waId,
                   id: waMessageId,
-                  timestamp: String(Math.floor(Date.now() / 1000)),
+                  timestamp: String(tsSegundos ?? Math.floor(Date.now() / 1000)),
                   type: 'text',
                   text: { body: texto },
                 },
@@ -164,6 +164,22 @@ describe('critérios spec 004', () => {
     expect(assinaturaErrada.statusCode).toBe(401);
     expect((await db.select({ n: count() }).from(mensagem))[0]?.n).toBe(0);
     expect((await db.select({ n: count() }).from(conversa))[0]?.n).toBe(0);
+  });
+
+  it('mensagem antiga fora de ordem não REGRIDE a janela de 24h (fix do review)', async () => {
+    const waId = '5511999990009';
+    const agora = Math.floor(Date.now() / 1000);
+    const c1 = payloadTexto(waId, 'wamid.janela-nova', 'oi', agora);
+    expect((await postWebhook(c1, signBody(c1, env.WA_APP_SECRET))).statusCode).toBe(200);
+    const [antes] = await db.select().from(conversa).where(eq(conversa.waId, waId));
+    const janelaAntes = antes?.janelaExpiraEm?.getTime() ?? 0;
+    expect(janelaAntes).toBeGreaterThan(Date.now());
+
+    // entrega atrasada: mensagem de 3h atrás chega DEPOIS da mais nova
+    const c2 = payloadTexto(waId, 'wamid.janela-velha', 'mensagem atrasada', agora - 3 * 3600);
+    expect((await postWebhook(c2, signBody(c2, env.WA_APP_SECRET))).statusCode).toBe(200);
+    const [depois] = await db.select().from(conversa).where(eq(conversa.waId, waId));
+    expect(depois?.janelaExpiraEm?.getTime()).toBe(janelaAntes); // GREATEST: não regrediu
   });
 
   it('reentrega do mesmo wa_message_id não duplica mensagem nem turno', async () => {

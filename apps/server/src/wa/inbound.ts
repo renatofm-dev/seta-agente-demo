@@ -1,5 +1,6 @@
 import { newTraceId } from '@seta/observability';
 import type { InboundText } from '@seta/wa-meta';
+import { sql } from 'drizzle-orm';
 import type { PgBoss } from 'pg-boss';
 import { FILA_DEBOUNCE } from '../boss.js';
 import type { Db } from '../db/index.js';
@@ -32,7 +33,12 @@ export async function processInbound(
   const [conv] = await deps.db
     .insert(conversa)
     .values({ id: newTraceId(), waId: msg.waId, janelaExpiraEm })
-    .onConflictDoUpdate({ target: conversa.waId, set: { janelaExpiraEm } })
+    .onConflictDoUpdate({
+      target: conversa.waId,
+      // GREATEST: reentrega/entrega fora de ordem de mensagem antiga não pode
+      // REGREDIR a janela aberta (timestamp vem da Meta, não do relógio local)
+      set: { janelaExpiraEm: sql`GREATEST(${conversa.janelaExpiraEm}, excluded.janela_expira_em)` },
+    })
     .returning();
   if (!conv) throw new Error('upsert de conversa não retornou linha');
 

@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { api, STATUS_LABEL, type TicketDetalhe } from '@/lib/console-api';
 import { cn } from '@/lib/utils';
 import { useSessao } from '../../layout';
+import { TraceViewer } from './trace-viewer';
 
 /** Ticket ao vivo: conversa, ações HITL e painel lateral com dados do ERP. */
 
@@ -21,6 +22,7 @@ export default function TicketPage() {
   const [ticket, setTicket] = useState<TicketDetalhe | null>(null);
   const [texto, setTexto] = useState('');
   const [erro, setErro] = useState<string | null>(null);
+  const [aba, setAba] = useState<'conversa' | 'trace'>('conversa');
   const fimRef = useRef<HTMLDivElement>(null);
 
   const recarregar = useCallback(() => {
@@ -99,6 +101,18 @@ export default function TicketPage() {
           <span className="rounded-full bg-muted px-2 py-0.5 text-xs">
             {STATUS_LABEL[ticket.status]}
           </span>
+          <div className="flex rounded-md border text-xs">
+            {(['conversa', 'trace'] as const).map((t) => (
+              <button
+                key={t}
+                type="button"
+                onClick={() => setAba(t)}
+                className={cn('px-2 py-1 capitalize', aba === t && 'bg-muted font-medium')}
+              >
+                {t}
+              </button>
+            ))}
+          </div>
           <div className="ml-auto flex gap-2">
             {ticket.status === 'aguardando_humano' && (
               <button
@@ -130,7 +144,13 @@ export default function TicketPage() {
           </div>
         </header>
 
-        <div className="flex-1 space-y-2 overflow-y-auto p-4">
+        {aba === 'trace' && (
+          <div className="flex-1 overflow-y-auto">
+            <TraceViewer ticketId={ticket.id} />
+          </div>
+        )}
+
+        <div className={cn('flex-1 space-y-2 overflow-y-auto p-4', aba !== 'conversa' && 'hidden')}>
           {ticket.mensagens.map((m) => (
             <div
               key={m.id}

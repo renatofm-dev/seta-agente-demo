@@ -68,6 +68,23 @@ describe('guardrail de preço (beforeReply)', () => {
     };
     expect(await g.beforeReply?.('Seu boleto é de R$ 549,00.', ctx)).toEqual(ALLOW);
   });
+
+  it('id/quantidade de tool não-price_source NÃO valida um R$ do draft (coluna não monetária)', async () => {
+    const ctx: GuardrailCtx = {
+      ...CTX_VAZIO,
+      toolResults: [
+        // 990 aparece como id de produto — "R$ 9,90" continua órfão
+        { nome: 'ultimos_pedidos', priceSource: false, rows: [{ produto_id: 990, qtd: 990 }] },
+      ],
+    };
+    const v = await g.beforeReply?.('Sai por R$ 9,90!', ctx);
+    expect(v?.tipo).toBe('escalate');
+  });
+
+  it('mesmo número em coluna monetária de price_source valida normalmente', async () => {
+    const ctx = ctxComTools([{ preco_centavos: 990 }]);
+    expect(await g.beforeReply?.('Sai por R$ 9,90!', ctx)).toEqual(ALLOW);
+  });
 });
 
 describe('pipeline', () => {

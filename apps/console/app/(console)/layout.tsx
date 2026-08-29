@@ -51,6 +51,12 @@ export default function ConsoleLayout({ children }: { children: React.ReactNode 
                 Aprendizado
               </Link>
             )}
+            <Link
+              href="/metricas"
+              className={pathname === '/metricas' ? 'font-medium' : 'text-muted-foreground'}
+            >
+              Métricas
+            </Link>
           </nav>
           <div className="ml-auto flex items-center gap-3 text-sm">
             <span className="text-muted-foreground">

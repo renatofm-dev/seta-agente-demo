@@ -1,13 +1,21 @@
 import { TransicaoInvalidaError } from '@seta/crm';
 import { newTraceId } from '@seta/observability';
 import type { Executor } from '@seta/query-catalog';
-import { and, asc, desc, eq, gt, inArray } from 'drizzle-orm';
+import { and, asc, desc, eq, gt, inArray, sql } from 'drizzle-orm';
 import type { FastifyPluginCallback, FastifyReply, FastifyRequest } from 'fastify';
 import type { PgBoss } from 'pg-boss';
 import { z } from 'zod';
 import { type Auth, type SessaoConsole, sessaoDaRequest } from './auth.js';
 import type { Db } from './db/index.js';
-import { contato, conversa, mensagem, sinalAprendizado, ticket, traceTurno } from './db/schema.js';
+import {
+  contato,
+  conversa,
+  mensagem,
+  sinalAprendizado,
+  ticket,
+  traceTurno,
+  turno,
+} from './db/schema.js';
 import { agendarDebounce } from './wa/inbound.js';
 import { enqueueOutbound } from './wa/outbox.js';
 import { aplicarTransicao } from './wa/tickets.js';
@@ -24,6 +32,8 @@ export interface ConsoleRoutesOpts {
   readonly auth: Auth;
   readonly executor: Executor;
   readonly debounceMs: number;
+  /** Preço por 1M de tokens para o custo estimado do /metricas (010). */
+  readonly precos: { readonly inPor1M: number; readonly outPor1M: number };
 }
 
 const sessoes = new WeakMap<FastifyRequest, SessaoConsole>();
@@ -229,6 +239,112 @@ export const consoleRoutes: FastifyPluginCallback<ConsoleRoutesOpts> = (app, opt
       { conversaId: t.conversaId, chave: body.chave, texto: body.texto, autor: 'atendente' },
     );
     return reply.code(202).send(r);
+  });
+
+  // trace viewer (010): reconstitui qualquer turno da conversa sem tocar no banco
+  app.get('/api/console/ticket/:id/traces', async (req, reply) => {
+    const t = await carregarTicket(req, reply);
+    if (!t) return;
+    const traces = await db
+      .select({
+        id: traceTurno.id,
+        traceId: traceTurno.traceId,
+        turnoId: traceTurno.turnoId,
+        textoTurno: turno.textoAgregado,
+        contexto: traceTurno.contexto,
+        eventos: traceTurno.eventos,
+        resposta: traceTurno.resposta,
+        escalado: traceTurno.escalado,
+        fallback: traceTurno.fallback,
+        fallbackMotivo: traceTurno.fallbackMotivo,
+        tokensEntrada: traceTurno.tokensEntrada,
+        tokensSaida: traceTurno.tokensSaida,
+        latenciaMs: traceTurno.latenciaMs,
+        criadoEm: traceTurno.criadoEm,
+      })
+      .from(traceTurno)
+      .leftJoin(turno, eq(turno.id, traceTurno.turnoId))
+      .where(eq(traceTurno.conversaId, t.conversaId))
+      .orderBy(asc(traceTurno.criadoEm));
+    return { traces };
+  });
+
+  // métricas (010): agregados por janela de 7/30 dias
+  app.get('/api/console/metricas', async (req) => {
+    const { dias } = z
+      .object({
+        dias: z.coerce
+          .number()
+          .int()
+          .pipe(z.union([z.literal(7), z.literal(30)])),
+      })
+      .parse({ dias: (req.query as { dias?: string }).dias ?? '7' });
+    const desde = sql`now() - make_interval(days => ${dias})`;
+
+    const conversasPorDia = (
+      await db.execute(sql`
+        SELECT to_char(date_trunc('day', criado_em), 'YYYY-MM-DD') AS dia,
+               count(DISTINCT conversa_id)::int AS conversas
+        FROM trace_turno WHERE criado_em >= ${desde} GROUP BY 1 ORDER BY 1
+      `)
+    ).rows as { dia: string; conversas: number }[];
+
+    const tokensPorDia = (
+      (
+        await db.execute(sql`
+          SELECT to_char(date_trunc('day', criado_em), 'YYYY-MM-DD') AS dia,
+                 sum(tokens_entrada)::int AS entrada, sum(tokens_saida)::int AS saida
+          FROM evento_llm WHERE criado_em >= ${desde} GROUP BY 1 ORDER BY 1
+        `)
+      ).rows as { dia: string; entrada: number; saida: number }[]
+    ).map((r) => ({
+      ...r,
+      custo:
+        (r.entrada / 1_000_000) * opts.precos.inPor1M +
+        (r.saida / 1_000_000) * opts.precos.outPor1M,
+    }));
+
+    const escalonamentosPorMotivo = (
+      await db.execute(sql`
+        SELECT motivo, count(*)::int AS total
+        FROM evento_escalonamento WHERE criado_em >= ${desde}
+        GROUP BY motivo ORDER BY total DESC
+      `)
+    ).rows as { motivo: string; total: number }[];
+
+    const [totais] = (
+      await db.execute(sql`
+        SELECT
+          (SELECT count(DISTINCT conversa_id)::int FROM trace_turno WHERE criado_em >= ${desde}) AS conversas,
+          (SELECT count(DISTINCT conversa_id)::int FROM evento_escalonamento WHERE criado_em >= ${desde}) AS escaladas,
+          (SELECT percentile_cont(0.95) WITHIN GROUP (ORDER BY latency_ms)
+             FROM evento_query WHERE criado_em >= ${desde}) AS p95_query_ms,
+          (SELECT percentile_cont(0.95) WITHIN GROUP (ORDER BY latencia_ms)
+             FROM trace_turno WHERE criado_em >= ${desde}) AS p95_turno_ms
+      `)
+    ).rows as {
+      conversas: number;
+      escaladas: number;
+      p95_query_ms: number | null;
+      p95_turno_ms: number | null;
+    }[];
+
+    return {
+      dias,
+      conversasPorDia,
+      tokensPorDia,
+      escalonamentosPorMotivo,
+      totalConversas: totais?.conversas ?? 0,
+      totalEscaladas: totais?.escaladas ?? 0,
+      // premissa: "resolução sem humano" = conversas do período sem escalonamento
+      taxaResolucaoSemHumano:
+        totais && totais.conversas > 0
+          ? (totais.conversas - totais.escaladas) / totais.conversas
+          : null,
+      p95QueryMs: totais?.p95_query_ms ?? null,
+      p95TurnoMs: totais?.p95_turno_ms ?? null,
+      custoTotal: tokensPorDia.reduce((s, r) => s + r.custo, 0),
+    };
   });
 
   app.get('/api/console/events', async (req, reply) => {

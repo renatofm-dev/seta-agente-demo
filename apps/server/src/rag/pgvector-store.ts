@@ -102,6 +102,12 @@ export function createPgVectorStore(deps: PgVectorStoreDeps): VectorStore & {
       const def = (r.rows[0] as { indexdef?: string } | undefined)?.indexdef;
       if (def?.includes(`vector(${dim})`)) return;
       if (def) await db.execute(sql.raw('DROP INDEX chunk_embedding_hnsw'));
+      // vetores de OUTRA dimensão são inutilizáveis (o cast do índice falharia
+      // no CREATE) — anula p/ re-embedar: KB re-ingere, skills re-sincronizam
+      await db.execute(
+        sql`UPDATE chunk SET embedding = NULL
+            WHERE embedding IS NOT NULL AND vector_dims(embedding) <> ${dim}`,
+      );
       await db.execute(
         sql.raw(
           `CREATE INDEX chunk_embedding_hnsw ON chunk ` +

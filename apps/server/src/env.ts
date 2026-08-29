@@ -26,6 +26,9 @@ export const EnvSchema = z.object({
   LLM_API_KEY: z.string().min(1).optional(),
   LLM_MODEL: z.string().min(1).optional(),
   EMBEDDING_MODEL: z.string().min(1).optional(),
+  /** Preço por 1M de tokens (custo estimado do /metricas; unidade livre, ex.: USD). */
+  LLM_PRECO_IN_POR_1M: z.coerce.number().min(0).default(0),
+  LLM_PRECO_OUT_POR_1M: z.coerce.number().min(0).default(0),
   /** Dimensão dos embeddings (coluna vector é sem typmod; cast/índice usam isto). */
   EMBEDDING_DIM: z.coerce.number().int().positive().default(1536),
   /** Diretório da base de conhecimento ingerida por `pnpm kb:ingest` (008). */

@@ -9,6 +9,7 @@ import { createAuth } from './auth.js';
 import { startBoss } from './boss.js';
 import { createDb } from './db/index.js';
 import { loadEnv } from './env.js';
+import { createDrizzleObsEmitter } from './obs-emitter.js';
 import { createDrizzleQueryEventSink } from './query-event-sink.js';
 import { createPgVectorStore } from './rag/pgvector-store.js';
 import { createSkillRegistry } from './skills/registry.js';
@@ -83,6 +84,7 @@ await registerDebounceWorker({
     clientConfig,
     registry,
     store,
+    obs: createDrizzleObsEmitter(db, logger),
     logger,
     turnoTimeoutMs: env.AGENT_TURN_TIMEOUT_MS,
     resumoACadaTurnos: env.AGENT_RESUMO_A_CADA_TURNOS,

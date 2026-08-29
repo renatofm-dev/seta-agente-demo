@@ -4,6 +4,7 @@ import { and, asc, eq, gt } from 'drizzle-orm';
 import type { FastifyPluginCallback } from 'fastify';
 import type { PgBoss } from 'pg-boss';
 import { z } from 'zod';
+import { type Auth, sessaoDaRequest } from '../auth.js';
 import type { Db } from '../db/index.js';
 import { conversa, mensagem, turno } from '../db/schema.js';
 import type { Env } from '../env.js';
@@ -12,13 +13,17 @@ import { processInbound } from './inbound.js';
 /**
  * Simulador dev (DEV_SIMULATOR=true): injeta mensagens no MESMO caminho do
  * webhook (mesma idempotência, mesmo debounce) e transmite a conversa via SSE.
- * É o plano B da demo (000).
+ * É o plano B da demo (000). Com `auth` presente (011: exposto na demo
+ * pública), TODA rota /dev exige sessão do console — sem isso qualquer um com
+ * a URL injeta mensagens como qualquer waId e lê conversas alheias.
  */
 
 export interface DevRoutesOpts {
   readonly env: Env;
   readonly db: Db;
   readonly boss: PgBoss;
+  /** Presente ⇒ /dev/* exige sessão Better Auth (atendente|curador). */
+  readonly auth?: Auth;
 }
 
 const InboundBodySchema = z.object({
@@ -29,7 +34,14 @@ const InboundBodySchema = z.object({
 const SSE_INTERVALO_MS = 700;
 
 export const devRoutes: FastifyPluginCallback<DevRoutesOpts> = (app, opts, done) => {
-  const { env, db, boss } = opts;
+  const { env, db, boss, auth } = opts;
+
+  if (auth) {
+    app.addHook('preHandler', async (req, reply) => {
+      const sessao = await sessaoDaRequest(auth, req.headers);
+      if (!sessao) return reply.code(401).send({ erro: 'não autenticado' });
+    });
+  }
 
   app.post('/dev/inbound', async (req, reply) => {
     const body = InboundBodySchema.parse(req.body);
@@ -47,11 +59,11 @@ export const devRoutes: FastifyPluginCallback<DevRoutesOpts> = (app, opts, done)
 
   app.get('/dev/events', async (req, reply) => {
     const { waId } = z.object({ waId: WaPhoneSchema }).parse(req.query);
+    // sem CORS: o console consome via rewrite same-origin do Next
     reply.raw.writeHead(200, {
       'content-type': 'text/event-stream',
       'cache-control': 'no-cache',
       connection: 'keep-alive',
-      'access-control-allow-origin': '*',
     });
     reply.raw.write(': conectado\n\n');
 
