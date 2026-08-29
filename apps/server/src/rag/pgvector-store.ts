@@ -14,6 +14,8 @@ export interface PgVectorStoreDeps {
   readonly db: Db;
   /** Dimensão dos embeddings (env EMBEDDING_DIM) — valida upsert e parametriza o índice. */
   readonly dim: number;
+  /** Avisos de degradação (dim divergente etc.); ausente ⇒ silencioso. */
+  readonly logger?: { warn(obj: unknown, msg: string): void };
 }
 
 /** Candidatos por ranking antes da fusão (folga sobre k para o RRF trabalhar). */
@@ -54,7 +56,13 @@ export function createPgVectorStore(deps: PgVectorStoreDeps): VectorStore & {
   ): Promise<Hit[]> => {
     if (query.length === 0) return [];
     if (query.length !== dim) {
-      throw new Error(`query com ${query.length} dims; esperado ${dim} (EMBEDDING_DIM)`);
+      // #32: provider real com modelo de outra dimensão NÃO derruba a tool —
+      // degrada para lexical-only (densa vazia) com aviso
+      deps.logger?.warn(
+        { recebido: query.length, esperado: dim },
+        'embedding com dimensão divergente de EMBEDDING_DIM — busca densa ignorada',
+      );
+      return [];
     }
     const vec = `[${query.join(',')}]`;
     const filtroFontes = filter?.fontes?.length

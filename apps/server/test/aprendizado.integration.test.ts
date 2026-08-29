@@ -442,6 +442,36 @@ describe('critérios spec 009 (Ato 3)', () => {
     expect(restos).toHaveLength(0);
   }, 20_000);
 
+  it('#32: sincronizar não re-embeda inalteradas nem apaga vetor bom', async () => {
+    let chamadas = 0;
+    const regComEmbed = createSkillRegistry({
+      db,
+      store,
+      embed: async (texto) => {
+        chamadas += 1;
+        return Array.from((await fake.embed([texto]))[0] ?? []);
+      },
+    });
+    await regComEmbed.sincronizar(); // 1ª: skills do seed ainda sem vetor → embeda
+    const primeira = chamadas;
+    expect(primeira).toBeGreaterThan(0);
+    await regComEmbed.sincronizar(); // 2ª: nada mudou → ZERO chamadas de API
+    expect(chamadas).toBe(primeira);
+
+    // API de embedding fora do ar no boot NÃO apaga vetor bom
+    const regQuebrado = createSkillRegistry({
+      db,
+      store,
+      embed: async () => {
+        throw new Error('api de embedding fora do ar');
+      },
+    });
+    await regQuebrado.sincronizar();
+    const vetores = await db.select().from(chunk).where(eq(chunk.ns, 'skills'));
+    expect(vetores.length).toBeGreaterThan(0);
+    expect(vetores.every((c) => c.embedding !== null)).toBe(true);
+  }, 20_000);
+
   it('papel curador é obrigatório; cadeia de auditoria navegável', async () => {
     const comoAtendente = await app.inject({
       method: 'GET',
