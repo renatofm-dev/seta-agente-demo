@@ -25,23 +25,46 @@ export default function TicketPage() {
   const [aba, setAba] = useState<'conversa' | 'trace'>('conversa');
   const fimRef = useRef<HTMLDivElement>(null);
 
+  const conversaIdRef = useRef<string | null>(null);
   const recarregar = useCallback(() => {
     api
       .ticket(id)
-      .then(setTicket)
+      .then((t) => {
+        conversaIdRef.current = t.conversaId;
+        setTicket(t);
+      })
       .catch(() => {});
   }, [id]);
 
   useEffect(() => {
     recarregar();
     const es = new EventSource('/api/console/events');
-    const aoEvento = () => recarregar();
+    // #31: só eventos DESTA conversa recarregam (o refetch do detalhe consulta
+    // o perfil no ERP — evento global de outra conversa não pode custar isso)
+    const aoEvento = (ev: MessageEvent) => {
+      try {
+        const dado = JSON.parse(String(ev.data)) as { conversaId?: string };
+        if (!conversaIdRef.current || dado.conversaId === conversaIdRef.current) recarregar();
+      } catch {
+        recarregar();
+      }
+    };
     es.addEventListener('ticket', aoEvento);
     es.addEventListener('mensagem', aoEvento);
-    const timer = setInterval(recarregar, 3_000); // fallback polling
+    // polling é SÓ fallback de SSE caído
+    let pollTimer: ReturnType<typeof setInterval> | null = null;
+    es.onopen = () => {
+      if (pollTimer) {
+        clearInterval(pollTimer);
+        pollTimer = null;
+      }
+    };
+    es.onerror = () => {
+      if (!pollTimer) pollTimer = setInterval(recarregar, 3_000);
+    };
     return () => {
       es.close();
-      clearInterval(timer);
+      if (pollTimer) clearInterval(pollTimer);
     };
   }, [recarregar]);
 

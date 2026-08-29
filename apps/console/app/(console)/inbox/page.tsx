@@ -59,16 +59,38 @@ export default function InboxPage() {
   useEffect(() => {
     recarregar();
     const es = new EventSource('/api/console/events');
-    es.onopen = () => setAoVivo(true);
-    es.onerror = () => setAoVivo(false);
-    const aoEvento = () => recarregarRef.current();
+    // #31: polling é SÓ fallback de SSE caído — não roda junto
+    let pollTimer: ReturnType<typeof setInterval> | null = null;
+    const pararPolling = () => {
+      if (pollTimer) {
+        clearInterval(pollTimer);
+        pollTimer = null;
+      }
+    };
+    es.onopen = () => {
+      setAoVivo(true);
+      pararPolling();
+      recarregarRef.current();
+    };
+    es.onerror = () => {
+      setAoVivo(false);
+      if (!pollTimer) pollTimer = setInterval(() => recarregarRef.current(), 3_000);
+    };
+    // rajada de eventos = 1 recarga (trailing throttle)
+    let agendado: ReturnType<typeof setTimeout> | null = null;
+    const aoEvento = () => {
+      if (agendado) return;
+      agendado = setTimeout(() => {
+        agendado = null;
+        recarregarRef.current();
+      }, 500);
+    };
     es.addEventListener('ticket', aoEvento);
     es.addEventListener('mensagem', aoEvento);
-    // fallback: polling 3 s cobre SSE caído (e serve de refresh do tempo de espera)
-    const timer = setInterval(() => recarregarRef.current(), 3_000);
     return () => {
       es.close();
-      clearInterval(timer);
+      pararPolling();
+      if (agendado) clearTimeout(agendado);
     };
   }, [recarregar]);
 
