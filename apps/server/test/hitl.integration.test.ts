@@ -318,4 +318,26 @@ describe('critérios spec 007 (fluxo HITL completo)', () => {
     await aguardar(async () => (await contarTurnos()) === 2);
     expect((await db.select().from(ticket))[0]?.status).toBe('bot_ativo');
   }, 20_000);
+
+  it('#33: dois "assumir" concorrentes — um vence (200), o outro leva 409, 1 evento só', async () => {
+    fake.respondeTexto('negociar_preco'); // classificador escala direto
+    await mensagemDoContato('me dá um desconto aí');
+    await aguardar(async () => {
+      const [t] = await db.select().from(ticket);
+      return t?.status === 'aguardando_humano';
+    });
+    const [t] = await db.select().from(ticket);
+
+    const [a, b] = await Promise.all([
+      apiConsole('POST', `/api/console/ticket/${t?.id}/assumir`),
+      apiConsole('POST', `/api/console/ticket/${t?.id}/assumir`),
+    ]);
+    expect([a.statusCode, b.statusCode].sort()).toEqual([200, 409]);
+
+    const [depois] = await db.select().from(ticket);
+    expect(depois?.status).toBe('humano_ativo');
+    // auditoria sem evento fantasma: exatamente UMA transição p/ humano_ativo
+    const eventos = await db.select().from(eventoTicket);
+    expect(eventos.filter((e) => e.paraStatus === 'humano_ativo')).toHaveLength(1);
+  }, 20_000);
 });

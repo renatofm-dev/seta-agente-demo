@@ -1,6 +1,11 @@
-import { type AtorTicket, type TicketStatus, transicionar } from '@seta/crm';
+import {
+  type AtorTicket,
+  type TicketStatus,
+  TransicaoInvalidaError,
+  transicionar,
+} from '@seta/crm';
 import { newTraceId } from '@seta/observability';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import type { Db } from '../db/index.js';
 import { eventoTicket, ticket } from '../db/schema.js';
 
@@ -33,6 +38,8 @@ export async function aplicarTransicao(
   extras: { atorId?: string; motivo?: string } = {},
 ): Promise<TicketRow> {
   const t = transicionar(ticketAtual.status, para, ator, extras); // lança se inválida
+  // #33: UPDATE condicional no status LIDO — dois atendentes assumindo juntos
+  // não fazem mais last-write-wins: o segundo cai em 409, sem evento fantasma
   const [atualizado] = await db
     .update(ticket)
     .set({
@@ -46,8 +53,12 @@ export async function aplicarTransicao(
       escaladoEm: t.para === 'aguardando_humano' ? new Date() : ticketAtual.escaladoEm,
       atualizadoEm: new Date(),
     })
-    .where(eq(ticket.id, ticketAtual.id))
+    .where(and(eq(ticket.id, ticketAtual.id), eq(ticket.status, ticketAtual.status)))
     .returning();
+  if (!atualizado) {
+    throw new TransicaoInvalidaError(ticketAtual.status, t.para); // corrida: estado já mudou
+  }
+  // evento de auditoria só para a transição que VENCEU
   await db.insert(eventoTicket).values({
     id: newTraceId(),
     ticketId: ticketAtual.id,
@@ -57,7 +68,6 @@ export async function aplicarTransicao(
     atorId: extras.atorId ?? null,
     motivo: extras.motivo ?? null,
   });
-  if (!atualizado) throw new Error(`ticket ${ticketAtual.id} não atualizado`);
   return atualizado;
 }
 
