@@ -26,12 +26,20 @@ export function extrairValoresMonetarios(texto: string): number[] {
   return valores;
 }
 
-/** Todos os valores numéricos (centavos) presentes nos resultados de tools do turno. */
+/** Coluna que carrega dinheiro (valor_centavos, preco_..., total_...). */
+const RE_COLUNA_MONETARIA = /centavos|valor|pre[cç]o|total/i;
+
+/**
+ * Valores (centavos) rastreáveis nos resultados de tools do turno. Tool
+ * `price_source` legitima qualquer coluna; nas demais, só colunas MONETÁRIAS —
+ * id de produto ou quantidade não pode validar um "R$" do draft (spec 006).
+ */
 function valoresRastreaveis(ctx: GuardrailCtx): Set<number> {
   const set = new Set<number>();
   for (const r of ctx.toolResults) {
     for (const row of r.rows) {
-      for (const valor of Object.values(row)) {
+      for (const [coluna, valor] of Object.entries(row)) {
+        if (!r.priceSource && !RE_COLUNA_MONETARIA.test(coluna)) continue;
         const n = typeof valor === 'string' ? Number(valor) : valor;
         if (typeof n === 'number' && Number.isFinite(n) && Number.isInteger(n)) set.add(n);
       }
