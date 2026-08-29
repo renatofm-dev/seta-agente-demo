@@ -68,6 +68,10 @@ export function createAgentRuntime(deps: AgentRuntimeDeps): AgentRuntime {
     async processarTurno(input: TurnoInput): Promise<ResultadoTurno> {
       const inicio = Date.now();
       const deadline = inicio + input.limites.timeoutMs;
+      // #27: deadline também CANCELA chamadas LLM em voo — uma request
+      // pendurada no provider não segura o turno além do timeout
+      const abortoTurno = new AbortController();
+      const timerAborto = setTimeout(() => abortoTurno.abort(), input.limites.timeoutMs);
       const toolsPorNome = new Map(input.tools.map((t) => [t.name, t]));
       const toolDefs = paraToolDefs(input.tools);
       const guardrailCtx = (state: State): GuardrailCtx => ({
@@ -104,7 +108,19 @@ export function createAgentRuntime(deps: AgentRuntimeDeps): AgentRuntime {
         if (Date.now() > deadline) {
           return { fallbackMotivo: 'timeout de turno' };
         }
-        const res = await deps.provider.chat({ messages: state.mensagens, tools: toolDefs });
+        let res: Awaited<ReturnType<typeof deps.provider.chat>>;
+        try {
+          res = await deps.provider.chat({
+            messages: state.mensagens,
+            tools: toolDefs,
+            signal: abortoTurno.signal,
+          });
+        } catch (err) {
+          if (abortoTurno.signal.aborted) {
+            return { fallbackMotivo: 'timeout de turno' }; // LLM cancelado em voo
+          }
+          throw err;
+        }
         const evento: TraceEvento = {
           tipo: 'llm',
           tokensEntrada: res.tokensEntrada,
@@ -349,7 +365,12 @@ export function createAgentRuntime(deps: AgentRuntimeDeps): AgentRuntime {
         .addEdge('responder', END)
         .compile();
 
-      const final = (await grafo.invoke({}, { recursionLimit: 60 })) as State;
+      let final: State;
+      try {
+        final = (await grafo.invoke({}, { recursionLimit: 60 })) as State;
+      } finally {
+        clearTimeout(timerAborto);
+      }
 
       return {
         resposta: final.respostaFinal ?? TEXTO_FALLBACK,

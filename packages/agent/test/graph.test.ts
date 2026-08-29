@@ -245,4 +245,26 @@ describe('grafo do agente', () => {
     expect(r.escaladoTrigger).toBe('falhas_tool');
     expect(r.resposta).toBe(TEXTO_TRANSICAO);
   });
+
+  it('#27: LLM pendurado é CANCELADO no deadline do turno (fallback, sem travar)', async () => {
+    // provider que nunca responde, mas respeita o AbortSignal do turno
+    const pendurado = {
+      modelId: 'pendurado',
+      chat: (req: { signal?: AbortSignal }) =>
+        new Promise<never>((_, reject) => {
+          req.signal?.addEventListener('abort', () => reject(new Error('abortado')));
+        }),
+      embed: async () => [],
+    };
+    const { efeitos } = efeitosFake();
+    const runtime = createAgentRuntime({ provider: pendurado as never });
+    const t0 = Date.now();
+    const r = await runtime.processarTurno(
+      inputBase({ limites: { maxToolCalls: 6, timeoutMs: 300, retriesPorTool: 1 } }, efeitos),
+    );
+    expect(Date.now() - t0).toBeLessThan(3_000); // sem o abort, penduraria para sempre
+    expect(r.fallback).toBe(true);
+    expect(r.fallbackMotivo).toBe('timeout de turno');
+    expect(r.resposta).toBe(TEXTO_FALLBACK);
+  });
 });

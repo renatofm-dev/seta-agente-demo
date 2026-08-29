@@ -132,3 +132,37 @@ describe('ai-provider (port + impl openai-compatible)', () => {
     await expect(fake.chat({ messages: [] })).rejects.toThrow(/fila de respostas vazia/);
   });
 });
+
+describe('#27: timeout e cancelamento de rede', () => {
+  it('signal externo aborta a chamada em voo', async () => {
+    const fetchPendurado: typeof fetch = (_url, init) =>
+      new Promise((_, reject) => {
+        init?.signal?.addEventListener('abort', () => reject(new Error('AbortError')));
+      });
+    const provider = createOpenAICompatibleProvider(
+      { baseUrl: 'http://127.0.0.1:9', apiKey: 'x', model: 'm' },
+      fetchPendurado,
+    );
+    const controller = new AbortController();
+    const promessa = provider.chat({
+      messages: [{ role: 'user', content: 'oi' }],
+      signal: controller.signal,
+    });
+    controller.abort();
+    await expect(promessa).rejects.toThrow();
+  });
+
+  it('timeoutMs da config aborta sozinho (sem sinal externo)', async () => {
+    const fetchPendurado: typeof fetch = (_url, init) =>
+      new Promise((_, reject) => {
+        init?.signal?.addEventListener('abort', () => reject(new Error('timeout')));
+      });
+    const provider = createOpenAICompatibleProvider(
+      { baseUrl: 'http://127.0.0.1:9', apiKey: 'x', model: 'm', timeoutMs: 1_000 },
+      fetchPendurado,
+    );
+    const t0 = Date.now();
+    await expect(provider.chat({ messages: [{ role: 'user', content: 'oi' }] })).rejects.toThrow();
+    expect(Date.now() - t0).toBeLessThan(5_000);
+  });
+});
