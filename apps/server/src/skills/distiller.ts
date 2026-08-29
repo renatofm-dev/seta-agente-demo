@@ -1,5 +1,5 @@
 import type { AIProvider } from '@seta/ai-provider';
-import { newTraceId } from '@seta/observability';
+import { newTraceId, type ObsEmitter } from '@seta/observability';
 import { DISTILLER_OUTPUT_SCHEMA, renderPromptDistiller } from '@seta/skills';
 import { desc, eq, inArray, isNull } from 'drizzle-orm';
 import type { Db } from '../db/index.js';
@@ -13,6 +13,8 @@ import { casoEval, proposta, sinalAprendizado, traceTurno } from '../db/schema.j
 export interface DistillerDeps {
   readonly db: Db;
   readonly provider: AIProvider;
+  /** #30: cada chamada do distiller entra no evento_llm (custo real no /metricas). */
+  readonly obs?: ObsEmitter;
 }
 
 type Sinal = typeof sinalAprendizado.$inferSelect;
@@ -37,6 +39,7 @@ export interface ResultadoDistiller {
 
 export async function gerarPropostas(deps: DistillerDeps): Promise<ResultadoDistiller> {
   const { db, provider } = deps;
+  const traceIdRodada = newTraceId(); // agrupa os evento_llm desta rodada
   const pendentes = await db
     .select()
     .from(sinalAprendizado)
@@ -60,10 +63,21 @@ export async function gerarPropostas(deps: DistillerDeps): Promise<ResultadoDist
       payload: s.payload,
       criadoEm: s.criadoEm.toISOString(),
     }));
+    const t0 = Date.now();
     const res = await provider.chat({
       messages: [{ role: 'user', content: renderPromptDistiller(resumoSinais) }],
       temperature: 0,
       maxOutputTokens: 1024,
+    });
+    deps.obs?.llm({
+      traceId: traceIdRodada,
+      conversaId: null, // destilação não pertence a uma conversa
+      turnoId: null,
+      ticketId: null,
+      modelo: provider.modelId,
+      tokensEntrada: res.tokensEntrada,
+      tokensSaida: res.tokensSaida,
+      latenciaMs: Date.now() - t0,
     });
     const parsed = DISTILLER_OUTPUT_SCHEMA.safeParse(extrairJson(res.content ?? ''));
     if (!parsed.success || !parsed.data.proposta) continue;

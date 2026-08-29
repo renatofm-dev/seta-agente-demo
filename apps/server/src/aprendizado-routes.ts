@@ -1,4 +1,5 @@
 import type { AIProvider } from '@seta/ai-provider';
+import type { ObsEmitter } from '@seta/observability';
 import type { SkillFrontmatter, SkillRegistry } from '@seta/skills';
 import { desc, sql as dsql, eq, inArray } from 'drizzle-orm';
 import type { FastifyPluginCallback, FastifyReply, FastifyRequest } from 'fastify';
@@ -18,6 +19,8 @@ export interface AprendizadoRoutesOpts {
   readonly registry: SkillRegistry;
   /** null ⇒ distiller indisponível (LLM não configurado). */
   readonly provider: AIProvider | null;
+  /** #30: emissor p/ contabilizar os tokens do distiller (ausente ⇒ não emite). */
+  readonly obs?: ObsEmitter;
 }
 
 const sessoes = new WeakMap<FastifyRequest, SessaoConsole>();
@@ -47,7 +50,7 @@ export const aprendizadoRoutes: FastifyPluginCallback<AprendizadoRoutesOpts> = (
     if (!provider) {
       return reply.code(503).send({ erro: 'LLM não configurado — distiller indisponível' });
     }
-    return gerarPropostas({ db, provider });
+    return gerarPropostas({ db, provider, obs: opts.obs });
   });
 
   app.get('/api/aprendizado/propostas', async () => {

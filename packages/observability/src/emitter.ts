@@ -15,6 +15,8 @@ const Base = z.object({
 });
 
 export const EventoLlmSchema = Base.extend({
+  /** null (#30): distiller roda fora de conversa. */
+  conversaId: z.uuid().nullable().default(null),
   modelo: z.string().min(1),
   tokensEntrada: z.number().int().min(0),
   tokensSaida: z.number().int().min(0),

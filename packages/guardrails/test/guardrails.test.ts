@@ -132,7 +132,10 @@ describe('pipeline', () => {
 describe('classificador de intenção', () => {
   it('mapeia a resposta estruturada do LLM', async () => {
     const fake = createFakeProvider().respondeTexto('negociar_preco');
-    expect(await classificarIntencao(fake, 'me dá 10% de desconto?', [])).toBe('negociar_preco');
+    const r = await classificarIntencao(fake, 'me dá 10% de desconto?', []);
+    expect(r.intencao).toBe('negociar_preco');
+    expect(r.tokensEntrada).toBe(10); // #30: usage do provider vem junto
+    expect(r.tokensSaida).toBe(5);
     const req = fake.requests[0];
     expect(req?.messages[0]?.content).toContain('negociar_preco');
     expect(req?.maxOutputTokens).toBe(8);
@@ -140,7 +143,7 @@ describe('classificador de intenção', () => {
 
   it('resposta fora do enum cai em outro (classificador nunca trava o fluxo)', async () => {
     const fake = createFakeProvider().respondeTexto('sei lá, talvez preço?');
-    expect(await classificarIntencao(fake, 'oi', [])).toBe('outro');
+    expect((await classificarIntencao(fake, 'oi', [])).intencao).toBe('outro');
   });
 
   it('temas sensíveis da config entram no prompt', async () => {

@@ -20,7 +20,12 @@ import {
 } from '../src/db/schema.ts';
 import { type Env, loadEnv } from '../src/env.ts';
 import { registerDebounceWorker, type TurnoPronto } from '../src/wa/debounce.ts';
-import { enqueueOutbound, registerOutboxWorker } from '../src/wa/outbox.ts';
+import {
+  enqueueOutbound,
+  enviarLinha,
+  registerOutboxWorker,
+  varrerPendentesOrfas,
+} from '../src/wa/outbox.ts';
 
 /**
  * Critérios da spec 004 (integração; exige Postgres dev):
@@ -308,7 +313,93 @@ describe('outbox', () => {
         .where(eq(outbox.dedupeKey, `${t.id}:1`));
       return linha?.status === 'janela_fechada';
     });
+    // #29 (e spec 004): a janela fechada também MARCA o ticket p/ um humano
+    await aguardar(async () => (await db.select().from(ticket)).length === 1);
+    const [tk] = await db.select().from(ticket);
+    expect(tk?.status).toBe('aguardando_humano');
+    expect(tk?.motivoEscalonamento).toContain('janela');
   }, 15_000);
+
+  it('#29: retries esgotados → linha vira `falha` e o ticket escala (dead-letter)', async () => {
+    const [conv] = await db
+      .insert(conversa)
+      .values({
+        id: '01990a5d-ac96-774b-bcce-b302099a8060',
+        waId: '5511999990007',
+        janelaExpiraEm: new Date(Date.now() + 3600_000),
+      })
+      .returning();
+    const [t] = await db
+      .insert(turno)
+      .values({
+        id: '01990a5d-ac96-774b-bcce-b302099a8061',
+        conversaId: conv?.id ?? '',
+        textoAgregado: 'x',
+      })
+      .returning();
+    if (!conv || !t) throw new Error('setup incompleto');
+    const r = await enqueueOutbound(
+      { db, boss },
+      { conversaId: conv.id, turnoId: t.id, seq: 1, texto: 'não vai sair' },
+    );
+
+    const gatewayQuebrado = {
+      async send(): Promise<{ waMessageId: string }> {
+        throw new Error('Meta fora do ar');
+      },
+    };
+    // última tentativa (retryCount == limite): não relança, marca falha + ticket
+    await enviarLinha({ db, boss, logger, gateway: gatewayQuebrado }, r.outboxId ?? '', true);
+
+    const [linha] = await db
+      .select()
+      .from(outbox)
+      .where(eq(outbox.id, r.outboxId ?? ''));
+    expect(linha?.status).toBe('falha');
+    const [tk] = await db.select().from(ticket).where(eq(ticket.conversaId, conv.id));
+    expect(tk?.status).toBe('aguardando_humano');
+    expect(tk?.motivoEscalonamento).toContain('falha ao enviar');
+  }, 15_000);
+
+  it('#29: pendente órfã (crash entre insert e send) é ressuscitada pelo sweeper', async () => {
+    const [conv] = await db
+      .insert(conversa)
+      .values({
+        id: '01990a5d-ac96-774b-bcce-b302099a8062',
+        waId: '5511999990008',
+        janelaExpiraEm: new Date(Date.now() + 3600_000),
+      })
+      .returning();
+    if (!conv) throw new Error('setup incompleto');
+    // linha pendente ANTIGA sem job (simula o crash pós-insert)
+    const [linha] = await db
+      .insert(outbox)
+      .values({
+        id: '01990a5d-ac96-774b-bcce-b302099a8063',
+        conversaId: conv.id,
+        turnoId: null,
+        seq: 1,
+        dedupeKey: 'manual:orfa-teste',
+        autor: 'atendente',
+        texto: 'mensagem órfã',
+        atualizadoEm: new Date(Date.now() - 11 * 60 * 1000),
+      })
+      .returning();
+    if (!linha) throw new Error('setup incompleto');
+
+    const gatewayOk = {
+      async send(): Promise<{ waMessageId: string }> {
+        return { waMessageId: 'wamid.orfa-1' };
+      },
+    };
+    const n = await varrerPendentesOrfas({ db, boss, logger, gateway: gatewayOk });
+    expect(n).toBe(1);
+    // o worker registrado na suíte pega o job re-enfileirado e envia
+    await aguardar(async () => {
+      const [l] = await db.select().from(outbox).where(eq(outbox.id, linha.id));
+      return l?.status === 'enviada';
+    }, 12_000);
+  }, 20_000);
 });
 
 describe('simulador dev', () => {

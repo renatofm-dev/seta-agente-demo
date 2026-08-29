@@ -300,4 +300,43 @@ describe('critérios spec 005 (via simulador)', () => {
     expect(conteudos.some((c) => c.includes(`msg-${max + 5}`))).toBe(true); // recente entra
     expect(conteudos.some((c) => c === 'msg-1')).toBe(false); // antiga sai da janela
   }, 20_000);
+
+  it('#28: turnos de conversas DIFERENTES processam em paralelo', async () => {
+    // provider-barreira: a resposta do grafo só libera quando DOIS turnos
+    // estiverem em voo ao mesmo tempo — com processamento serial, trava e o
+    // teste falha por timeout (era o comportamento antigo)
+    let emVoo = 0;
+    let liberar: () => void = () => {};
+    const barreira = new Promise<void>((r) => {
+      liberar = r;
+    });
+    const provider = {
+      modelId: 'barreira',
+      embed: async (t: readonly string[]) => t.map(() => new Float32Array(8)),
+      chat: async (req: { messages: readonly { content: string }[] }) => {
+        const ehClassificador = String(req.messages[0]?.content).startsWith('Classifique');
+        if (!ehClassificador) {
+          emVoo += 1;
+          if (emVoo >= 2) liberar();
+          await barreira;
+        }
+        return {
+          content: ehClassificador ? 'outro' : 'tudo certo!',
+          toolCalls: [],
+          tokensEntrada: 1,
+          tokensSaida: 1,
+          finishReason: 'stop',
+        };
+      },
+    };
+    fake = provider as unknown as typeof fake;
+
+    await enviarPeloSimulador('5511999990005', 'oi, tudo bem?');
+    await enviarPeloSimulador('5511999990006', 'bom dia!');
+    await aguardar(
+      async () => ((await db.select({ n: count() }).from(traceTurno))[0]?.n ?? 0) === 2,
+      20_000,
+    );
+    expect(emVoo).toBeGreaterThanOrEqual(2);
+  }, 30_000);
 });

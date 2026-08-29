@@ -353,7 +353,8 @@ export const eventoQuery = pgTable('evento_query', {
 export const eventoLlm = pgTable('evento_llm', {
   id: uuid('id').primaryKey(),
   traceId: text('trace_id').notNull(),
-  conversaId: uuid('conversa_id').notNull(),
+  // nullable (#30): distiller gasta tokens fora de qualquer conversa
+  conversaId: uuid('conversa_id'),
   turnoId: uuid('turno_id'),
   ticketId: uuid('ticket_id'),
   modelo: text('modelo').notNull(),
