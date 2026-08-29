@@ -3,7 +3,7 @@ import type { ObsEmitter } from '@seta/observability';
 import type { SkillFrontmatter, SkillRegistry } from '@seta/skills';
 import { desc, sql as dsql, eq, inArray } from 'drizzle-orm';
 import type { FastifyPluginCallback, FastifyReply, FastifyRequest } from 'fastify';
-import { z } from 'zod';
+import { ZodError, z } from 'zod';
 import { type Auth, type SessaoConsole, sessaoDaRequest } from './auth.js';
 import type { Db } from './db/index.js';
 import { proposta, sinalAprendizado, skill, skillVersao } from './db/schema.js';
@@ -39,6 +39,14 @@ export const aprendizadoRoutes: FastifyPluginCallback<AprendizadoRoutesOpts> = (
       return reply.code(403).send({ erro: 'papel curador obrigatório' });
     }
     sessoes.set(req, sessao);
+  });
+  app.setErrorHandler((err, req, reply) => {
+    if (err instanceof ZodError) {
+      // #37: input inválido é 400, não 500
+      return reply.code(400).send({ erro: 'entrada inválida', detalhe: z.prettifyError(err) });
+    }
+    req.log.error(err, 'erro na api de aprendizado');
+    return reply.code(500).send({ erro: 'erro interno' });
   });
   const sessaoDe = (req: FastifyRequest): SessaoConsole => {
     const s = sessoes.get(req);
@@ -168,6 +176,12 @@ export const aprendizadoRoutes: FastifyPluginCallback<AprendizadoRoutesOpts> = (
     if (versoes.length === 0) return reply.code(404).send({ erro: 'skill sem versões' });
 
     const cadeia = [];
+    // #37: não depende da versão — era re-executada (idêntica) a cada iteração
+    const turnosQueUsaram = await db.execute(dsql`
+      SELECT id, turno_id, criado_em FROM trace_turno
+      WHERE contexto -> 'skillIds' @> ${JSON.stringify([id])}::jsonb
+      ORDER BY criado_em DESC LIMIT 20
+    `);
     for (const v of versoes) {
       const [p] = v.propostaId
         ? await db.select().from(proposta).where(eq(proposta.id, v.propostaId))
@@ -178,11 +192,6 @@ export const aprendizadoRoutes: FastifyPluginCallback<AprendizadoRoutesOpts> = (
             .from(sinalAprendizado)
             .where(inArray(sinalAprendizado.id, (p.sinais as string[]) ?? []))
         : [];
-      const turnos = await db.execute(dsql`
-        SELECT id, turno_id, criado_em FROM trace_turno
-        WHERE contexto -> 'skillIds' @> ${JSON.stringify([id])}::jsonb
-        ORDER BY criado_em DESC LIMIT 20
-      `);
       cadeia.push({
         versao: {
           id: v.id,
@@ -202,7 +211,7 @@ export const aprendizadoRoutes: FastifyPluginCallback<AprendizadoRoutesOpts> = (
             }
           : null,
         sinais: sinais.map((s) => ({ id: s.id, tipo: s.tipo, criadoEm: s.criadoEm })),
-        turnosQueUsaram: turnos.rows,
+        turnosQueUsaram: turnosQueUsaram.rows,
       });
     }
     return { skillId: id, cadeia };

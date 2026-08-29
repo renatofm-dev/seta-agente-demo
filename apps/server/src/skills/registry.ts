@@ -231,6 +231,9 @@ export function createSkillRegistry(deps: RegistryDeps): SkillRegistry & {
     async reject(propostaId, revisor, motivo) {
       const [p] = await db.select().from(proposta).where(eq(proposta.id, propostaId));
       if (!p) throw new Error(`proposta inexistente: ${propostaId}`);
+      // #36: rejeitar proposta já revisada deixaria auditoria contraditória
+      // (versão ativa + proposta 'rejeitada')
+      if (p.status !== 'aberta') throw new Error(`proposta ${propostaId} já ${p.status}`);
       await db
         .update(proposta)
         .set({ status: 'rejeitada', motivoRejeicao: motivo, revisadoPor: revisor })
@@ -240,9 +243,9 @@ export function createSkillRegistry(deps: RegistryDeps): SkillRegistry & {
       if (conversaId) {
         await db.insert(sinalAprendizado).values({
           id: newTraceId(),
-          tipo: 'guardrail_verdict',
+          tipo: 'rejeicao_proposta', // #36: tipo próprio — não volta ao distiller
           conversaId,
-          payload: { origem: 'rejeicao_proposta', propostaId, motivo, revisor },
+          payload: { propostaId, motivo, revisor },
         });
       }
     },

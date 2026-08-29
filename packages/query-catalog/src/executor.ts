@@ -68,6 +68,21 @@ export function createExecutor(opts: CreateExecutorOptions): Executor {
       const sessao = valoresDeSessao(session);
       const binds: Record<string, Scalar> = {};
 
+      // #37: falha de VALIDAÇÃO também é auditada — tentativa malformada do
+      // modelo aparece no evento_query como qualquer outro erro
+      const falhaValidacao = async (mensagem: string): Promise<never> => {
+        await gravar(sink, logger, {
+          traceId: session.traceId,
+          entryId: id,
+          ok: false,
+          latencyMs: 0,
+          linhas: 0,
+          truncated: false,
+          erro: mensagem,
+        });
+        throw new Error(mensagem);
+      };
+
       for (const [nome, spec] of Object.entries(entry.params)) {
         if (spec.source === 'session') {
           // valor vindo do modelo para param de sessão é IGNORADO e logado
@@ -79,20 +94,24 @@ export function createExecutor(opts: CreateExecutorOptions): Executor {
           }
           const valor = sessao[nome];
           if (valor === undefined) {
-            throw new Error(`sessão não fornece o param "${nome}" exigido por ${id}`);
+            await falhaValidacao(`sessão não fornece o param "${nome}" exigido por ${id}`);
           }
+          if (valor === undefined) throw new Error('unreachable');
           binds[nome] = valor;
           continue;
         }
 
         const bruto = rawParams[nome] ?? spec.default;
         if (bruto === undefined) {
-          if (spec.required) throw new Error(`param obrigatório ausente: "${nome}" em ${id}`);
+          if (spec.required) await falhaValidacao(`param obrigatório ausente: "${nome}" em ${id}`);
           continue; // opcional sem default e sem valor: SQL não deve referenciar? validador exige bind⇔param, então default é obrigatório na prática
         }
         const parseado = zodDoParam(spec).safeParse(bruto);
         if (!parseado.success) {
-          throw new Error(`param "${nome}" inválido em ${id}: ${z.prettifyError(parseado.error)}`);
+          await falhaValidacao(
+            `param "${nome}" inválido em ${id}: ${z.prettifyError(parseado.error)}`,
+          );
+          throw new Error('unreachable');
         }
         binds[nome] = parseado.data as Scalar;
       }

@@ -299,6 +299,15 @@ describe('critérios spec 010', () => {
     expect(t1.tokensEntrada).toBe(30); // trace também inclui o classificador (#30)
     expect(t1.latenciaMs).toBeGreaterThanOrEqual(0);
 
+    // #37: paginação — limite=1 devolve só o turno MAIS RECENTE
+    const limitado = await app.inject({
+      method: 'GET',
+      url: `/api/console/ticket/${tk?.id}/traces?limite=1`,
+      headers: { cookie },
+    });
+    expect(limitado.json().traces).toHaveLength(1);
+    expect(limitado.json().traces[0].escalado).toBe(true); // o turno 2
+
     // turno 2: verdict do classificador + escalada visíveis
     const t2 = traces[1];
     const tipos2 = t2.eventos.map((e: { tipo: string }) => e.tipo);

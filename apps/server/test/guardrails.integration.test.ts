@@ -192,7 +192,7 @@ describe('critérios spec 006', () => {
 
     // verdict != allow virou sinal_aprendizado (insumo da 009); a escalada também (009)
     const sinais = await db.select().from(sinalAprendizado);
-    expect(sinais.filter((sg) => sg.tipo === 'guardrail_verdict')).toHaveLength(1);
+    expect(sinais.filter((sg) => sg.tipo === 'verdict_guardrail')).toHaveLength(1);
     expect(sinais.filter((sg) => sg.tipo === 'escalonamento')).toHaveLength(1);
   }, 20_000);
 

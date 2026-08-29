@@ -148,3 +148,16 @@ describe('codegen de ToolSpecs', () => {
     ).rejects.toThrow(/sem vínculo/);
   });
 });
+
+describe('#37: falha de validação também é auditada', () => {
+  it('param inválido do modelo gera evento_query ok:false (antes era invisível)', async () => {
+    const { executor, eventos, chamadas } = fakes();
+    await expect(
+      executor.run('vendas.ultimos_pedidos', { quantidade: 'não-é-número' }, SESSION),
+    ).rejects.toThrow(/inválido/);
+    expect(chamadas).toHaveLength(0); // nunca chegou ao banco
+    expect(eventos).toHaveLength(1);
+    expect(eventos[0]).toMatchObject({ ok: false, entryId: 'vendas.ultimos_pedidos' });
+    expect(eventos[0]?.erro).toContain('quantidade');
+  });
+});
