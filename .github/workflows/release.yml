@@ -13,6 +13,7 @@ jobs:
   imagens:
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false # falha de uma imagem não cancela o build da outra
       matrix:
         include:
           - nome: server
