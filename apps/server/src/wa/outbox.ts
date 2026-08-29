@@ -3,9 +3,10 @@ import { JanelaFechadaError, type OutboundGateway } from '@seta/wa-meta';
 import { eq, sql } from 'drizzle-orm';
 import type { PgBoss } from 'pg-boss';
 import type { Logger } from 'pino';
-import { FILA_OUTBOX } from '../boss.js';
+import { FILA_OUTBOX, FILA_OUTBOX_SWEEP, OUTBOX_RETRY_LIMIT } from '../boss.js';
 import type { Db } from '../db/index.js';
 import { conversa, mensagem, outbox } from '../db/schema.js';
+import { aplicarTransicao, garantirTicket } from './tickets.js';
 
 /**
  * Outbox: toda resposta vira linha com dedupe (turnoId+seq) antes de qualquer
@@ -65,14 +66,39 @@ export interface OutboxWorkerDeps extends OutboxDeps {
 }
 
 export async function registerOutboxWorker(deps: OutboxWorkerDeps): Promise<void> {
-  await deps.boss.work<{ outboxId: string }>(FILA_OUTBOX, async (jobs) => {
-    for (const job of jobs) {
-      await enviarLinha(deps, job.data.outboxId);
-    }
-  });
+  await deps.boss.work<{ outboxId: string }>(
+    FILA_OUTBOX,
+    { includeMetadata: true },
+    async (jobs) => {
+      for (const job of jobs) {
+        const retryCount = (job as unknown as { retryCount?: number }).retryCount ?? 0;
+        await enviarLinha(deps, job.data.outboxId, retryCount >= OUTBOX_RETRY_LIMIT);
+      }
+    },
+  );
 }
 
-async function enviarLinha(deps: OutboxWorkerDeps, outboxId: string): Promise<void> {
+/** #29: entrega indeliverável marca o ticket — humano fica sabendo na hora. */
+async function marcarTicketPorFalha(
+  deps: OutboxWorkerDeps,
+  conversaId: string,
+  motivo: string,
+): Promise<void> {
+  try {
+    const t = await garantirTicket(deps.db, conversaId);
+    if (t.status === 'bot_ativo') {
+      await aplicarTransicao(deps.db, t, 'aguardando_humano', 'bot', { motivo });
+    }
+  } catch (err) {
+    deps.logger.error({ err, conversaId }, 'falha ao marcar ticket após erro de envio');
+  }
+}
+
+export async function enviarLinha(
+  deps: OutboxWorkerDeps,
+  outboxId: string,
+  ultimaTentativa = false,
+): Promise<void> {
   const [linha] = await deps.db.select().from(outbox).where(eq(outbox.id, outboxId));
   if (linha?.status !== 'pendente') return; // inexistente ou já resolvida (dedupe/reprocesso)
   const [conv] = await deps.db.select().from(conversa).where(eq(conversa.id, linha.conversaId));
@@ -106,11 +132,12 @@ async function enviarLinha(deps: OutboxWorkerDeps, outboxId: string): Promise<vo
     });
   } catch (err) {
     if (err instanceof JanelaFechadaError) {
-      // POC: sem template — loga e marca; abertura de ticket chega na 007
+      // POC sem template: marca a linha E o ticket (spec 004) — reengajar é humano
       await deps.db
         .update(outbox)
         .set({ status: 'janela_fechada', atualizadoEm: new Date() })
         .where(eq(outbox.id, outboxId));
+      await marcarTicketPorFalha(deps, conv.id, 'janela de 24h fechada — reengajar por template');
       deps.logger.warn({ outboxId, waId: conv.waId }, 'janela de 24h fechada — envio abortado');
       return;
     }
@@ -118,6 +145,46 @@ async function enviarLinha(deps: OutboxWorkerDeps, outboxId: string): Promise<vo
       .update(outbox)
       .set({ tentativas: sql`${outbox.tentativas} + 1`, atualizadoEm: new Date() })
       .where(eq(outbox.id, outboxId));
+    if (ultimaTentativa) {
+      // #29: dead-letter — a mensagem NÃO some em silêncio: linha vira `falha`
+      // e o ticket escala para um humano reenviar/decidir
+      await deps.db
+        .update(outbox)
+        .set({ status: 'falha', atualizadoEm: new Date() })
+        .where(eq(outbox.id, outboxId));
+      await marcarTicketPorFalha(deps, conv.id, 'falha ao enviar resposta ao contato');
+      deps.logger.error({ err, outboxId }, 'outbox: retries esgotados — linha em falha');
+      return;
+    }
     throw err; // pg-boss re-tenta com backoff exponencial (config da fila)
   }
+}
+
+/**
+ * #29: varredura de órfãs — crash entre o INSERT do outbox e o boss.send deixa
+ * linha `pendente` sem job. Recoloca na fila linhas pendentes velhas o bastante
+ * para o ciclo de retries original já ter morrido (sem risco de envio duplo).
+ */
+export const ORFA_APOS_MS = 10 * 60 * 1000;
+
+export async function varrerPendentesOrfas(deps: OutboxWorkerDeps): Promise<number> {
+  const corte = new Date(Date.now() - ORFA_APOS_MS);
+  const orfas = await deps.db
+    .select({ id: outbox.id })
+    .from(outbox)
+    .where(sql`${outbox.status} = 'pendente' AND ${outbox.atualizadoEm} < ${corte}`);
+  for (const linha of orfas) {
+    await deps.boss.send(FILA_OUTBOX, { outboxId: linha.id }, { singletonKey: linha.id });
+  }
+  if (orfas.length > 0) {
+    deps.logger.warn({ n: orfas.length }, 'outbox: pendentes órfãs re-enfileiradas');
+  }
+  return orfas.length;
+}
+
+export async function registerOutboxSweeper(deps: OutboxWorkerDeps): Promise<void> {
+  await deps.boss.schedule(FILA_OUTBOX_SWEEP, '* * * * *');
+  await deps.boss.work(FILA_OUTBOX_SWEEP, async () => {
+    await varrerPendentesOrfas(deps);
+  });
 }
