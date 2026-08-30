@@ -7,6 +7,12 @@ import { ALLOW, type GuardrailCtx, type GuardrailHooks, type Verdict } from './i
  * - beforeReply: todo valor monetário do draft precisa ser rastreável a um
  *   resultado de tool DESTE turno; valor órfão, percentual de desconto ou
  *   promessa de condição especial → escalate(negociacao_preco).
+ *
+ * Termo comercial isolado ("abatimento", "desconto") segue a MESMA regra de
+ * rastreabilidade dos valores: citar política recuperada por tool no turno é
+ * legítimo; inventar o termo não é. Sem isso o guardrail escalava toda resposta
+ * que citasse a política de trocas da KB, que fala em "abatimento do frete".
+ * Promessa em primeira pessoa escala sempre, mesmo que o termo exista na fonte.
  */
 
 // milhar exige ≥1 ponto; senão `\d{1,3}` casaria só o prefixo de "2854,30"
@@ -15,8 +21,15 @@ const RE_REAIS = /R\$\s?(\d{1,3}(?:\.\d{3})+|\d+)(?:,(\d{2}))?/g;
 // (número por extenso, ex. "mil e duzentos reais", fica fora — premissa)
 const RE_REAIS_SUFIXO = /\b(\d{1,3}(?:\.\d{3})+|\d+)(?:,(\d{2}))?\s*(?:reais|real)\b/gi;
 const RE_PERCENTUAL = /\d+(?:[.,]\d+)?\s?(?:%|por\s?cento)/gi;
-const RE_CONDICAO_ESPECIAL =
-  /\b(desconto|abatimento|cortesia|por conta da casa|pre[cç]o especial|condi[cç][aã]o especial|baixar o pre[cç]o|fa[cç]o por)\b/i;
+/** Termo comercial: suspeito só quando órfão (ver rastreabilidade abaixo). */
+const RE_TERMO_COMERCIAL =
+  /\b(desconto|abatimento|cortesia|pre[cç]o especial|condi[cç][aã]o especial)\b/gi;
+/**
+ * Promessa do agente — escala mesmo que o termo exista na fonte. Cobre a forma
+ * idiomática ("por conta da casa") e o verbo em 1ª pessoa perto do termo.
+ */
+const RE_PROMESSA =
+  /\b(?:por conta da casa|fa[cç]o por|baixar o pre[cç]o)\b|\b(?:posso|consigo|vou|podemos|fa[cç]o|libero|autorizo|dou|ofere[cç]o|garanto|consegui)\b[^.!?\n]{0,40}\b(?:desconto|abatimento|cortesia|pre[cç]o especial|condi[cç][aã]o especial)\b/i;
 
 /** Valores monetários do texto, em centavos. */
 export function extrairValoresMonetarios(texto: string): number[] {
@@ -53,16 +66,44 @@ function valoresRastreaveis(ctx: GuardrailCtx): Set<number> {
   return set;
 }
 
+/**
+ * Texto (minúsculo) dos resultados de tools do turno — a fonte contra a qual um
+ * termo comercial do draft é considerado citação e não invenção.
+ */
+function textoRastreavel(ctx: GuardrailCtx): string {
+  const partes: string[] = [];
+  for (const r of ctx.toolResults) {
+    for (const row of r.rows) {
+      for (const valor of Object.values(row)) {
+        if (typeof valor === 'string') partes.push(valor);
+      }
+    }
+  }
+  return partes.join('\n').toLowerCase();
+}
+
 export function guardrailPreco(): GuardrailHooks {
   return {
     nome: 'preco',
     async beforeReply(draft, ctx): Promise<Verdict> {
-      if (RE_CONDICAO_ESPECIAL.test(draft)) {
+      if (RE_PROMESSA.test(draft)) {
         return {
           tipo: 'escalate',
           trigger: 'negociacao_preco',
           reason: 'draft promete desconto/condição especial — agente não negocia preço',
         };
+      }
+      const termos = [...draft.matchAll(RE_TERMO_COMERCIAL)].map((m) => m[0].toLowerCase());
+      if (termos.length > 0) {
+        const fonte = textoRastreavel(ctx);
+        const orfao = termos.find((t) => !fonte.includes(t));
+        if (orfao !== undefined) {
+          return {
+            tipo: 'escalate',
+            trigger: 'negociacao_preco',
+            reason: `termo comercial "${orfao}" sem origem em tool do turno — agente não negocia preço`,
+          };
+        }
       }
       const percentuais = draft.match(RE_PERCENTUAL);
       if (percentuais && percentuais.length > 0) {

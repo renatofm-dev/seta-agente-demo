@@ -55,6 +55,43 @@ describe('guardrail de preço (beforeReply)', () => {
     });
   });
 
+  // regressão: a KB de trocas fala em "abatimento do frete"; citar política
+  // recuperada por tool no turno não é negociar preço
+  const ctxPoliticaTroca: GuardrailCtx = {
+    ...CTX_VAZIO,
+    textoUsuario: 'como funciona a troca?',
+    toolResults: [
+      {
+        nome: 'buscar_conhecimento',
+        priceSource: false,
+        rows: [
+          {
+            fonte: 'Política de trocas e devoluções',
+            trecho:
+              'Compra errada pelo cliente: a devolução é aceita com abatimento do frete de retorno.',
+          },
+        ],
+      },
+    ],
+  };
+
+  it('termo comercial citado de política recuperada por tool passa', async () => {
+    const draft = 'Pela política, a devolução é aceita com abatimento do frete de retorno.';
+    expect(await g.beforeReply?.(draft, ctxPoliticaTroca)).toEqual(ALLOW);
+  });
+
+  it('termo comercial sem origem em tool do turno escala', async () => {
+    expect(
+      await g.beforeReply?.('A empresa costuma dar abatimento nesses casos.', CTX_VAZIO),
+    ).toMatchObject({ tipo: 'escalate', trigger: 'negociacao_preco' });
+  });
+
+  it('promessa em 1ª pessoa escala mesmo com o termo presente na fonte', async () => {
+    expect(
+      await g.beforeReply?.('Posso te dar um abatimento especial no frete.', ctxPoliticaTroca),
+    ).toMatchObject({ tipo: 'escalate', trigger: 'negociacao_preco' });
+  });
+
   it('draft sem valores nem promessas passa', async () => {
     expect(await g.beforeReply?.('Seu pedido saiu para entrega hoje!', CTX_VAZIO)).toEqual(ALLOW);
   });
