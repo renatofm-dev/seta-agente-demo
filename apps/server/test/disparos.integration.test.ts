@@ -1,0 +1,445 @@
+import { join } from 'node:path';
+import { createFakeProvider } from '@seta/ai-provider/testing';
+import { loadClientConfig } from '@seta/client-config';
+import { createPgConnector, type DbConnector } from '@seta/erp-connector';
+import { createLogger, createNoopObsEmitter } from '@seta/observability';
+import { createExecutor, type Executor, loadCatalog } from '@seta/query-catalog';
+import {
+  type OutboundTemplate,
+  signBody,
+  type TemplateApi,
+  type TemplateDef,
+  type TemplateStatus,
+} from '@seta/wa-meta';
+import { count, eq } from 'drizzle-orm';
+import { migrate } from 'drizzle-orm/node-postgres/migrator';
+import pg from 'pg';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { adminUrl, applySchema, seedData } from '../../../infra/erp-mock/seed.ts';
+import { type App, buildApp } from '../src/app.ts';
+import { createAuth } from '../src/auth.ts';
+import { FILA_DEBOUNCE, FILA_DISPARO, startBoss } from '../src/boss.ts';
+import { createDb, type Db } from '../src/db/index.ts';
+import {
+  conversa,
+  conversaLeitura,
+  disparo,
+  disparoDestinatario,
+  eventoQuery,
+  eventoTicket,
+  mensagem,
+  modeloMensagem,
+  outbox,
+  sinalAprendizado,
+  ticket,
+  traceTurno,
+  turno,
+} from '../src/db/schema.ts';
+import { type Env, loadEnv } from '../src/env.ts';
+import { createDrizzleQueryEventSink } from '../src/query-event-sink.ts';
+import { createPgVectorStore } from '../src/rag/pgvector-store.ts';
+import { seedApp, USUARIOS_DEMO } from '../src/seed-app.ts';
+import { registerDebounceWorker } from '../src/wa/debounce.ts';
+import { registerDisparoWorker, renderizarCorpo } from '../src/wa/disparo.ts';
+import { ticketPermiteBot } from '../src/wa/tickets.ts';
+import { createAgentTurnoHandler } from '../src/wa/turno-handler.ts';
+
+/**
+ * Critérios da spec 013: modelo criado DA PLATAFORMA (registrado na Meta via
+ * TemplateApi) com sync de aprovação; disparo só com modelo aprovado; envio
+ * ignora a janela de 24h; falha por destinatário não derruba o disparo;
+ * webhook de status atualiza o destinatário; resposta do cliente ao disparo
+ * cai no fluxo normal de turno. Exige Postgres dev.
+ */
+
+const DEBOUNCE_MS = 400;
+const logger = createLogger({ name: 'teste-disparos', level: 'silent' });
+
+let env: Env;
+let db: Db;
+let closeDb: () => Promise<void>;
+let boss: Awaited<ReturnType<typeof startBoss>>;
+let app: App;
+let appSemMeta: App;
+let admin: pg.Pool;
+let connector: DbConnector;
+let executor: Executor;
+let fake = createFakeProvider();
+let cookie = '';
+
+const clientConfig = loadClientConfig(
+  join(import.meta.dirname, '../../../configs/demo/client.yaml'),
+);
+const catalog = loadCatalog(join(import.meta.dirname, '../../../catalog'));
+
+/** TemplateApi fake: grava as criações e devolve o que o teste configurar. */
+const templateApiFake = {
+  criados: [] as TemplateDef[],
+  statusPorNome: new Map<string, { status: TemplateStatus; motivo?: string }>(),
+  api: {
+    async criar(def: TemplateDef) {
+      templateApiFake.criados.push(def);
+      return { metaId: `meta-${def.nome}`, status: 'pendente' as const };
+    },
+    async listar() {
+      return [...templateApiFake.statusPorNome.entries()].map(([nome, s]) => ({
+        metaId: `meta-${nome}`,
+        nome,
+        idioma: 'pt_BR',
+        categoria: 'utility',
+        status: s.status,
+        motivoRejeicao: s.motivo ?? null,
+      }));
+    },
+  } satisfies TemplateApi,
+};
+
+/** Gateway fake: templates enviados ficam registrados; waIds em `falhar` explodem. */
+const gatewayFake = {
+  templates: [] as OutboundTemplate[],
+  falhar: new Set<string>(),
+  seq: 0,
+  gateway: {
+    async send() {
+      gatewayFake.seq += 1;
+      return { waMessageId: `wamid.txt-${gatewayFake.seq}` };
+    },
+    async sendTemplate(msg: OutboundTemplate) {
+      if (gatewayFake.falhar.has(msg.to)) throw new Error('Graph API 400: numero bloqueado');
+      gatewayFake.templates.push(msg);
+      gatewayFake.seq += 1;
+      return { waMessageId: `wamid.tpl-${gatewayFake.seq}` };
+    },
+  },
+};
+
+async function aguardar(cond: () => Promise<boolean>, timeoutMs = 12_000): Promise<void> {
+  const inicio = Date.now();
+  while (Date.now() - inicio < timeoutMs) {
+    if (await cond()) return;
+    await new Promise((r) => setTimeout(r, 100));
+  }
+  throw new Error('condição não atingida no tempo');
+}
+
+async function apiConsole(method: 'GET' | 'POST', url: string, payload?: unknown) {
+  return app.inject({
+    method,
+    url,
+    headers: { cookie },
+    ...(payload !== undefined ? { payload } : {}),
+  });
+}
+
+/** Cria um modelo e o marca como aprovado (via sync fake). */
+async function modeloAprovado(nome: string, corpo: string) {
+  const criar = await apiConsole('POST', '/api/console/modelos', { nome, corpo });
+  expect(criar.statusCode).toBe(201);
+  templateApiFake.statusPorNome.set(nome, { status: 'aprovado' });
+  expect((await apiConsole('POST', '/api/console/modelos/sincronizar')).statusCode).toBe(200);
+  return criar.json().modelo as { id: string };
+}
+
+beforeAll(async () => {
+  admin = new pg.Pool({ connectionString: adminUrl(), max: 2 });
+  try {
+    await admin.query('SELECT 1');
+  } catch (err) {
+    throw new Error(
+      'Postgres dev indisponível — suba com: docker compose -f infra/compose.dev.yml up -d --wait',
+      { cause: err },
+    );
+  }
+  await applySchema(admin);
+  await seedData(admin);
+
+  env = {
+    ...loadEnv({
+      DATABASE_URL:
+        process.env.DATABASE_URL ?? 'postgres://app_owner:app_owner_dev@localhost:5432/app',
+      ERP_DATABASE_URL:
+        process.env.ERP_DATABASE_URL ?? 'postgres://erp_ro:erp_ro_dev@localhost:5432/erp_mock',
+      LOG_LEVEL: 'silent',
+      DEV_SIMULATOR: 'true',
+      CONTATOS_PATH: join(import.meta.dirname, '../../../configs/demo/contatos.yaml'),
+      EMBEDDING_DIM: '8',
+    } as NodeJS.ProcessEnv),
+    WA_DEBOUNCE_MS: DEBOUNCE_MS,
+  };
+  const criado = createDb(env.DATABASE_URL);
+  db = criado.db;
+  closeDb = criado.close;
+  await migrate(db, { migrationsFolder: join(import.meta.dirname, '../drizzle') });
+  await seedApp(db, env);
+
+  connector = createPgConnector({ url: env.ERP_DATABASE_URL, poolMax: 3 });
+  executor = createExecutor({ catalog, connector, sink: createDrizzleQueryEventSink(db) });
+  const auth = createAuth(db, { secret: env.BETTER_AUTH_SECRET, baseURL: env.BETTER_AUTH_URL });
+
+  boss = await startBoss(env.DATABASE_URL, logger);
+  await registerDebounceWorker({
+    db,
+    boss,
+    debounceMs: DEBOUNCE_MS,
+    ticketGate: (conversaId) => ticketPermiteBot(db, conversaId),
+    handler: createAgentTurnoHandler({
+      db,
+      boss,
+      get provider() {
+        return fake;
+      },
+      catalog,
+      executor,
+      clientConfig,
+      registry: null,
+      store: createPgVectorStore({ db, dim: env.EMBEDDING_DIM }),
+      obs: createNoopObsEmitter(),
+      logger,
+      turnoTimeoutMs: 30_000,
+      resumoACadaTurnos: 99,
+      debounceMs: DEBOUNCE_MS,
+    }),
+    logger,
+  });
+  await registerDisparoWorker({ db, boss, gateway: gatewayFake.gateway, logger });
+
+  app = buildApp({
+    env,
+    clientConfig,
+    wa: { db, boss },
+    console: { auth, executor, templateApi: templateApiFake.api },
+  });
+  appSemMeta = buildApp({ env, clientConfig, wa: { db, boss }, console: { auth, executor } });
+
+  const atendente = USUARIOS_DEMO[0];
+  const login = await app.inject({
+    method: 'POST',
+    url: '/api/auth/sign-in/email',
+    payload: { email: atendente?.email, password: atendente?.password },
+  });
+  expect(login.statusCode).toBe(200);
+  const setCookie = login.headers['set-cookie'];
+  cookie = (Array.isArray(setCookie) ? setCookie : [setCookie ?? ''])
+    .map((c) => c.split(';')[0])
+    .join('; ');
+}, 60_000);
+
+beforeEach(async () => {
+  fake = createFakeProvider();
+  templateApiFake.criados = [];
+  templateApiFake.statusPorNome.clear();
+  gatewayFake.templates = [];
+  gatewayFake.falhar.clear();
+  gatewayFake.seq = 0;
+  await boss.deleteQueuedJobs(FILA_DEBOUNCE);
+  await boss.deleteQueuedJobs(FILA_DISPARO);
+  for (let tentativa = 0; ; tentativa++) {
+    try {
+      await db.delete(disparoDestinatario);
+      await db.delete(disparo);
+      await db.delete(modeloMensagem);
+      await db.delete(conversaLeitura);
+      await db.delete(sinalAprendizado);
+      await db.delete(eventoTicket);
+      await db.delete(ticket);
+      await db.delete(traceTurno);
+      await db.delete(eventoQuery);
+      await db.delete(outbox);
+      await db.delete(mensagem);
+      await db.delete(turno);
+      await db.delete(conversa);
+      break;
+    } catch (err) {
+      if (tentativa >= 4) throw err;
+      await new Promise((r) => setTimeout(r, 250));
+    }
+  }
+});
+
+afterAll(async () => {
+  await app?.close();
+  await appSemMeta?.close();
+  await boss?.stop({ graceful: false });
+  await connector?.close();
+  await closeDb?.();
+  await admin?.end();
+});
+
+describe('spec 013 — modelos criados da plataforma', () => {
+  it('criar registra na Meta e persiste como pendente; duplicado → 409; sync aprova/rejeita', async () => {
+    const criar = await apiConsole('POST', '/api/console/modelos', {
+      nome: 'aviso_parcela',
+      corpo: 'Olá {{1}}, sua parcela vence {{2}}.',
+      rodape: 'Mirante da Serra Resort',
+    });
+    expect(criar.statusCode).toBe(201);
+    expect(criar.json().modelo.statusMeta).toBe('pendente');
+    expect(templateApiFake.criados[0]?.nome).toBe('aviso_parcela'); // foi PRA META
+
+    expect(
+      (await apiConsole('POST', '/api/console/modelos', { nome: 'aviso_parcela', corpo: 'x y z' }))
+        .statusCode,
+    ).toBe(409);
+
+    // a Meta aprova um e rejeita outro — o sync reflete os dois
+    await apiConsole('POST', '/api/console/modelos', { nome: 'promo_verao', corpo: 'Promoção!' });
+    templateApiFake.statusPorNome.set('aviso_parcela', { status: 'aprovado' });
+    templateApiFake.statusPorNome.set('promo_verao', {
+      status: 'rejeitado',
+      motivo: 'INVALID_FORMAT',
+    });
+    const sync = await apiConsole('POST', '/api/console/modelos/sincronizar');
+    expect(sync.statusCode).toBe(200);
+    expect(sync.json().atualizados).toBe(2);
+    const modelos = sync.json().modelos as { nome: string; statusMeta: string }[];
+    expect(modelos.find((m) => m.nome === 'aviso_parcela')?.statusMeta).toBe('aprovado');
+    expect(modelos.find((m) => m.nome === 'promo_verao')?.statusMeta).toBe('rejeitado');
+  });
+
+  it('sem WA_WABA_ID configurado, criar modelo responde 503 explicado', async () => {
+    const res = await appSemMeta.inject({
+      method: 'POST',
+      url: '/api/console/modelos',
+      headers: { cookie },
+      payload: { nome: 'qualquer_um', corpo: 'oi' },
+    });
+    expect(res.statusCode).toBe(503);
+    expect(res.json().erro).toContain('WA_WABA_ID');
+  });
+});
+
+describe('spec 013 — disparos para a carteira', () => {
+  it('modelo não aprovado → 400; variáveis erradas → 400; fora da carteira → 400', async () => {
+    const criar = await apiConsole('POST', '/api/console/modelos', {
+      nome: 'nao_aprovado',
+      corpo: 'Oi {{1}}!',
+    });
+    const modeloId = criar.json().modelo.id;
+    const pendente = await apiConsole('POST', '/api/console/disparos', {
+      modeloId,
+      variaveis: ['x'],
+      waIds: ['5511999990001'],
+    });
+    expect(pendente.statusCode).toBe(400);
+    expect(pendente.json().erro).toMatch(/não está aprovado/);
+
+    const aprovado = await modeloAprovado('com_variavel', 'Oi {{1}}, tudo bem?');
+    const semVariavel = await apiConsole('POST', '/api/console/disparos', {
+      modeloId: aprovado.id,
+      variaveis: [],
+      waIds: ['5511999990001'],
+    });
+    expect(semVariavel.statusCode).toBe(400);
+    expect(semVariavel.json().erro).toMatch(/variável/);
+
+    const foraDaCarteira = await apiConsole('POST', '/api/console/disparos', {
+      modeloId: aprovado.id,
+      variaveis: ['cotista'],
+      waIds: ['5511999990001', '5599999999999'],
+    });
+    expect(foraDaCarteira.statusCode).toBe(400);
+    expect(foraDaCarteira.json().erro).toContain('5599999999999');
+  });
+
+  it('dispara IGNORANDO a janela de 24h, grava a thread e falha por destinatário não derruba', async () => {
+    const modelo = await modeloAprovado('aviso_geral', 'Olá {{1}}! Novidades do resort.');
+    // uma conversa JÁ existe com janela FECHADA — texto livre seria proibido
+    const [convVelha] = await db
+      .insert(conversa)
+      .values({
+        id: '01990a5d-ac96-774b-bcce-b302099a9001',
+        waId: '5511999990001',
+        janelaExpiraEm: new Date(Date.now() - 3600_000),
+      })
+      .returning();
+    gatewayFake.falhar.add('5511999990002'); // este número explode no gateway
+
+    const res = await apiConsole('POST', '/api/console/disparos', {
+      modeloId: modelo.id,
+      variaveis: ['cotista'],
+      waIds: ['5511999990001', '5511999990002', '5511999990003'],
+    });
+    expect(res.statusCode).toBe(202);
+    expect(res.json().destinatarios).toBe(3);
+
+    await aguardar(async () => (await db.select().from(disparo))[0]?.status === 'concluido');
+    const destinatarios = await db.select().from(disparoDestinatario);
+    const porWa = new Map(destinatarios.map((d) => [d.waId, d]));
+    // janela fechada NÃO impediu o template
+    expect(porWa.get('5511999990001')?.status).toBe('enviado');
+    expect(porWa.get('5511999990003')?.status).toBe('enviado');
+    // falha marcou SÓ o destinatário problemático
+    expect(porWa.get('5511999990002')?.status).toBe('falha');
+    expect(porWa.get('5511999990002')?.erro).toContain('numero bloqueado');
+    expect(gatewayFake.templates.map((t) => t.to).sort()).toEqual([
+      '5511999990001',
+      '5511999990003',
+    ]);
+    expect(gatewayFake.templates[0]?.variaveis).toEqual(['cotista']);
+
+    // a thread mostra o disparo: mensagem `campanha` com o corpo renderizado
+    const msgs = await db.select().from(mensagem).where(eq(mensagem.autor, 'campanha'));
+    expect(msgs).toHaveLength(2);
+    expect(msgs[0]?.texto).toBe(renderizarCorpo('Olá {{1}}! Novidades do resort.', ['cotista']));
+    // na conversa existente a mensagem entrou na MESMA conversa (sem duplicar)
+    const daVelha = msgs.find((m) => m.conversaId === convVelha?.id);
+    expect(daVelha).toBeDefined();
+    // e para o wa_id sem conversa, uma nova nasceu SEM abrir janela
+    const [convNova] = await db.select().from(conversa).where(eq(conversa.waId, '5511999990003'));
+    expect(convNova?.janelaExpiraEm).toBeNull();
+
+    // resumo por status na listagem
+    const lista = await apiConsole('GET', '/api/console/disparos');
+    expect(lista.json().disparos[0]).toMatchObject({ total: 3, enviados: 2, falhas: 1 });
+  }, 30_000);
+
+  it('webhook de status atualiza o destinatário; resposta do cliente vira turno normal', async () => {
+    const modelo = await modeloAprovado('reengaja', 'Voltamos a falar!');
+    await apiConsole('POST', '/api/console/disparos', {
+      modeloId: modelo.id,
+      variaveis: [],
+      waIds: ['5511999990001'],
+    });
+    await aguardar(async () => (await db.select().from(disparo))[0]?.status === 'concluido');
+    const [dest] = await db.select().from(disparoDestinatario);
+    expect(dest?.status).toBe('enviado');
+
+    // status "read" chega pelo webhook assinado — destinatário E mensagem refletem
+    const corpo = JSON.stringify({
+      object: 'whatsapp_business_account',
+      entry: [
+        {
+          changes: [{ value: { statuses: [{ id: dest?.waMessageId ?? '', status: 'read' }] } }],
+        },
+      ],
+    });
+    const webhook = await app.inject({
+      method: 'POST',
+      url: '/webhook',
+      headers: {
+        'content-type': 'application/json',
+        'x-hub-signature-256': signBody(corpo, env.WA_APP_SECRET),
+      },
+      payload: corpo,
+    });
+    expect(webhook.statusCode).toBe(200);
+    const [depois] = await db.select().from(disparoDestinatario);
+    expect(depois?.status).toBe('lido');
+    const [msg] = await db.select().from(mensagem).where(eq(mensagem.autor, 'campanha'));
+    expect(msg?.status).toBe('lida');
+
+    // o cliente responde ao disparo → fluxo normal: turno nasce e o bot atende
+    fake = createFakeProvider().respondeTexto('outro').respondeTexto('Que bom te ver de volta!');
+    const inbound = await app.inject({
+      method: 'POST',
+      url: '/dev/inbound',
+      headers: { cookie },
+      payload: { waId: '5511999990001', text: 'oi, recebi a mensagem de vocês' },
+    });
+    expect(inbound.statusCode).toBe(202);
+    await aguardar(
+      async () => ((await db.select({ n: count() }).from(traceTurno))[0]?.n ?? 0) === 1,
+    );
+    expect((await db.select({ n: count() }).from(turno))[0]?.n).toBe(1);
+  }, 30_000);
+});

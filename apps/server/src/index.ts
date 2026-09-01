@@ -3,7 +3,12 @@ import { loadClientConfig } from '@seta/client-config';
 import { createPgConnector } from '@seta/erp-connector';
 import { createLogger } from '@seta/observability';
 import { createExecutor, loadCatalog } from '@seta/query-catalog';
-import { createLogGateway, createMetaGateway, type OutboundGateway } from '@seta/wa-meta';
+import {
+  createLogGateway,
+  createMetaGateway,
+  createMetaTemplateApi,
+  type OutboundGateway,
+} from '@seta/wa-meta';
 import { buildApp } from './app.js';
 import { createAuth } from './auth.js';
 import { startBoss } from './boss.js';
@@ -15,6 +20,7 @@ import { createPgVectorStore } from './rag/pgvector-store.js';
 import { createSkillRegistry } from './skills/registry.js';
 import { registerSinaisDiarios } from './skills/sinais-job.js';
 import { registerDebounceWorker } from './wa/debounce.js';
+import { registerDisparoWorker } from './wa/disparo.js';
 import { registerOutboxSweeper, registerOutboxWorker } from './wa/outbox.js';
 import { ticketPermiteBot } from './wa/tickets.js';
 import { createAgentTurnoHandler } from './wa/turno-handler.js';
@@ -51,6 +57,12 @@ const gateway: OutboundGateway =
   env.WA_ACCESS_TOKEN && env.WA_PHONE_NUMBER_ID
     ? createMetaGateway({ accessToken: env.WA_ACCESS_TOKEN, phoneNumberId: env.WA_PHONE_NUMBER_ID })
     : createLogGateway(logger);
+
+// 013: gestão de modelos exige o WABA — sem ele a plataforma explica o 503
+const templateApi =
+  env.WA_ACCESS_TOKEN && env.WA_WABA_ID
+    ? createMetaTemplateApi({ accessToken: env.WA_ACCESS_TOKEN, wabaId: env.WA_WABA_ID })
+    : null;
 
 const auth = createAuth(db, { secret: env.BETTER_AUTH_SECRET, baseURL: env.BETTER_AUTH_URL });
 
@@ -96,12 +108,13 @@ await registerDebounceWorker({
 });
 await registerOutboxWorker({ db, boss, gateway, logger });
 await registerOutboxSweeper({ db, boss, gateway, logger });
+await registerDisparoWorker({ db, boss, gateway, logger }); // 013
 
 const app = buildApp({
   env,
   clientConfig,
   wa: { db, boss },
-  console: { auth, executor, registry, provider },
+  console: { auth, executor, registry, provider, templateApi },
 });
 
 try {

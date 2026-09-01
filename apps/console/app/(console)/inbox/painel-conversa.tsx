@@ -17,12 +17,14 @@ const BALAO_AUTOR: Record<MensagemThread['autor'], string> = {
   contato: 'bg-muted',
   bot: 'bg-sky-600/15 dark:bg-sky-400/15',
   atendente: 'bg-emerald-600/90 text-white',
+  campanha: 'bg-violet-600/15 dark:bg-violet-400/15',
 };
 
 const ROTULO_AUTOR: Record<MensagemThread['autor'], string> = {
   contato: 'cliente',
   bot: 'bot',
   atendente: 'atendente',
+  campanha: 'disparo',
 };
 
 function Checks({ status }: { status: MensagemThread['status'] }) {

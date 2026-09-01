@@ -9,7 +9,7 @@ import type { FastifyPluginCallback } from 'fastify';
 import type { PgBoss } from 'pg-boss';
 import { z } from 'zod';
 import type { Db } from '../db/index.js';
-import { mensagem } from '../db/schema.js';
+import { disparoDestinatario, mensagem } from '../db/schema.js';
 import type { Env } from '../env.js';
 import { processInbound } from './inbound.js';
 
@@ -29,6 +29,14 @@ const STATUS_MAP = {
   sent: 'enviada',
   delivered: 'entregue',
   read: 'lida',
+  failed: 'falha',
+} as const;
+
+/** 013: o mesmo webhook de status alimenta o progresso por destinatário. */
+const STATUS_DESTINATARIO = {
+  sent: 'enviado',
+  delivered: 'entregue',
+  read: 'lido',
   failed: 'falha',
 } as const;
 
@@ -76,6 +84,11 @@ export const waRoutes: FastifyPluginCallback<WaRoutesOpts> = (app, opts, done) =
           .update(mensagem)
           .set({ status: STATUS_MAP[st.status] })
           .where(eq(mensagem.waMessageId, st.waMessageId));
+        // 013: disparo acompanha entrega/leitura pelo mesmo wa_message_id
+        await db
+          .update(disparoDestinatario)
+          .set({ status: STATUS_DESTINATARIO[st.status], atualizadoEm: new Date() })
+          .where(eq(disparoDestinatario.waMessageId, st.waMessageId));
       }
     } catch (err) {
       // payload inesperado nunca derruba o webhook — Meta re-tenta em não-200

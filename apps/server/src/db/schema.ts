@@ -51,8 +51,8 @@ export const mensagem = pgTable('mensagem', {
     .notNull()
     .references(() => conversa.id),
   direcao: text('direcao', { enum: ['in', 'out'] }).notNull(),
-  /** Quem produziu a mensagem (007): contato (in), bot ou atendente (out). */
-  autor: text('autor', { enum: ['contato', 'bot', 'atendente'] })
+  /** Quem produziu a mensagem: contato (in); bot, atendente ou campanha/013 (out). */
+  autor: text('autor', { enum: ['contato', 'bot', 'atendente', 'campanha'] })
     .notNull()
     .default('contato'),
   /** #45: qual atendente falou (user.id) — atribuição por mensagem na thread. */
@@ -118,6 +118,66 @@ export const contato = pgTable('contato', {
   verificadoEm: timestamp('verificado_em', { withTimezone: true }).notNull(),
   criadoEm: timestamp('criado_em', { withTimezone: true }).notNull().defaultNow(),
 });
+
+// --- Disparos de template para a carteira (013) ----------------------------
+
+/** Espelho local do template do WABA; o status de aprovação vem da Meta (sync). */
+export const modeloMensagem = pgTable('modelo_mensagem', {
+  id: uuid('id').primaryKey(),
+  nome: text('nome').notNull().unique(), // ^[a-z0-9_]+$ (regra da Meta)
+  idioma: text('idioma').notNull().default('pt_BR'),
+  categoria: text('categoria', { enum: ['utility', 'marketing'] })
+    .notNull()
+    .default('utility'),
+  corpo: text('corpo').notNull(), // variáveis posicionais {{1}}..{{N}}
+  rodape: text('rodape'),
+  metaId: text('meta_id'),
+  statusMeta: text('status_meta', {
+    enum: ['pendente', 'aprovado', 'rejeitado', 'desconhecido'],
+  })
+    .notNull()
+    .default('pendente'),
+  motivoRejeicao: text('motivo_rejeicao'),
+  criadoPor: text('criado_por').notNull(),
+  criadoEm: timestamp('criado_em', { withTimezone: true }).notNull().defaultNow(),
+  atualizadoEm: timestamp('atualizado_em', { withTimezone: true }).notNull().defaultNow(),
+});
+
+/** Um disparo = 1 modelo aprovado + valores de variáveis + N destinatários. */
+export const disparo = pgTable('disparo', {
+  id: uuid('id').primaryKey(),
+  modeloId: uuid('modelo_id')
+    .notNull()
+    .references(() => modeloMensagem.id),
+  /** Valores das variáveis {{1}}..{{N}}, globais ao disparo (013). */
+  variaveis: jsonb('variaveis').notNull().default([]),
+  status: text('status', { enum: ['enviando', 'concluido'] })
+    .notNull()
+    .default('enviando'),
+  criadoPor: text('criado_por').notNull(),
+  criadoEm: timestamp('criado_em', { withTimezone: true }).notNull().defaultNow(),
+  atualizadoEm: timestamp('atualizado_em', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const disparoDestinatario = pgTable(
+  'disparo_destinatario',
+  {
+    id: uuid('id').primaryKey(),
+    disparoId: uuid('disparo_id')
+      .notNull()
+      .references(() => disparo.id),
+    waId: text('wa_id').notNull(),
+    /** Snapshot do nome do contato no momento do disparo (exibição). */
+    contatoNome: text('contato_nome'),
+    status: text('status', { enum: ['pendente', 'enviado', 'entregue', 'lido', 'falha'] })
+      .notNull()
+      .default('pendente'),
+    waMessageId: text('wa_message_id').unique(),
+    erro: text('erro'),
+    atualizadoEm: timestamp('atualizado_em', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('disparo_destinatario_disparo_idx').on(t.disparoId)],
+);
 
 /** Ticket 1:1 com a conversa; a história vive em evento_ticket. */
 export const ticket = pgTable('ticket', {

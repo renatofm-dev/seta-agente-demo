@@ -19,6 +19,8 @@ export const EnvSchema = z.object({
   /** Credenciais da Cloud API. Ausentes ⇒ gateway de saída vira log-only (dev). */
   WA_ACCESS_TOKEN: z.string().optional(),
   WA_PHONE_NUMBER_ID: z.string().optional(),
+  /** 013: WhatsApp Business Account id — habilita a gestão de modelos na Meta. */
+  WA_WABA_ID: z.string().optional(),
   /**
    * Silêncio (ms) que fecha um turno no debouncer. #46: 10s de base — quem
    * digita a 2ª frase no celular leva 10–20s; a janela ainda se adapta à

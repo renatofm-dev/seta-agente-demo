@@ -92,6 +92,13 @@
       "when": 1788286243397,
       "tag": "0012_fusao-de-turno",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1788303962770,
+      "tag": "0013_disparos-carteira",
+      "breakpoints": true
     }
   ]
 }

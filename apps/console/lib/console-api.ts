@@ -65,7 +65,7 @@ export interface ConversaResumo {
 
 export interface MensagemThread {
   id: string;
-  autor: 'contato' | 'bot' | 'atendente';
+  autor: 'contato' | 'bot' | 'atendente' | 'campanha';
   atendenteId: string | null;
   atendenteNome: string | null;
   texto: string;
@@ -96,6 +96,48 @@ export interface ConversaDetalhe {
 export interface PaginaMensagens {
   mensagens: MensagemThread[];
   temMais: boolean;
+}
+
+// --- Disparos de template (013) --------------------------------------------
+
+export interface Modelo {
+  id: string;
+  nome: string;
+  idioma: string;
+  categoria: 'utility' | 'marketing';
+  corpo: string;
+  rodape: string | null;
+  statusMeta: 'pendente' | 'aprovado' | 'rejeitado' | 'desconhecido';
+  motivoRejeicao: string | null;
+  criadoEm: string;
+}
+
+export interface ContatoCarteira {
+  waId: string;
+  nome: string | null;
+  clienteErpId: string;
+}
+
+export interface DisparoResumo {
+  id: string;
+  status: 'enviando' | 'concluido';
+  variaveis: string[];
+  criado_em: string;
+  modelo_nome: string;
+  total: number;
+  enviados: number;
+  entregues: number;
+  lidos: number;
+  falhas: number;
+  pendentes: number;
+}
+
+export interface DisparoDestinatarioView {
+  id: string;
+  waId: string;
+  contatoNome: string | null;
+  status: 'pendente' | 'enviado' | 'entregue' | 'lido' | 'falha';
+  erro: string | null;
 }
 
 // --- Observabilidade (010) -------------------------------------------------
@@ -205,6 +247,40 @@ export const api = {
     }).then((r) => json<{ duplicada: boolean }>(r)),
   traces: (id: string) =>
     fetch(`/api/console/ticket/${id}/traces`).then((r) => json<{ traces: TraceTurnoView[] }>(r)),
+  modelos: () =>
+    fetch('/api/console/modelos').then((r) =>
+      json<{ modelos: Modelo[]; metaConfigurada: boolean }>(r),
+    ),
+  criarModelo: (def: {
+    nome: string;
+    idioma?: string;
+    categoria?: string;
+    corpo: string;
+    rodape?: string;
+  }) =>
+    fetch('/api/console/modelos', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(def),
+    }).then((r) => json<{ modelo: Modelo }>(r)),
+  sincronizarModelos: () =>
+    fetch('/api/console/modelos/sincronizar', { method: 'POST' }).then((r) =>
+      json<{ modelos: Modelo[]; atualizados: number }>(r),
+    ),
+  carteira: () =>
+    fetch('/api/console/carteira').then((r) => json<{ contatos: ContatoCarteira[] }>(r)),
+  disparos: () =>
+    fetch('/api/console/disparos').then((r) => json<{ disparos: DisparoResumo[] }>(r)),
+  criarDisparo: (corpo: { modeloId: string; variaveis: string[]; waIds: string[] }) =>
+    fetch('/api/console/disparos', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(corpo),
+    }).then((r) => json<{ disparoId: string; destinatarios: number }>(r)),
+  disparo: (id: string) =>
+    fetch(`/api/console/disparos/${id}`).then((r) =>
+      json<{ destinatarios: DisparoDestinatarioView[]; modelo: Modelo }>(r),
+    ),
   metricas: (dias: 7 | 30) =>
     fetch(`/api/console/metricas?dias=${dias}`).then((r) => json<Metricas>(r)),
 };

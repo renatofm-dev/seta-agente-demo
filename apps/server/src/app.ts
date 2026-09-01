@@ -4,6 +4,7 @@ import type { ClientConfig } from '@seta/client-config';
 import { createLogger, newTraceId, type ObsEmitter } from '@seta/observability';
 import type { Executor } from '@seta/query-catalog';
 import type { SkillRegistry } from '@seta/skills';
+import type { TemplateApi } from '@seta/wa-meta';
 import { type FastifyInstance, fastify, LogController, type RawServerDefault } from 'fastify';
 import type { PgBoss } from 'pg-boss';
 import type { Logger } from 'pino';
@@ -12,6 +13,7 @@ import type { Auth } from './auth.js';
 import { authRoutes } from './auth-routes.js';
 import { consoleRoutes } from './console-routes.js';
 import type { Db } from './db/index.js';
+import { disparosRoutes } from './disparos-routes.js';
 import type { Env } from './env.js';
 import { devRoutes } from './wa/dev-routes.js';
 import { waRoutes } from './wa/routes.js';
@@ -36,6 +38,8 @@ export interface ConsoleDeps {
   readonly provider?: AIProvider | null;
   /** #30: contabiliza tokens do distiller no evento_llm. */
   readonly obs?: ObsEmitter;
+  /** 013: gestão de modelos na Meta; null ⇒ rotas respondem 503 explicado. */
+  readonly templateApi?: TemplateApi | null;
 }
 
 export interface BuildAppOptions {
@@ -77,6 +81,12 @@ export function buildApp({ env, clientConfig, wa, console: consoleDeps }: BuildA
         debounceMs: env.WA_DEBOUNCE_MS,
         limiteResposta: clientConfig.limites.maxCaracteresResposta,
         precos: { inPor1M: env.LLM_PRECO_IN_POR_1M, outPor1M: env.LLM_PRECO_OUT_POR_1M },
+      });
+      app.register(disparosRoutes, {
+        db: wa.db,
+        boss: wa.boss,
+        auth: consoleDeps.auth,
+        templateApi: consoleDeps.templateApi ?? null,
       });
       if (consoleDeps.registry) {
         app.register(aprendizadoRoutes, {
