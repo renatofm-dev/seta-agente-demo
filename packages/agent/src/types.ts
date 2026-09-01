@@ -35,7 +35,9 @@ export type TraceEvento =
       draftDescartado?: string;
     }
   | { tipo: 'fallback'; motivo: string }
-  | { tipo: 'escalado' };
+  | { tipo: 'escalado' }
+  /** #46: turno superado — resposta descartada; o próximo turno agrega tudo. */
+  | { tipo: 'descartado'; motivo: string };
 
 /** Efeitos do nó responder — implementados pelo server (outbox, resumo). */
 export interface ResponderEfeitos {

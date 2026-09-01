@@ -26,6 +26,11 @@ export const conversa = pgTable('conversa', {
   /** Resumo rolante do histórico (atualizado a cada K turnos pelo runtime). */
   resumo: text('resumo'),
   turnosDesdeResumo: integer('turnos_desde_resumo').notNull().default(0),
+  /**
+   * #46: turnos seguidos descartados por mensagem nova em voo. No teto, o
+   * agente responde mesmo com pendência (anti-inanição); zera a cada envio.
+   */
+  descartesConsecutivos: integer('descartes_consecutivos').notNull().default(0),
   criadoEm: timestamp('criado_em', { withTimezone: true }).notNull().defaultNow(),
 });
 

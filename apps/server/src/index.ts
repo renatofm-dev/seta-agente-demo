@@ -89,6 +89,7 @@ await registerDebounceWorker({
     logger,
     turnoTimeoutMs: env.AGENT_TURN_TIMEOUT_MS,
     resumoACadaTurnos: env.AGENT_RESUMO_A_CADA_TURNOS,
+    debounceMs: env.WA_DEBOUNCE_MS, // #46: reagendamento após turno descartado
   }),
   logger,
 });

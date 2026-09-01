@@ -19,8 +19,12 @@ export const EnvSchema = z.object({
   /** Credenciais da Cloud API. Ausentes ⇒ gateway de saída vira log-only (dev). */
   WA_ACCESS_TOKEN: z.string().optional(),
   WA_PHONE_NUMBER_ID: z.string().optional(),
-  /** Silêncio (ms) que fecha um turno no debouncer. */
-  WA_DEBOUNCE_MS: z.coerce.number().int().min(100).default(4_000),
+  /**
+   * Silêncio (ms) que fecha um turno no debouncer. #46: 10s de base — quem
+   * digita a 2ª frase no celular leva 10–20s; a janela ainda se adapta à
+   * última mensagem (fecho 0.6×, continuação 1.5×).
+   */
+  WA_DEBOUNCE_MS: z.coerce.number().int().min(100).default(10_000),
   /** Provedor LLM OpenAI-compatible. Ausente ⇒ agente responde fallback honesto. */
   LLM_BASE_URL: z.url().optional(),
   LLM_API_KEY: z.string().min(1).optional(),

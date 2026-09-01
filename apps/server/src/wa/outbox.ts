@@ -39,12 +39,17 @@ export type OutboundItem =
       readonly atendenteId: string;
     };
 
-export async function enqueueOutbound(
-  deps: OutboxDeps,
+/**
+ * Só o INSERT do outbox (aceita tx — #46: o turno-handler insere na mesma
+ * transação da checagem de pendentes). O job do worker é enviado à parte,
+ * DEPOIS do commit, via enviarJobOutbound.
+ */
+export async function inserirOutbound(
+  db: Pick<Db, 'insert'>,
   item: OutboundItem,
 ): Promise<{ duplicada: boolean; outboxId?: string }> {
   const manual = item.turnoId === undefined;
-  const [linha] = await deps.db
+  const [linha] = await db
     .insert(outbox)
     .values({
       id: newTraceId(),
@@ -59,8 +64,20 @@ export async function enqueueOutbound(
     .onConflictDoNothing({ target: outbox.dedupeKey })
     .returning();
   if (!linha) return { duplicada: true };
-  await deps.boss.send(FILA_OUTBOX, { outboxId: linha.id });
   return { duplicada: false, outboxId: linha.id };
+}
+
+export async function enviarJobOutbound(boss: PgBoss, outboxId: string): Promise<void> {
+  await boss.send(FILA_OUTBOX, { outboxId });
+}
+
+export async function enqueueOutbound(
+  deps: OutboxDeps,
+  item: OutboundItem,
+): Promise<{ duplicada: boolean; outboxId?: string }> {
+  const r = await inserirOutbound(deps.db, item);
+  if (!r.duplicada && r.outboxId) await enviarJobOutbound(deps.boss, r.outboxId);
+  return r;
 }
 
 export interface OutboxWorkerDeps extends OutboxDeps {

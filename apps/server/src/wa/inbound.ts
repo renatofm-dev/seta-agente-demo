@@ -30,30 +30,39 @@ export async function processInbound(
 ): Promise<InboundResultado> {
   const janelaExpiraEm = new Date(msg.timestamp.getTime() + JANELA_MS);
 
-  const [conv] = await deps.db
-    .insert(conversa)
-    .values({ id: newTraceId(), waId: msg.waId, janelaExpiraEm })
-    .onConflictDoUpdate({
-      target: conversa.waId,
-      // GREATEST: reentrega/entrega fora de ordem de mensagem antiga não pode
-      // REGREDIR a janela aberta (timestamp vem da Meta, não do relógio local)
-      set: { janelaExpiraEm: sql`GREATEST(${conversa.janelaExpiraEm}, excluded.janela_expira_em)` },
-    })
-    .returning();
-  if (!conv) throw new Error('upsert de conversa não retornou linha');
+  // #46: upsert da conversa + insert da mensagem numa transação SÓ. O lock de
+  // linha da conversa (do upsert) serializa este insert com a checagem de
+  // pendentes do turno-handler — mensagem nunca "cai no vão" entre a checagem
+  // e o enfileiramento da resposta.
+  const { conv, inseridas } = await deps.db.transaction(async (tx) => {
+    const [convTx] = await tx
+      .insert(conversa)
+      .values({ id: newTraceId(), waId: msg.waId, janelaExpiraEm })
+      .onConflictDoUpdate({
+        target: conversa.waId,
+        // GREATEST: reentrega/entrega fora de ordem de mensagem antiga não pode
+        // REGREDIR a janela aberta (timestamp vem da Meta, não do relógio local)
+        set: {
+          janelaExpiraEm: sql`GREATEST(${conversa.janelaExpiraEm}, excluded.janela_expira_em)`,
+        },
+      })
+      .returning();
+    if (!convTx) throw new Error('upsert de conversa não retornou linha');
 
-  const inseridas = await deps.db
-    .insert(mensagem)
-    .values({
-      id: newTraceId(),
-      conversaId: conv.id,
-      direcao: 'in',
-      waMessageId: msg.waMessageId,
-      texto: msg.texto,
-      status: 'recebida',
-    })
-    .onConflictDoNothing({ target: mensagem.waMessageId })
-    .returning();
+    const inseridasTx = await tx
+      .insert(mensagem)
+      .values({
+        id: newTraceId(),
+        conversaId: convTx.id,
+        direcao: 'in',
+        waMessageId: msg.waMessageId,
+        texto: msg.texto,
+        status: 'recebida',
+      })
+      .onConflictDoNothing({ target: mensagem.waMessageId })
+      .returning();
+    return { conv: convTx, inseridas: inseridasTx };
+  });
 
   // reentrega do mesmo wa_message_id: nada muda, nada é re-agendado
   if (inseridas.length === 0) return { conversaId: conv.id, duplicada: true };

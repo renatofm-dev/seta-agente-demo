@@ -20,7 +20,8 @@ import type { Db } from '../db/index.js';
 import { contato, conversa, mensagem, sinalAprendizado, ticket, traceTurno } from '../db/schema.js';
 import { toolBuscarConhecimento } from '../rag/tool-buscar-conhecimento.js';
 import type { TurnoHandler, TurnoPronto } from './debounce.js';
-import { enqueueOutbound } from './outbox.js';
+import { agendarDebounce } from './inbound.js';
+import { enqueueOutbound, enviarJobOutbound, inserirOutbound } from './outbox.js';
 import { aplicarTransicao, garantirTicket } from './tickets.js';
 
 /**
@@ -46,6 +47,80 @@ export interface AgentTurnoHandlerDeps {
   readonly logger: Logger;
   readonly turnoTimeoutMs: number;
   readonly resumoACadaTurnos: number;
+  /** #46: janela usada para reagendar o debounce após um turno descartado. */
+  readonly debounceMs?: number;
+}
+
+/**
+ * #46: teto de descartes consecutivos — cliente que digita sem parar recebe
+ * resposta mesmo com pendência (inanição nunca).
+ */
+export const MAX_DESCARTES_CONSECUTIVOS = 2;
+
+/** Resultado do turno + o que a fusão decidiu (não faz parte do contrato do agent). */
+type ResultadoComFusao = ResultadoTurno & { readonly turnoDescartado: boolean };
+
+/**
+ * #46: enfileira a resposta SÓ se não chegou mensagem nova durante o
+ * processamento. Checagem e insert do outbox na MESMA transação, com lock da
+ * linha da conversa — o processInbound (também transacional) serializa com
+ * isto, então mensagem não cai no vão entre a checagem e o enfileiramento.
+ * Devolve false quando o turno foi descartado (mensagens voltam a pendentes
+ * e o próximo turno agrega tudo).
+ */
+async function enfileirarComFusao(
+  deps: AgentTurnoHandlerDeps,
+  t: TurnoPronto,
+  texto: string,
+): Promise<boolean> {
+  const r = await deps.db.transaction(async (tx) => {
+    const [conv] = await tx
+      .select({ descartes: conversa.descartesConsecutivos })
+      .from(conversa)
+      .where(eq(conversa.id, t.conversaId))
+      .for('update');
+    const pendentes = await tx
+      .select({ id: mensagem.id })
+      .from(mensagem)
+      .where(
+        and(
+          eq(mensagem.conversaId, t.conversaId),
+          eq(mensagem.direcao, 'in'),
+          isNull(mensagem.turnoId),
+        ),
+      )
+      .limit(1);
+    const descartes = conv?.descartes ?? 0;
+    if (pendentes.length > 0 && descartes < MAX_DESCARTES_CONSECUTIVOS) {
+      // devolve as mensagens deste turno ao estado pendente: o próximo turno
+      // agrega antigas + nova e o contato recebe UMA resposta só
+      await tx
+        .update(mensagem)
+        .set({ turnoId: null })
+        .where(and(eq(mensagem.turnoId, t.id), eq(mensagem.direcao, 'in')));
+      await tx
+        .update(conversa)
+        .set({ descartesConsecutivos: descartes + 1 })
+        .where(eq(conversa.id, t.conversaId));
+      return { enviado: false as const };
+    }
+    if (descartes > 0) {
+      await tx
+        .update(conversa)
+        .set({ descartesConsecutivos: 0 })
+        .where(eq(conversa.id, t.conversaId));
+    }
+    const inserido = await inserirOutbound(tx, {
+      conversaId: t.conversaId,
+      turnoId: t.id,
+      seq: 1,
+      texto,
+    });
+    return { enviado: true as const, outboxId: inserido.outboxId };
+  });
+  // o job vai DEPOIS do commit — rollback nunca deixa job órfão na fila
+  if (r.enviado && r.outboxId) await enviarJobOutbound(deps.boss, r.outboxId);
+  return r.enviado;
 }
 
 export function createAgentTurnoHandler(deps: AgentTurnoHandlerDeps): TurnoHandler {
@@ -60,8 +135,24 @@ export function createAgentTurnoHandler(deps: AgentTurnoHandlerDeps): TurnoHandl
         }
         await gravarSinaisDeVerdict(deps, t, resultado);
         emitirObservabilidade(deps, t, traceId, resultado, await ticketIdDe(deps.db, t));
+        // #46: turno superado fica VISÍVEL no trace (tokens/latência foram
+        // reais e entram nas métricas) — só a resposta é que não saiu
+        const eventos: TraceEvento[] = resultado.turnoDescartado
+          ? [
+              ...resultado.eventos,
+              {
+                tipo: 'descartado',
+                motivo:
+                  'mensagem nova chegou durante o processamento — resposta descartada; o próximo turno agrega tudo',
+              },
+            ]
+          : [...resultado.eventos];
         // trace por ÚLTIMO: é o marcador de turno completo (ticket e sinais já visíveis)
-        await gravarTrace(deps.db, t, traceId, resultado);
+        await gravarTrace(deps.db, t, traceId, { ...resultado, eventos });
+        if (resultado.turnoDescartado) {
+          // o próximo disparo agrega as mensagens devolvidas + a recém-chegada
+          await agendarDebounce(deps.boss, t.conversaId, deps.debounceMs ?? 10_000);
+        }
       } catch (err) {
         // trace persistido SEMPRE — inclusive na falha catastrófica do runtime
         deps.logger.error({ err, turnoId: t.id, traceId }, 'turno falhou — fallback de emergência');
@@ -98,7 +189,7 @@ async function processarComAgente(
   deps: AgentTurnoHandlerDeps,
   t: TurnoPronto,
   traceId: string,
-): Promise<ResultadoTurno> {
+): Promise<ResultadoComFusao> {
   const [conv] = await deps.db.select().from(conversa).where(eq(conversa.id, t.conversaId));
   if (!conv) throw new Error(`turno ${t.id} sem conversa`);
 
@@ -111,12 +202,23 @@ async function processarComAgente(
   // #30: tokens de TODA chamada do turno (classificador + resumo) entram no
   // trace e no evento_llm — o custo do /metricas deixa de subcontar
   const usageExtra = { entrada: 0, saida: 0 };
+  const fusao = { descartado: false };
   const efeitos = {
-    gravarResposta: async (texto: string) => {
-      await enqueueOutbound(
-        { db: deps.db, boss: deps.boss },
-        { conversaId: t.conversaId, turnoId: t.id, seq: 1, texto },
-      );
+    gravarResposta: async (texto: string, meta?: { escalado: boolean; fallback: boolean }) => {
+      // #46: escalada NUNCA é silenciada — o contato precisa saber que um
+      // humano vai assumir (a pendente fica p/ o atendente, como sempre foi)
+      if (meta?.escalado) {
+        await enqueueOutbound(
+          { db: deps.db, boss: deps.boss },
+          { conversaId: t.conversaId, turnoId: t.id, seq: 1, texto },
+        );
+        await deps.db
+          .update(conversa)
+          .set({ descartesConsecutivos: 0 })
+          .where(eq(conversa.id, t.conversaId));
+        return;
+      }
+      fusao.descartado = !(await enfileirarComFusao(deps, t, texto));
     },
     atualizarResumoSePreciso: async () => {
       const uso = await atualizarResumo(deps, conv.id);
@@ -137,6 +239,7 @@ async function processarComAgente(
       tokensEntrada: 0,
       tokensSaida: 0,
       latenciaMs: 0,
+      turnoDescartado: fusao.descartado,
     };
   }
 
@@ -151,7 +254,7 @@ async function processarComAgente(
   usageExtra.saida += cls.tokensSaida;
   if (intencao !== 'outro') {
     const trigger = TRIGGER_POR_INTENCAO[intencao];
-    await efeitos.gravarResposta(TEXTO_TRANSICAO);
+    await efeitos.gravarResposta(TEXTO_TRANSICAO, { escalado: true, fallback: false });
     return {
       resposta: TEXTO_TRANSICAO,
       escalado: true,
@@ -170,6 +273,7 @@ async function processarComAgente(
       tokensEntrada: usageExtra.entrada,
       tokensSaida: usageExtra.saida,
       latenciaMs: Date.now() - inicioTurno, // latência REAL — 0 distorcia o p95
+      turnoDescartado: false,
     };
   }
 
@@ -247,6 +351,7 @@ async function processarComAgente(
     ...resultado,
     tokensEntrada: resultado.tokensEntrada + usageExtra.entrada,
     tokensSaida: resultado.tokensSaida + usageExtra.saida,
+    turnoDescartado: fusao.descartado,
   };
 }
 

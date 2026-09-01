@@ -124,7 +124,8 @@ export type TraceEvento =
       verdict: { tipo: string; trigger?: string; reason?: string; patch?: string };
     }
   | { tipo: 'fallback'; motivo: string }
-  | { tipo: 'escalado' };
+  | { tipo: 'escalado' }
+  | { tipo: 'descartado'; motivo: string };
 
 export interface TraceTurnoView {
   id: string;

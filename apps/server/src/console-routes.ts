@@ -530,6 +530,10 @@ export const consoleRoutes: FastifyPluginCallback<ConsoleRoutesOpts> = (app, opt
     const atualizado = await aplicarTransicao(db, t, 'resolvido', 'atendente', {
       atorId: sessao.userId,
     });
+    // #46: resolvido também reabre o bot — varre pendentes como o devolver faz
+    // (antes, mensagem mandada durante o atendimento ficava parada até o
+    // contato escrever de novo)
+    await agendarDebounce(boss, t.conversaId, opts.debounceMs);
     return { status: atualizado.status };
   });
 
