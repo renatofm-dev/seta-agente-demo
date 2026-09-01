@@ -74,7 +74,8 @@ await registerDebounceWorker({
   boss,
   debounceMs: env.WA_DEBOUNCE_MS,
   turnosConcorrentes: env.AGENT_TURNOS_CONCORRENTES,
-  // HITL (007): bot só responde com o ticket em bot_ativo (resolvido reabre)
+  // HITL (007/#47): bot responde em bot_ativo E aguardando_humano (resolvido
+  // reabre); só humano_ativo silencia
   ticketGate: (conversaId) => ticketPermiteBot(db, conversaId),
   handler: createAgentTurnoHandler({
     db,

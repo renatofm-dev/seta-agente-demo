@@ -594,12 +594,24 @@ export const consoleRoutes: FastifyPluginCallback<ConsoleRoutesOpts> = (app, opt
           .limit(1)
       : [];
     if (sinaisDestaEscalada.length === 0) {
-      const [ultimoTrace] = await db
+      // #47: com o bot ativo na fila, o trace MAIS RECENTE pode ser um assunto
+      // qualquer — o par do sinal é o trace DA ESCALADA (escalado = true);
+      // fallback para o último quando a escalada não veio de um turno (ex.:
+      // falha de entrega marcou o ticket)
+      const [traceDaEscalada] = await db
         .select()
         .from(traceTurno)
-        .where(eq(traceTurno.conversaId, t.conversaId))
+        .where(and(eq(traceTurno.conversaId, t.conversaId), eq(traceTurno.escalado, true)))
         .orderBy(desc(traceTurno.criadoEm))
         .limit(1);
+      const [ultimoTrace] = traceDaEscalada
+        ? [traceDaEscalada]
+        : await db
+            .select()
+            .from(traceTurno)
+            .where(eq(traceTurno.conversaId, t.conversaId))
+            .orderBy(desc(traceTurno.criadoEm))
+            .limit(1);
       await db.insert(sinalAprendizado).values({
         id: newTraceId(),
         tipo: 'correcao_hitl',

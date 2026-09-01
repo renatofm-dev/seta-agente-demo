@@ -57,39 +57,65 @@ export interface AgentTurnoHandlerDeps {
  */
 export const MAX_DESCARTES_CONSECUTIVOS = 2;
 
+/** #47: reconhecimento quando o tema escalado volta com a conversa já na fila. */
+export const TEXTO_JA_NA_FILA =
+  'Esse assunto já está com a nossa equipe — você está na fila e um atendente ' +
+  'assume em instantes. Posso te ajudar com outra coisa enquanto isso? 🙂';
+
+/** O que a fusão decidiu fazer com a resposta do turno. */
+type FusaoResultado = 'enviado' | 'fundido' | 'humano_assumiu';
+
 /** Resultado do turno + o que a fusão decidiu (não faz parte do contrato do agent). */
-type ResultadoComFusao = ResultadoTurno & { readonly turnoDescartado: boolean };
+type ResultadoComFusao = ResultadoTurno & {
+  readonly fusao: FusaoResultado;
+  /** Texto que realmente saiu (pode diferir do draft, ex.: TEXTO_JA_NA_FILA). */
+  readonly respostaEnviada: string | null;
+};
 
 /**
- * #46: enfileira a resposta SÓ se não chegou mensagem nova durante o
- * processamento. Checagem e insert do outbox na MESMA transação, com lock da
- * linha da conversa — o processInbound (também transacional) serializa com
- * isto, então mensagem não cai no vão entre a checagem e o enfileiramento.
- * Devolve false quando o turno foi descartado (mensagens voltam a pendentes
- * e o próximo turno agrega tudo).
+ * #46/#47: enfileira a resposta SÓ se ainda fizer sentido. Checagem e insert
+ * do outbox na MESMA transação, com lock da conversa E do ticket:
+ * - atendente assumiu durante o turno (#47) → 'humano_assumiu', descarta;
+ * - mensagem nova pendente (#46) → 'fundido', devolve as mensagens do turno a
+ *   pendentes e o próximo turno agrega tudo (respeitando o teto de descartes);
+ * - senão → 'enviado'.
+ * O processInbound (transacional) e o aplicarTransicao serializam com isto.
  */
 async function enfileirarComFusao(
   deps: AgentTurnoHandlerDeps,
   t: TurnoPronto,
   texto: string,
-): Promise<boolean> {
+  opts: { ignorarPendentes?: boolean } = {},
+): Promise<FusaoResultado> {
   const r = await deps.db.transaction(async (tx) => {
     const [conv] = await tx
       .select({ descartes: conversa.descartesConsecutivos })
       .from(conversa)
       .where(eq(conversa.id, t.conversaId))
       .for('update');
-    const pendentes = await tx
-      .select({ id: mensagem.id })
-      .from(mensagem)
-      .where(
-        and(
-          eq(mensagem.conversaId, t.conversaId),
-          eq(mensagem.direcao, 'in'),
-          isNull(mensagem.turnoId),
-        ),
-      )
-      .limit(1);
+    // #47: corrida do Assumir — com o ticket travado, ou a transição já
+    // aconteceu (vemos humano_ativo e descartamos) ou ela espera nosso commit
+    const [tk] = await tx
+      .select({ status: ticket.status })
+      .from(ticket)
+      .where(eq(ticket.conversaId, t.conversaId))
+      .for('update');
+    if (tk?.status === 'humano_ativo') {
+      return { resultado: 'humano_assumiu' as const };
+    }
+    const pendentes = opts.ignorarPendentes
+      ? []
+      : await tx
+          .select({ id: mensagem.id })
+          .from(mensagem)
+          .where(
+            and(
+              eq(mensagem.conversaId, t.conversaId),
+              eq(mensagem.direcao, 'in'),
+              isNull(mensagem.turnoId),
+            ),
+          )
+          .limit(1);
     const descartes = conv?.descartes ?? 0;
     if (pendentes.length > 0 && descartes < MAX_DESCARTES_CONSECUTIVOS) {
       // devolve as mensagens deste turno ao estado pendente: o próximo turno
@@ -102,7 +128,7 @@ async function enfileirarComFusao(
         .update(conversa)
         .set({ descartesConsecutivos: descartes + 1 })
         .where(eq(conversa.id, t.conversaId));
-      return { enviado: false as const };
+      return { resultado: 'fundido' as const };
     }
     if (descartes > 0) {
       await tx
@@ -116,11 +142,11 @@ async function enfileirarComFusao(
       seq: 1,
       texto,
     });
-    return { enviado: true as const, outboxId: inserido.outboxId };
+    return { resultado: 'enviado' as const, outboxId: inserido.outboxId };
   });
   // o job vai DEPOIS do commit — rollback nunca deixa job órfão na fila
-  if (r.enviado && r.outboxId) await enviarJobOutbound(deps.boss, r.outboxId);
-  return r.enviado;
+  if (r.resultado === 'enviado' && r.outboxId) await enviarJobOutbound(deps.boss, r.outboxId);
+  return r.resultado;
 }
 
 export function createAgentTurnoHandler(deps: AgentTurnoHandlerDeps): TurnoHandler {
@@ -135,21 +161,29 @@ export function createAgentTurnoHandler(deps: AgentTurnoHandlerDeps): TurnoHandl
         }
         await gravarSinaisDeVerdict(deps, t, resultado);
         emitirObservabilidade(deps, t, traceId, resultado, await ticketIdDe(deps.db, t));
-        // #46: turno superado fica VISÍVEL no trace (tokens/latência foram
-        // reais e entram nas métricas) — só a resposta é que não saiu
-        const eventos: TraceEvento[] = resultado.turnoDescartado
-          ? [
-              ...resultado.eventos,
-              {
-                tipo: 'descartado',
-                motivo:
-                  'mensagem nova chegou durante o processamento — resposta descartada; o próximo turno agrega tudo',
-              },
-            ]
-          : [...resultado.eventos];
-        // trace por ÚLTIMO: é o marcador de turno completo (ticket e sinais já visíveis)
-        await gravarTrace(deps.db, t, traceId, { ...resultado, eventos });
-        if (resultado.turnoDescartado) {
+        // #46/#47: turno com resposta descartada fica VISÍVEL no trace
+        // (tokens/latência foram reais e entram nas métricas)
+        const eventos: TraceEvento[] = [...resultado.eventos];
+        if (resultado.fusao === 'fundido') {
+          eventos.push({
+            tipo: 'descartado',
+            motivo:
+              'mensagem nova chegou durante o processamento — resposta descartada; o próximo turno agrega tudo',
+          });
+        } else if (resultado.fusao === 'humano_assumiu') {
+          eventos.push({
+            tipo: 'descartado',
+            motivo: 'atendente assumiu durante o processamento — resposta do bot descartada',
+          });
+        }
+        // trace por ÚLTIMO: é o marcador de turno completo (ticket e sinais já
+        // visíveis); a resposta gravada é a que SAIU (ex.: TEXTO_JA_NA_FILA)
+        await gravarTrace(deps.db, t, traceId, {
+          ...resultado,
+          eventos,
+          resposta: resultado.respostaEnviada ?? resultado.resposta,
+        });
+        if (resultado.fusao === 'fundido') {
           // o próximo disparo agrega as mensagens devolvidas + a recém-chegada
           await agendarDebounce(deps.boss, t.conversaId, deps.debounceMs ?? 10_000);
         }
@@ -198,27 +232,36 @@ async function processarComAgente(
   const clienteId = vinculo?.clienteErpId ?? '';
   const session = { traceId, clienteId };
 
+  // #47: o turno precisa saber se a conversa JÁ está na fila de humano — o
+  // bot segue atendendo outros assuntos, sem repetir promessa de escalada
+  const [tk] = await deps.db.select().from(ticket).where(eq(ticket.conversaId, t.conversaId));
+  const filaHumano = tk?.status === 'aguardando_humano';
+  const motivoEscalada = tk?.motivoEscalonamento ?? 'assunto sensível';
+
   const inicioTurno = Date.now();
   // #30: tokens de TODA chamada do turno (classificador + resumo) entram no
   // trace e no evento_llm — o custo do /metricas deixa de subcontar
   const usageExtra = { entrada: 0, saida: 0 };
-  const fusao = { descartado: false };
+  const fusao: { resultado: FusaoResultado; textoEnviado: string | null } = {
+    resultado: 'enviado',
+    textoEnviado: null,
+  };
+  const enviar = async (texto: string, opts: { ignorarPendentes?: boolean } = {}) => {
+    fusao.resultado = await enfileirarComFusao(deps, t, texto, opts);
+    fusao.textoEnviado = fusao.resultado === 'enviado' ? texto : null;
+  };
   const efeitos = {
     gravarResposta: async (texto: string, meta?: { escalado: boolean; fallback: boolean }) => {
-      // #46: escalada NUNCA é silenciada — o contato precisa saber que um
-      // humano vai assumir (a pendente fica p/ o atendente, como sempre foi)
+      // #46/#47: escalada não é silenciada por pendência (o contato precisa
+      // saber do humano), mas com a conversa JÁ na fila a mensagem de
+      // transição não se repete — vira o reconhecimento da fila
       if (meta?.escalado) {
-        await enqueueOutbound(
-          { db: deps.db, boss: deps.boss },
-          { conversaId: t.conversaId, turnoId: t.id, seq: 1, texto },
-        );
-        await deps.db
-          .update(conversa)
-          .set({ descartesConsecutivos: 0 })
-          .where(eq(conversa.id, t.conversaId));
+        await enviar(filaHumano && texto === TEXTO_TRANSICAO ? TEXTO_JA_NA_FILA : texto, {
+          ignorarPendentes: true,
+        });
         return;
       }
-      fusao.descartado = !(await enfileirarComFusao(deps, t, texto));
+      await enviar(texto);
     },
     atualizarResumoSePreciso: async () => {
       const uso = await atualizarResumo(deps, conv.id);
@@ -239,7 +282,8 @@ async function processarComAgente(
       tokensEntrada: 0,
       tokensSaida: 0,
       latenciaMs: 0,
-      turnoDescartado: fusao.descartado,
+      fusao: fusao.resultado,
+      respostaEnviada: fusao.textoEnviado,
     };
   }
 
@@ -254,6 +298,35 @@ async function processarComAgente(
   usageExtra.saida += cls.tokensSaida;
   if (intencao !== 'outro') {
     const trigger = TRIGGER_POR_INTENCAO[intencao];
+    // #47: já na fila ⇒ o tema segue proibido (006), mas a escalada não se
+    // repete — o contato ouve que o assunto já está com um atendente
+    if (filaHumano) {
+      await enviar(TEXTO_JA_NA_FILA);
+      return {
+        resposta: TEXTO_JA_NA_FILA,
+        escalado: false,
+        escaladoTrigger: null,
+        fallback: false,
+        fallbackMotivo: null,
+        eventos: [
+          {
+            tipo: 'verdict',
+            guardrail: 'classificador_intencao',
+            hook: 'beforeReply',
+            verdict: {
+              tipo: 'escalate',
+              trigger,
+              reason: `intenção ${intencao} com a conversa já na fila — reconhecimento sem nova escalada`,
+            },
+          },
+        ],
+        tokensEntrada: usageExtra.entrada,
+        tokensSaida: usageExtra.saida,
+        latenciaMs: Date.now() - inicioTurno,
+        fusao: fusao.resultado,
+        respostaEnviada: fusao.textoEnviado,
+      };
+    }
     await efeitos.gravarResposta(TEXTO_TRANSICAO, { escalado: true, fallback: false });
     return {
       resposta: TEXTO_TRANSICAO,
@@ -273,7 +346,8 @@ async function processarComAgente(
       tokensEntrada: usageExtra.entrada,
       tokensSaida: usageExtra.saida,
       latenciaMs: Date.now() - inicioTurno, // latência REAL — 0 distorcia o p95
-      turnoDescartado: false,
+      fusao: fusao.resultado,
+      respostaEnviada: fusao.textoEnviado,
     };
   }
 
@@ -328,13 +402,23 @@ async function processarComAgente(
     }));
   }
 
+  // #47: com a conversa na fila, o agente sabe que o humano já foi acionado —
+  // atende outros assuntos e não promete (nem escala) de novo o mesmo tema
+  const persona = filaHumano
+    ? `${deps.clientConfig.persona}\n\nATENÇÃO: um atendente humano JÁ FOI ACIONADO para esta ` +
+      `conversa (motivo: ${motivoEscalada}) e ela está na fila de atendimento. Sobre ESSE ` +
+      'assunto, apenas informe que um atendente vai assumir em instantes — não responda o ' +
+      'tema, não prometa acionar de novo e não use a tool escalar_para_humano para o mesmo ' +
+      'motivo. Continue ajudando normalmente em qualquer outro assunto.'
+    : deps.clientConfig.persona;
+
   const runtime = createAgentRuntime({
     provider: deps.provider,
     guardrails: [guardrailPreco()],
   });
   const resultado = await runtime.processarTurno({
     session,
-    persona: deps.clientConfig.persona,
+    persona,
     resumo: conv.resumo,
     skills,
     historico,
@@ -349,9 +433,14 @@ async function processarComAgente(
   });
   return {
     ...resultado,
+    // #47: escalada com a conversa JÁ na fila não é nova escalada — o ticket
+    // não muda e a métrica de escalonamento não conta duas vezes
+    escalado: resultado.escalado && !filaHumano,
+    escaladoTrigger: filaHumano ? null : resultado.escaladoTrigger,
     tokensEntrada: resultado.tokensEntrada + usageExtra.entrada,
     tokensSaida: resultado.tokensSaida + usageExtra.saida,
-    turnoDescartado: fusao.descartado,
+    fusao: fusao.resultado,
+    respostaEnviada: fusao.textoEnviado,
   };
 }
 
