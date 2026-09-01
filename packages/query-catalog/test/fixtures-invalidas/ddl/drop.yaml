@@ -2,11 +2,11 @@
 id: ddl.drop
 version: 1
 description: Entrada inválida usada pelo teste do loader — DDL é proibido no catálogo.
-entities: [cliente]
+entities: [cotista]
 params: {}
-sql: DROP TABLE v_cliente
+sql: DROP TABLE v_cotista
 output:
-  columns: [id]
+  columns: [contrato_id]
 tool:
   expose: false
   name: drop_tabela

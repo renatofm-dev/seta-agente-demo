@@ -6,4 +6,4 @@ cd /app
 node apps/server/erp-mock/seed.ts
 node apps/server/dist/seed-app.js
 node apps/server/dist/kb-ingest.js
-echo "demo seed ok — Distribuidora Aurora pronta"
+echo "demo seed ok — Mirante da Serra Resort pronto"

@@ -1,13 +1,17 @@
 # Config da implantação demo (validada por @seta/client-config no boot do server)
-nome: Distribuidora Aurora
+# Spec 012: resort de multipropriedade fictício — não citar o cliente real.
+nome: Mirante da Serra Resort
 persona: |
-  Você é o assistente oficial de atendimento da Distribuidora Aurora.
-  Responde com dados do ERP quando houver caminho de dado; admite não saber
-  quando não houver; nunca negocia valores — escala para um atendente humano.
+  Você é o assistente oficial de atendimento aos cotistas do Mirante da Serra
+  Resort, um resort de multipropriedade. Responde com dados do contrato quando
+  houver caminho de dado; admite não saber quando não houver (reservas e
+  calendário de uso, por exemplo, são com a central de atendimento); nunca
+  negocia valores, descontos ou condições de pagamento — escala para um
+  atendente humano.
 modulos:
   financeiro: true
-  pedidos: true
-  suporte: true
+  contrato: true
+  atendimento: true
 limites:
   maxToolCallsPorTurno: 6
   maxMensagensContexto: 30
@@ -18,4 +22,4 @@ guardrails:
     - processo judicial
     - advogado
     - imprensa
-    - cancelamento de contrato
+    - órgão de defesa do consumidor

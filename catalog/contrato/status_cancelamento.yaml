@@ -1,0 +1,29 @@
+id: contrato.status_cancelamento
+version: 1
+description: >-
+  Situação do ÚLTIMO pedido de cancelamento (distrato) do contrato da sessão:
+  status (em_analise|concluido|negado), motivo registrado, data da
+  solicitação, multa e valor a reembolsar em centavos. Use quando o cotista
+  perguntar como está o cancelamento, o distrato ou o reembolso. Vazio
+  significa que não há pedido de cancelamento registrado — NÃO abra um novo:
+  solicitação de cancelamento é assunto de atendente humano.
+entities: [cancelamento, contrato]
+modules: [contrato]
+params:
+  contrato_id:
+    type: string
+    source: session
+    description: Contrato vinculado à sessão (nunca vem do modelo).
+sql: >-
+  SELECT status, motivo, solicitado_em, multa_centavos, reembolso_centavos
+  FROM v_cancelamento
+  WHERE contrato_id = :contrato_id
+limits:
+  timeout_ms: 2000
+  max_rows: 1
+output:
+  columns: [status, motivo, solicitado_em, multa_centavos, reembolso_centavos]
+  masking: {}
+tool:
+  expose: true
+  name: status_cancelamento

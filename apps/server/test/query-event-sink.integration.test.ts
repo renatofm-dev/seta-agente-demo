@@ -40,7 +40,7 @@ describe('sink drizzle de evento_query', () => {
     const traceId = `teste-${Date.now()}`;
     await sink.record({
       traceId,
-      entryId: 'cliente.perfil',
+      entryId: 'contrato.minha_cota',
       ok: true,
       latencyMs: 12,
       linhas: 1,
@@ -51,7 +51,7 @@ describe('sink drizzle de evento_query', () => {
     const gravado = linhas.find((l) => l.traceId === traceId);
     expect(gravado).toBeDefined();
     expect(gravado).toMatchObject({
-      entryId: 'cliente.perfil',
+      entryId: 'contrato.minha_cota',
       ok: true,
       latencyMs: 12,
       linhas: 1,

@@ -21,9 +21,10 @@ export function toolBuscarConhecimento(deps: ToolBuscarConhecimentoDeps): ToolSp
     name: NOME_BUSCAR_CONHECIMENTO,
     entryId: 'interno.buscar_conhecimento',
     description:
-      'Busca na base de conhecimento (políticas, prazos de entrega, trocas e devoluções, ' +
-      'pagamento e boletos, horários, cadastro). Use para perguntas institucionais que não ' +
-      'são sobre dados do cliente. Cite a fonte retornada ao usar um trecho.',
+      'Busca na base de conhecimento (regulamento de uso, taxas e formas de pagamento, ' +
+      'cancelamento e distrato, pontos e períodos, canais e horários). Use para perguntas ' +
+      'institucionais que não são sobre dados do contrato. Cite a fonte retornada ao usar ' +
+      'um trecho.',
     schema: z.object({
       pergunta: z.string().min(2).max(200).describe('Pergunta ou tema a procurar na base.'),
     }),

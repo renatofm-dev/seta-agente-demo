@@ -33,12 +33,12 @@ import { registerDebounceWorker } from '../src/wa/debounce.ts';
 import { createAgentTurnoHandler } from '../src/wa/turno-handler.ts';
 
 /**
- * Critérios da spec 005, ponta a ponta VIA SIMULADOR (provider fake determinístico,
- * dados reais do seed da 002 através do catálogo da 003). Exige Postgres dev.
+ * Critérios das specs 005/012, ponta a ponta VIA SIMULADOR (provider fake
+ * determinístico, dados reais do seed da 012 através do catálogo). Exige Postgres dev.
  */
 
 const DEBOUNCE_MS = 400;
-// wa_id vinculado ao cliente 1 no configs/demo/contatos.yaml
+// wa_id vinculado ao contrato 10001 (ativo, em dia) no configs/demo/contatos.yaml
 const WA_ID_VINCULADO = '5511999990001';
 const logger = createLogger({ name: 'teste-agente', level: 'silent' });
 
@@ -183,41 +183,64 @@ afterAll(async () => {
 });
 
 describe('critérios spec 005 (via simulador)', () => {
-  it('pergunta de boletos → tool certa → resposta com dados do seed', async () => {
+  it('critério 012: pergunta de saldo → tool certa → resposta com valor do seed', async () => {
     fake
       .respondeTexto('outro') // classificador de intenção (006)
-      .chamaTool('titulos_abertos', {})
-      .respondeTexto('Encontrei seus boletos em aberto! O primeiro vence em breve.');
+      .chamaTool('saldo_contrato', {})
+      .respondeTexto('Seu contrato tem parcelas em aberto! Te passo o resumo do saldo.');
 
-    await enviarPeloSimulador(WA_ID_VINCULADO, 'quais boletos tenho em aberto?');
+    await enviarPeloSimulador(WA_ID_VINCULADO, 'quanto ainda falta pagar do meu contrato?');
     const { resposta, trace } = await aguardarResposta();
 
     // a tool certa rodou e o RESULTADO REAL DO SEED voltou ao modelo
     const toolResult = fake.requests[2]?.messages.find((m) => m.role === 'tool');
-    expect(toolResult?.content).toContain('valor_centavos');
-    expect(toolResult?.content).toContain('linha_digitavel');
+    expect(toolResult?.content).toContain('saldo_devedor_centavos');
+    expect(toolResult?.content).toContain('parcelas_em_aberto');
 
-    expect(resposta).toContain('boletos em aberto');
+    expect(resposta).toContain('saldo');
     expect(trace.fallback).toBe(false);
     const eventos = trace.eventos as { tipo: string; nome?: string }[];
     expect(eventos.map((e) => e.tipo)).toEqual(['contexto', 'llm', 'tool', 'llm']);
-    expect(eventos.find((e) => e.tipo === 'tool')?.nome).toBe('titulos_abertos');
+    expect(eventos.find((e) => e.tipo === 'tool')?.nome).toBe('saldo_contrato');
 
     // auditoria do catálogo também registrou a execução
     const [ev] = await db.select().from(eventoQuery);
-    expect(ev?.entryId).toBe('financeiro.titulos_abertos');
+    expect(ev?.entryId).toBe('financeiro.saldo_contrato');
     expect(ev?.ok).toBe(true);
+  }, 20_000);
+
+  it('critério 012: pergunta de reserva → agente admite não saber e escala', async () => {
+    // reserva/calendário NÃO tem caminho de dado neste domínio (fora do espelho)
+    fake
+      .respondeTexto('outro') // classificador de intenção (006)
+      .chamaTool('escalar_para_humano', { motivo: 'reserva de período — sem caminho de dado' })
+      .respondeTexto(
+        'A marcação de períodos eu não consigo fazer por aqui — já acionei um atendente da central para te ajudar!',
+      );
+
+    await enviarPeloSimulador(WA_ID_VINCULADO, 'quero reservar minha semana de janeiro');
+    const { resposta, trace } = await aguardarResposta();
+
+    expect(resposta).toMatch(/atendente/);
+    expect(trace.escalado).toBe(true);
+    const [tk] = await db.select().from(ticket);
+    expect(tk?.status).toBe('aguardando_humano');
+    // nenhuma tool de dado cobre reserva — só a escalada rodou
+    const eventos = trace.eventos as { tipo: string; nome?: string }[];
+    expect(eventos.filter((e) => e.tipo === 'tool').map((e) => e.nome)).toEqual([
+      'escalar_para_humano',
+    ]);
   }, 20_000);
 
   it('pergunta sem caminho de dado → admite não saber e oferece humano (replay)', async () => {
     fake
       .respondeTexto('outro') // classificador de intenção (006)
-      .chamaTool('buscar_conhecimento', { pergunta: 'política de trocas de barril' })
+      .chamaTool('buscar_conhecimento', { pergunta: 'política de pets no resort' })
       .respondeTexto(
         'Não encontrei essa informação na nossa base. Quer que eu acione um atendente humano para te ajudar?',
       );
 
-    await enviarPeloSimulador(WA_ID_VINCULADO, 'como funciona a troca de barril retornável?');
+    await enviarPeloSimulador(WA_ID_VINCULADO, 'posso levar meu cachorro para o resort?');
     const { resposta, trace } = await aguardarResposta();
 
     const toolResult = fake.requests[2]?.messages.find((m) => m.role === 'tool');
@@ -229,21 +252,21 @@ describe('critérios spec 005 (via simulador)', () => {
   it('trace_turno reconstitui a decisão inteira', async () => {
     fake
       .respondeTexto('outro') // classificador de intenção (006)
-      .chamaTool('perfil_cliente', {})
-      .respondeTexto('Você é o Depósito do Andrade!');
-    await enviarPeloSimulador(WA_ID_VINCULADO, 'qual meu cadastro?');
+      .chamaTool('meu_produto', {})
+      .respondeTexto('Sua cota é DIAMANTE PREMIUM, com 2 períodos de uso por ano!');
+    await enviarPeloSimulador(WA_ID_VINCULADO, 'o que eu comprei mesmo?');
     const { trace } = await aguardarResposta();
 
     const contexto = trace.contexto as { tools: string[]; nMensagensHistorico: number };
-    expect(contexto.tools).toContain('titulos_abertos');
+    expect(contexto.tools).toContain('saldo_contrato');
     expect(contexto.tools).toContain('escalar_para_humano');
     const eventos = trace.eventos as {
       tipo: string;
-      resultado?: { rows: { documento?: string }[] };
+      resultado?: { rows: { tier?: string }[] };
     }[];
     const evTool = eventos.find((e) => e.tipo === 'tool');
-    // resultado no trace vem MASCARADO (masking aplicado antes do retorno)
-    expect(evTool?.resultado?.rows[0]?.documento).toMatch(/^\*\*\./);
+    // resultado REAL do seed reconstituível no trace (contrato demo 10001)
+    expect(evTool?.resultado?.rows[0]?.tier).toBe('DIAMANTE PREMIUM');
     expect(trace.tokensEntrada).toBeGreaterThan(0);
     expect(trace.latenciaMs).toBeGreaterThanOrEqual(0);
     expect(trace.traceId).toMatch(/^[0-9a-f-]{36}$/);
@@ -254,7 +277,7 @@ describe('critérios spec 005 (via simulador)', () => {
       .respondeTexto('outro') // classificador de intenção (006)
       .respondeTexto('Não localizei seu cadastro por aqui. Quer que eu acione um atendente?');
 
-    await enviarPeloSimulador('5511888880000', 'quais boletos tenho?');
+    await enviarPeloSimulador('5511888880000', 'quanto falta pagar do meu contrato?');
     const { trace } = await aguardarResposta();
 
     // spec 003: sem vínculo na sessão, o modelo só vê KB + escalar — nada de

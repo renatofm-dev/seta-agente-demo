@@ -11,16 +11,16 @@ const { Parser } = pkg;
  */
 
 export const CANONICAL_VIEWS = [
-  'v_cliente',
-  'v_pedido',
-  'v_item_pedido',
+  'v_cotista',
+  'v_contrato_cota',
   'v_titulo',
-  'v_estoque',
-  'v_tabela_preco',
+  'v_inadimplencia',
+  'v_cancelamento',
+  'v_chamado',
 ] as const;
 
 /** Params de sessão que o executor sabe resolver (validado no load). */
-export const KNOWN_SESSION_PARAMS = ['cliente_id'] as const;
+export const KNOWN_SESSION_PARAMS = ['contrato_id'] as const;
 
 const parser = new Parser();
 

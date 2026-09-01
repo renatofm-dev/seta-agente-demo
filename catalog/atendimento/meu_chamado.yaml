@@ -1,0 +1,29 @@
+id: atendimento.meu_chamado
+version: 1
+description: >-
+  Chamados (ocorrências de atendimento) do titular do contrato da sessão, do
+  mais recente para o mais antigo: status (aberto|em_andamento|finalizado),
+  motivo, data de abertura e de finalização. Use quando o cotista perguntar
+  como está o chamado, a solicitação ou o protocolo aberto. Lista vazia
+  significa que não há chamado registrado.
+entities: [chamado]
+modules: [atendimento]
+params:
+  contrato_id:
+    type: string
+    source: session
+    description: Contrato vinculado à sessão (nunca vem do modelo).
+sql: >-
+  SELECT id, status, motivo, abertura, finalizacao
+  FROM v_chamado
+  WHERE contrato_id = :contrato_id
+  ORDER BY abertura DESC
+limits:
+  timeout_ms: 3000
+  max_rows: 10
+output:
+  columns: [id, status, motivo, abertura, finalizacao]
+  masking: {}
+tool:
+  expose: true
+  name: meu_chamado

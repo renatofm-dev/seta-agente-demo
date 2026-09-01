@@ -1,0 +1,34 @@
+# fixture VÁLIDA de teste: exercita param agent com default + masking no executor
+# (as 8 entradas reais da 012 não têm params agent nem masking)
+id: financeiro.titulos_filtro
+version: 1
+description: >-
+  Fixture de teste do executor — param agent com default e masking de coluna.
+entities: [titulo]
+modules: [financeiro]
+params:
+  contrato_id:
+    type: string
+    source: session
+    description: Contrato vinculado à sessão (nunca vem do modelo).
+  quantidade:
+    type: int
+    source: agent
+    required: false
+    default: 5
+    description: Quantas parcelas retornar.
+sql: >-
+  SELECT id, contrato_id AS documento
+  FROM v_titulo
+  WHERE contrato_id = :contrato_id
+  LIMIT :quantidade
+limits:
+  timeout_ms: 3000
+  max_rows: 20
+output:
+  columns: [id, documento]
+  masking:
+    documento: cnpj
+tool:
+  expose: true
+  name: titulos_filtro

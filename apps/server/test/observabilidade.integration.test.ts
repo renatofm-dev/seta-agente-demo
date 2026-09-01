@@ -208,12 +208,12 @@ afterAll(async () => {
 });
 
 async function cenarioControlado(): Promise<void> {
-  // turno 1: pergunta de boletos → 1 tool do catálogo + resposta (2 chats no grafo)
+  // turno 1: pergunta de saldo → 1 tool do catálogo + resposta (2 chats no grafo)
   fake
     .respondeTexto('outro')
-    .chamaTool('titulos_abertos', {})
-    .respondeTexto('Seus boletos em aberto estão aqui!');
-  await turnoCompleto('quais boletos tenho em aberto?');
+    .chamaTool('saldo_contrato', {})
+    .respondeTexto('O resumo do saldo do seu contrato está aqui!');
+  await turnoCompleto('quanto falta pagar do meu contrato?');
 
   // turno 2: pedido de desconto → classificador escala antes do grafo
   fake = createFakeProvider().respondeTexto('negociar_preco');
@@ -289,13 +289,13 @@ describe('critérios spec 010', () => {
 
     // turno 1 inteiro: o que entrou, o que rodou, o que saiu, quanto custou
     const t1 = traces[0];
-    expect(t1.textoTurno).toBe('quais boletos tenho em aberto?');
+    expect(t1.textoTurno).toBe('quanto falta pagar do meu contrato?');
     const tipos = t1.eventos.map((e: { tipo: string }) => e.tipo);
     expect(tipos).toEqual(['contexto', 'llm', 'tool', 'llm']);
     const tool = t1.eventos.find((e: { tipo: string }) => e.tipo === 'tool');
-    expect(tool.nome).toBe('titulos_abertos');
+    expect(tool.nome).toBe('saldo_contrato');
     expect(tool.resultado.rows.length).toBeGreaterThan(0);
-    expect(t1.resposta).toBe('Seus boletos em aberto estão aqui!');
+    expect(t1.resposta).toBe('O resumo do saldo do seu contrato está aqui!');
     expect(t1.tokensEntrada).toBe(30); // trace também inclui o classificador (#30)
     expect(t1.latenciaMs).toBeGreaterThanOrEqual(0);
 

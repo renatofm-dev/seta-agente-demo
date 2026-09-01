@@ -6,22 +6,28 @@ const CATALOG_REAL = join(import.meta.dirname, '../../../catalog');
 const FIXTURES_INVALIDAS = join(import.meta.dirname, 'fixtures-invalidas');
 
 describe('loader do catálogo', () => {
-  it('carrega o catálogo real do repo com as 6 entradas iniciais', () => {
+  it('carrega o catálogo real do repo com as 8 entradas da spec 012', () => {
     const catalog = loadCatalog(CATALOG_REAL);
     const ids = catalog
       .list()
       .map((e) => e.id)
       .sort();
     expect(ids).toEqual([
-      'cliente.perfil',
-      'estoque.disponibilidade',
-      'financeiro.titulos_abertos',
-      'preco.tabela_vigente',
-      'vendas.status_pedido',
-      'vendas.ultimos_pedidos',
+      'atendimento.meu_chamado',
+      'contrato.meu_produto',
+      'contrato.minha_cota',
+      'contrato.status_cancelamento',
+      'financeiro.proxima_parcela',
+      'financeiro.saldo_contrato',
+      'financeiro.titulos_atraso',
+      'financeiro.total_pago',
     ]);
-    expect(catalog.get('preco.tabela_vigente').price_source).toBe(true);
-    expect(catalog.get('cliente.perfil').output.masking).toEqual({ documento: 'cnpj' });
+    // toda entrada amarra no contrato da sessão — nunca em param do modelo
+    for (const entry of catalog.list()) {
+      expect(entry.params.contrato_id?.source).toBe('session');
+      expect(entry.tool.expose).toBe(true);
+      expect(entry.price_source).toBe(false); // não há price_source neste domínio
+    }
   });
 
   it('critério 003: interpolação, DDL e tabela física são rejeitados no load', () => {
