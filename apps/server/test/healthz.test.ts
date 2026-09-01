@@ -14,7 +14,7 @@ const envTeste: Env = {
 const clientConfigTeste = {
   nome: 'TS Explorer Demo',
   persona: 'assistente de teste',
-  modulos: { financeiro: true, pedidos: true, suporte: true },
+  modulos: { financeiro: true, contrato: true, atendimento: true },
   limites: { maxToolCallsPorTurno: 5, maxMensagensContexto: 30, maxCaracteresResposta: 2000 },
 };
 

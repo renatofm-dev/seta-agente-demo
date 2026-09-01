@@ -1,0 +1,30 @@
+id: financeiro.saldo_contrato
+version: 1
+description: >-
+  Saldo devedor do contrato da sessão: quantas parcelas ainda estão em aberto
+  (não pagas), o valor total devido em centavos e o vencimento mais próximo.
+  Use quando o cotista perguntar quanto falta pagar, qual o saldo do contrato
+  ou quantas parcelas restam. Não recebe parâmetros — o contrato é sempre o da
+  sessão.
+entities: [titulo, contrato]
+modules: [financeiro]
+params:
+  contrato_id:
+    type: string
+    source: session
+    description: Contrato vinculado à sessão (nunca vem do modelo).
+sql: >-
+  SELECT count(*) AS parcelas_em_aberto,
+         CAST(coalesce(sum(valor_centavos), 0) AS bigint) AS saldo_devedor_centavos,
+         min(vencimento) AS proximo_vencimento
+  FROM v_titulo
+  WHERE contrato_id = :contrato_id AND status <> 'pago'
+limits:
+  timeout_ms: 3000
+  max_rows: 1
+output:
+  columns: [parcelas_em_aberto, saldo_devedor_centavos, proximo_vencimento]
+  masking: {}
+tool:
+  expose: true
+  name: saldo_contrato

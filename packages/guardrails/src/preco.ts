@@ -1,9 +1,9 @@
 import { ALLOW, type GuardrailCtx, type GuardrailHooks, type Verdict } from './index.js';
 
 /**
- * Guardrail de preço (o guardrail da demo):
- * - estrutural: nenhuma tool cota livre — preço de venda só existe via
- *   `preco.tabela_vigente` (price_source);
+ * Guardrail de preço/valores (o guardrail da demo):
+ * - estrutural: nenhuma tool cota valor livre — no domínio 012 nenhuma entrada
+ *   é price_source; todo dinheiro sai de colunas monetárias das tools;
  * - beforeReply: todo valor monetário do draft precisa ser rastreável a um
  *   resultado de tool DESTE turno; valor órfão, percentual de desconto ou
  *   promessa de condição especial → escalate(negociacao_preco).

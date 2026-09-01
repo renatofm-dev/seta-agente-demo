@@ -1,0 +1,29 @@
+# fixture VÁLIDA de teste: exercita param agent OBRIGATÓRIO no executor
+id: atendimento.chamado_por_id
+version: 1
+description: >-
+  Fixture de teste do executor — param agent obrigatório validado com Zod.
+entities: [chamado]
+modules: [atendimento]
+params:
+  contrato_id:
+    type: string
+    source: session
+    description: Contrato vinculado à sessão (nunca vem do modelo).
+  chamado_id:
+    type: string
+    source: agent
+    description: Chamado citado pelo contato.
+sql: >-
+  SELECT id, status, motivo
+  FROM v_chamado
+  WHERE contrato_id = :contrato_id AND id = :chamado_id
+limits:
+  timeout_ms: 2000
+  max_rows: 1
+output:
+  columns: [id, status, motivo]
+  masking: {}
+tool:
+  expose: true
+  name: chamado_por_id

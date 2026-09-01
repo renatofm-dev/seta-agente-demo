@@ -1,0 +1,40 @@
+id: financeiro.proxima_parcela
+version: 1
+description: >-
+  Próxima parcela A VENCER do contrato da sessão: valor em centavos, data de
+  vencimento, meio de pagamento (boleto|pix|cartao_recorrente) e, quando
+  houver, linha digitável do boleto e código PIX copia-e-cola. Use quando o
+  cotista perguntar quando vence a próxima parcela, quanto vai pagar ou pedir
+  a segunda via/código de pagamento. Parcelas já vencidas ficam na tool de
+  atraso.
+entities: [titulo]
+modules: [financeiro]
+params:
+  contrato_id:
+    type: string
+    source: session
+    description: Contrato vinculado à sessão (nunca vem do modelo).
+sql: >-
+  SELECT id, origem, parcela, valor_centavos, vencimento, meio_pagamento,
+         linha_digitavel, pix_copia_cola
+  FROM v_titulo
+  WHERE contrato_id = :contrato_id AND status = 'aberto'
+  ORDER BY vencimento ASC
+  LIMIT 1
+limits:
+  timeout_ms: 2000
+  max_rows: 1
+output:
+  columns:
+    - id
+    - origem
+    - parcela
+    - valor_centavos
+    - vencimento
+    - meio_pagamento
+    - linha_digitavel
+    - pix_copia_cola
+  masking: {}
+tool:
+  expose: true
+  name: proxima_parcela

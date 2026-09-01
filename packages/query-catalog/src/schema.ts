@@ -12,7 +12,7 @@ export const CatalogEntryIdSchema = z
 export type CatalogEntryId = z.infer<typeof CatalogEntryIdSchema>;
 
 /**
- * Origem de um parâmetro: `session` vem do contexto autenticado (ex.: cliente_id),
+ * Origem de um parâmetro: `session` vem do contexto autenticado (ex.: contrato_id),
  * NUNCA do modelo; `agent` pode ser preenchido pelo modelo e é validado antes do bind.
  */
 export const ParamSourceSchema = z.enum(['session', 'agent']);

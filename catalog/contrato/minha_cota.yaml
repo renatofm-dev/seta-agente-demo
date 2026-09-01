@@ -1,0 +1,28 @@
+id: contrato.minha_cota
+version: 1
+description: >-
+  Localização física da cota do contrato da sessão: código da cota, bloco
+  (torre), andar, número da unidade hoteleira e capacidade de hóspedes. Use
+  quando o cotista perguntar qual é o apartamento, a torre, o andar ou quantas
+  pessoas a unidade acomoda. NÃO responde sobre reservas ou datas de uso —
+  isso não tem caminho de dado.
+entities: [contrato, cota]
+modules: [contrato]
+params:
+  contrato_id:
+    type: string
+    source: session
+    description: Contrato vinculado à sessão (nunca vem do modelo).
+sql: >-
+  SELECT cota_codigo, bloco, andar, uh, capacidade
+  FROM v_contrato_cota
+  WHERE contrato_id = :contrato_id
+limits:
+  timeout_ms: 2000
+  max_rows: 1
+output:
+  columns: [cota_codigo, bloco, andar, uh, capacidade]
+  masking: {}
+tool:
+  expose: true
+  name: minha_cota

@@ -12,8 +12,8 @@ export const ClientConfigSchema = z.object({
   persona: z.string().min(1),
   modulos: z.object({
     financeiro: z.boolean(),
-    pedidos: z.boolean(),
-    suporte: z.boolean(),
+    contrato: z.boolean(),
+    atendimento: z.boolean(),
   }),
   limites: z.object({
     maxToolCallsPorTurno: z.number().int().min(1).max(20),

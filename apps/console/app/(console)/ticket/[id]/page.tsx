@@ -104,9 +104,14 @@ export default function TicketPage() {
   }
 
   const perfil = ticket.perfilErp as {
-    razao_social?: string;
-    nome_fantasia?: string;
-    documento?: string;
+    tier?: string;
+    status?: string;
+    periodos?: number;
+    pontos?: number;
+    cota_codigo?: string;
+    bloco?: string;
+    andar?: number;
+    uh?: string;
   } | null;
 
   return (
@@ -212,20 +217,28 @@ export default function TicketPage() {
       </section>
 
       <aside className="hidden border-l p-4 text-sm lg:block">
-        <h3 className="font-semibold">Cliente (ERP)</h3>
+        <h3 className="font-semibold">Contrato (ERP)</h3>
         {perfil ? (
           <dl className="mt-2 space-y-1 text-xs">
             <div>
-              <dt className="text-muted-foreground">Razão social</dt>
-              <dd>{perfil.razao_social}</dd>
+              <dt className="text-muted-foreground">Produto</dt>
+              <dd>{perfil.tier}</dd>
             </div>
             <div>
-              <dt className="text-muted-foreground">Nome fantasia</dt>
-              <dd>{perfil.nome_fantasia ?? '—'}</dd>
+              <dt className="text-muted-foreground">Cota / UH</dt>
+              <dd>
+                {perfil.cota_codigo} — {perfil.bloco}, UH {perfil.uh}
+              </dd>
             </div>
             <div>
-              <dt className="text-muted-foreground">CNPJ</dt>
-              <dd>{perfil.documento}</dd>
+              <dt className="text-muted-foreground">Status</dt>
+              <dd className="capitalize">{perfil.status}</dd>
+            </div>
+            <div>
+              <dt className="text-muted-foreground">Períodos / pontos</dt>
+              <dd>
+                {perfil.periodos ?? '—'} período(s) · {perfil.pontos ?? '—'} pontos
+              </dd>
             </div>
           </dl>
         ) : (

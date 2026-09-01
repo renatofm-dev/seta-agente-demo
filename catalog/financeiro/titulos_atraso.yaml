@@ -1,0 +1,42 @@
+id: financeiro.titulos_atraso
+version: 1
+description: >-
+  Parcelas VENCIDAS do contrato da sessão, da mais antiga para a mais nova:
+  origem (entrada|saldo), número da parcela, valor em centavos e vencimento —
+  cada linha traz também o resumo da inadimplência (quantidade de vencidas,
+  saldo vencido, vencimento mais antigo e maior atraso em dias). Use quando o
+  cotista perguntar o que está atrasado, vencido ou pendente. Lista vazia
+  significa contrato em dia.
+entities: [titulo, inadimplencia]
+modules: [financeiro]
+params:
+  contrato_id:
+    type: string
+    source: session
+    description: Contrato vinculado à sessão (nunca vem do modelo).
+sql: >-
+  SELECT t.id, t.origem, t.parcela, t.valor_centavos, t.vencimento,
+         i.qtd_titulos_vencidos, i.saldo_vencido_centavos,
+         i.vencimento_mais_antigo, i.maior_atraso_dias
+  FROM v_titulo t
+  JOIN v_inadimplencia i ON i.contrato_id = t.contrato_id
+  WHERE t.contrato_id = :contrato_id AND t.status = 'vencido'
+  ORDER BY t.vencimento ASC
+limits:
+  timeout_ms: 3000
+  max_rows: 50
+output:
+  columns:
+    - id
+    - origem
+    - parcela
+    - valor_centavos
+    - vencimento
+    - qtd_titulos_vencidos
+    - saldo_vencido_centavos
+    - vencimento_mais_antigo
+    - maior_atraso_dias
+  masking: {}
+tool:
+  expose: true
+  name: titulos_atraso

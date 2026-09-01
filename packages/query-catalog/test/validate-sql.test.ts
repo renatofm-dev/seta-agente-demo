@@ -14,36 +14,47 @@ function entrada(sql: string, params: Record<string, unknown> = {}): CatalogEntr
   });
 }
 
-const CLIENTE_ID = { cliente_id: { type: 'string', source: 'session' } };
+const CONTRATO_ID = { contrato_id: { type: 'string', source: 'session' } };
 
 describe('validador estático de SQL', () => {
   it('aceita SELECT canônico com binds corretos', () => {
     expect(
       validateEntrySql(
-        entrada('SELECT id FROM v_pedido WHERE cliente_id = :cliente_id', CLIENTE_ID),
+        entrada('SELECT id FROM v_titulo WHERE contrato_id = :contrato_id', CONTRATO_ID),
+      ),
+    ).toEqual([]);
+  });
+
+  it('aceita JOIN entre views canônicas (titulos_atraso junta título + inadimplência)', () => {
+    expect(
+      validateEntrySql(
+        entrada(
+          'SELECT t.id FROM v_titulo t JOIN v_inadimplencia i ON i.contrato_id = t.contrato_id WHERE t.contrato_id = :contrato_id',
+          CONTRATO_ID,
+        ),
       ),
     ).toEqual([]);
   });
 
   it('reprova DDL e DML', () => {
-    expect(validateEntrySql(entrada('DROP TABLE pcclient')).join(' ')).toMatch(/proibido/);
+    expect(validateEntrySql(entrada('DROP TABLE pessoa')).join(' ')).toMatch(/proibido/);
     expect(
       validateEntrySql(
-        entrada("UPDATE v_pedido SET status = 'x' WHERE cliente_id = :cliente_id", CLIENTE_ID),
+        entrada("UPDATE v_titulo SET status = 'x' WHERE contrato_id = :contrato_id", CONTRATO_ID),
       ).join(' '),
     ).toMatch(/update.*proibido|proibid/i);
   });
 
   it('reprova mais de um statement', () => {
     expect(
-      validateEntrySql(entrada('SELECT 1 FROM v_cliente; SELECT 2 FROM v_cliente')).join(' '),
+      validateEntrySql(entrada('SELECT 1 FROM v_cotista; SELECT 2 FROM v_cotista')).join(' '),
     ).toMatch(/mais de um statement/);
   });
 
-  it('reprova objeto fora da allowlist (tabela física)', () => {
+  it('reprova objeto fora da allowlist (tabela física com dado pessoal)', () => {
     expect(
       validateEntrySql(
-        entrada('SELECT codcli FROM pcclient WHERE codcli = :cliente_id', CLIENTE_ID),
+        entrada('SELECT nome, cpf FROM pessoa WHERE idpessoa = :contrato_id', CONTRATO_ID),
       ).join(' '),
     ).toMatch(/fora da allowlist/);
   });
@@ -51,21 +62,21 @@ describe('validador estático de SQL', () => {
   // biome-ignore lint/suspicious/noTemplateCurlyInString: o caso testado é exatamente esse
   it('reprova interpolação ${} e placeholder cru', () => {
     // biome-ignore lint/suspicious/noTemplateCurlyInString: o caso testado é exatamente esse
-    expect(validateEntrySql(entrada('SELECT id FROM v_pedido WHERE id = ${id}')).join(' ')).toMatch(
+    expect(validateEntrySql(entrada('SELECT id FROM v_titulo WHERE id = ${id}')).join(' ')).toMatch(
       /interpolação/,
     );
-    expect(validateEntrySql(entrada('SELECT id FROM v_pedido WHERE id = $1')).join(' ')).toMatch(
+    expect(validateEntrySql(entrada('SELECT id FROM v_titulo WHERE id = $1')).join(' ')).toMatch(
       /placeholder posicional/,
     );
   });
 
   it('reprova bind sem param e param sem bind', () => {
     expect(
-      validateEntrySql(entrada('SELECT id FROM v_pedido WHERE id = :orfao')).join(' '),
+      validateEntrySql(entrada('SELECT id FROM v_titulo WHERE id = :orfao')).join(' '),
     ).toMatch(/bind :orfao sem param/);
     expect(
       validateEntrySql(
-        entrada('SELECT id FROM v_pedido', {
+        entrada('SELECT id FROM v_titulo', {
           sobrando: { type: 'string', source: 'agent' },
         }),
       ).join(' '),
@@ -75,8 +86,16 @@ describe('validador estático de SQL', () => {
   it('reprova param de sessão que o executor não sabe resolver', () => {
     expect(
       validateEntrySql(
-        entrada('SELECT id FROM v_pedido WHERE id = :misterio', {
+        entrada('SELECT id FROM v_titulo WHERE id = :misterio', {
           misterio: { type: 'string', source: 'session' },
+        }),
+      ).join(' '),
+    ).toMatch(/param de sessão desconhecido/);
+    // pessoa_id não tem fonte na sessão da POC (o vínculo carrega só o contrato)
+    expect(
+      validateEntrySql(
+        entrada('SELECT id FROM v_chamado WHERE contrato_id = :pessoa_id', {
+          pessoa_id: { type: 'string', source: 'session' },
         }),
       ).join(' '),
     ).toMatch(/param de sessão desconhecido/);

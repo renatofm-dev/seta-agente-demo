@@ -11,7 +11,10 @@ import { zodDoParam } from './schema.js';
 
 export interface SessionCtx {
   readonly traceId: string;
-  /** Cliente do ERP vinculado ao contato. Sem vínculo ⇒ sem acesso a dado. */
+  /**
+   * Identidade do contato no ERP — na spec 012 é o Nº DO CONTRATO de
+   * multipropriedade (bind `contrato_id`). Sem vínculo ⇒ sem acesso a dado.
+   */
   readonly clienteId: string;
 }
 
@@ -55,7 +58,7 @@ const LOGGER_NULO: CatalogLogger = { info: () => {}, warn: () => {} };
 
 /** Valores de sessão disponíveis para params `source: session`, por nome. */
 function valoresDeSessao(session: SessionCtx): Record<string, Scalar> {
-  return { cliente_id: session.clienteId };
+  return { contrato_id: session.clienteId };
 }
 
 export function createExecutor(opts: CreateExecutorOptions): Executor {

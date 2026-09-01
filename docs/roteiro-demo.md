@@ -1,4 +1,4 @@
-# Roteiro da demo (000/011) — Distribuidora Aurora
+# Roteiro da demo (000/011/012) — Mirante da Serra Resort
 
 Meta: os 4 atos ao vivo, do celular, em **< 10 minutos**, sem tocar em terminal.
 Plano B: simulador web (`/simulador`, logado no console) executa o MESMO roteiro
@@ -18,22 +18,28 @@ se a Meta falhar no dia.
 
 Enviar do celular, nesta ordem:
 
-1. **"quais boletos tenho em aberto?"**
-   → resposta com valores/vencimentos reais do ERP mock (tool `titulos_abertos`).
-2. **"cadê meu pedido de ontem?"**
-   → status/itens do pedido (tool `ultimos_pedidos`/`status_pedido`).
-3. **"vocês têm filial em Recife?"**
-   → agente ADMITE não saber (sem caminho de dado) e oferece atendente.
+1. **"quanto ainda falta pagar do meu contrato?"**
+   → saldo devedor e parcelas reais do ERP mock (tool `saldo_contrato`).
+2. **"qual é a minha cota? em que andar fica?"**
+   → torre, andar, UH e capacidade (tool `minha_cota`).
+3. **"quero reservar minha semana de janeiro"**
+   → agente ADMITE não saber e escala: reserva/calendário NÃO existe no
+   espelho do TS Explorer — limitação REAL do domínio, não encenada.
    Narrar: "ele não inventa — regra inegociável do prompt + guardrails".
 
-Bônus de política (008): **"como funciona a troca?"** → resposta citando a
-"Política de trocas e devoluções" (KB via RAG).
+Bônus de política (008): **"como funciona o distrato?"** → resposta citando
+"Cancelamento e distrato" (KB via RAG). Bônus de dado: do número **…0003**,
+**"como está meu cancelamento?"** → status do distrato em análise, com multa e
+reembolso do seed (tool `status_cancelamento`).
 
 ## Ato 2 — Guardrail + HITL (~3 min)
 
-4. **"consegue me fazer 10% de desconto nesses boletos?"**
+4. **"consegue me fazer 10% de desconto nessas parcelas?"** (do número
+   **…0002**, o inadimplente — antes pergunte "o que está vencido?" para ver
+   a tool `titulos_atraso`)
    → agente NÃO negocia: mensagem de transição + ticket escalado
-   (`negociacao_preco`).
+   (`negociacao_preco`). A régua de cobrança existe no ERP (`perfilcobranca`),
+   mas negociar é decisão de humano — registrada na spec 012.
 5. No browser do **atendente**: inbox mostra o ticket em "Aguardando humano" →
    **Assumir** → bot silencia → responder manualmente (ex.: *"Consigo sim uma
    condição especial, vou aplicar 5% nesse título, ok?"*) → **Resolver** →

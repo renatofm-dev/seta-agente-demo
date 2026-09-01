@@ -1,0 +1,28 @@
+id: contrato.meu_produto
+version: 1
+description: >-
+  Produto contratado no contrato da sessão: tier da cota (OURO/DIAMANTE ×
+  PREMIUM/MASTER/SPECIAL), quantos períodos de uso por ano a cota confere,
+  pontos contratados e status do contrato (ativo|cancelado|quitado). Use
+  quando o cotista perguntar o que comprou, qual o plano, quantos pontos tem
+  ou se o contrato está ativo.
+entities: [contrato, cota]
+modules: [contrato]
+params:
+  contrato_id:
+    type: string
+    source: session
+    description: Contrato vinculado à sessão (nunca vem do modelo).
+sql: >-
+  SELECT tier, periodos, pontos, status
+  FROM v_contrato_cota
+  WHERE contrato_id = :contrato_id
+limits:
+  timeout_ms: 2000
+  max_rows: 1
+output:
+  columns: [tier, periodos, pontos, status]
+  masking: {}
+tool:
+  expose: true
+  name: meu_produto

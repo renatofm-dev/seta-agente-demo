@@ -346,10 +346,7 @@ describe('critérios spec 009 (Ato 3)', () => {
   }, 30_000);
 
   it('versões imutáveis: aprovar edição cria versão nova; rollback reativa anterior', async () => {
-    const [s] = await db
-      .select()
-      .from(skill)
-      .where(eq(skill.idLogico, 'cobranca-boletos-vencidos'));
+    const [s] = await db.select().from(skill).where(eq(skill.idLogico, 'cobranca-parcela-vencida'));
     if (!s) throw new Error('skill do seed ausente');
     const [v1] = await db.select().from(skillVersao).where(eq(skillVersao.skillId, s.id));
     expect(v1?.versao).toBe(1);
@@ -421,10 +418,10 @@ describe('critérios spec 009 (Ato 3)', () => {
     expect(deNovo.statusCode).toBeGreaterThanOrEqual(400);
 
     // kill-switch: skill do seed some do retrieval na hora
-    const [s] = await db.select().from(skill).where(eq(skill.idLogico, 'status-pedido-proativo'));
+    const [s] = await db.select().from(skill).where(eq(skill.idLogico, 'orientacao-distrato'));
     if (!s) throw new Error('skill do seed ausente');
     const antes = await registry.activeFor(
-      { texto: 'cadê meu pedido, quando chega a entrega?' },
+      { texto: 'quero cancelar meu contrato, como funciona o distrato?' },
       2,
     );
     expect(antes.some((a) => a.skillId === s.id)).toBe(true);
@@ -433,7 +430,7 @@ describe('critérios spec 009 (Ato 3)', () => {
     });
     expect(desativar.statusCode).toBe(204);
     const depois = await registry.activeFor(
-      { texto: 'cadê meu pedido, quando chega a entrega?' },
+      { texto: 'quero cancelar meu contrato, como funciona o distrato?' },
       2,
     );
     expect(depois.some((a) => a.skillId === s.id)).toBe(false);

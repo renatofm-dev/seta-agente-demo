@@ -231,12 +231,12 @@ describe('critérios spec 006', () => {
     expect(eventos.find((e) => e.tipo === 'verdict')?.guardrail).toBe('preco');
   }, 20_000);
 
-  it('valores rastreáveis a tool do turno passam pelo guardrail (boletos com R$)', async () => {
+  it('valores rastreáveis a tool do turno passam pelo guardrail (parcela com R$)', async () => {
     fake
       .respondeTexto('outro')
-      .chamaTool('titulos_abertos', {})
+      .chamaTool('proxima_parcela', {})
       .enfileira({ content: null, toolCalls: [] }); // substituído abaixo
-    // monta a resposta com o valor REAL do primeiro boleto do seed
+    // monta a resposta com o valor REAL da próxima parcela do seed
     fake.chat = ((original) => async (req: Parameters<typeof original>[0]) => {
       const r = await original(req);
       if (r.content === null && r.toolCalls.length === 0) {
@@ -246,13 +246,13 @@ describe('critérios spec 006', () => {
         ).rows;
         const centavos = Number(rows?.[0]?.valor_centavos ?? 0);
         const reais = (centavos / 100).toFixed(2).replace('.', ',');
-        return { ...r, content: `Seu próximo boleto é de R$ ${reais}.` };
+        return { ...r, content: `Sua próxima parcela é de R$ ${reais}.` };
       }
       return r;
     })(fake.chat.bind(fake));
 
-    const { trace, resposta, ticket: t } = await turnoCompleto('quais boletos tenho em aberto?');
-    expect(resposta).toMatch(/^Seu próximo boleto é de R\$ /);
+    const { trace, resposta, ticket: t } = await turnoCompleto('quando vence a próxima parcela?');
+    expect(resposta).toMatch(/^Sua próxima parcela é de R\$ /);
     expect(t?.status ?? 'bot_ativo').toBe('bot_ativo'); // sem escalada
     const eventos = trace.eventos as { tipo: string }[];
     expect(eventos.some((e) => e.tipo === 'verdict')).toBe(false); // allow não registra verdict

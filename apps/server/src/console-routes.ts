@@ -253,16 +253,20 @@ export const consoleRoutes: FastifyPluginCallback<ConsoleRoutesOpts> = (app, opt
       .where(eq(mensagem.conversaId, t.conversaId))
       .orderBy(asc(mensagem.criadoEm));
 
-    // painel lateral: dados do cliente ERP via catálogo (cliente.perfil)
+    // painel lateral: dados do contrato via catálogo (produto + cota da 012)
     let perfilErp: Record<string, unknown> | null = null;
     if (contexto.clienteErpId) {
       try {
-        const r = await executor.run(
-          'cliente.perfil',
-          {},
-          { traceId: newTraceId(), clienteId: contexto.clienteErpId },
-        );
-        perfilErp = (r.rows[0] as Record<string, unknown>) ?? null;
+        const sessaoErp = { traceId: newTraceId(), clienteId: contexto.clienteErpId };
+        const [produto, cota] = await Promise.all([
+          executor.run('contrato.meu_produto', {}, sessaoErp),
+          executor.run('contrato.minha_cota', {}, sessaoErp),
+        ]);
+        const combinado = {
+          ...(produto.rows[0] as Record<string, unknown> | undefined),
+          ...(cota.rows[0] as Record<string, unknown> | undefined),
+        };
+        perfilErp = Object.keys(combinado).length > 0 ? combinado : null;
       } catch (err) {
         req.log.warn({ err }, 'perfil ERP indisponível para o painel');
       }
