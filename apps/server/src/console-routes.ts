@@ -1,7 +1,7 @@
 import { TransicaoInvalidaError } from '@seta/crm';
 import { newTraceId } from '@seta/observability';
 import type { Executor } from '@seta/query-catalog';
-import { and, asc, desc, eq, gt, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gt, lt, sql } from 'drizzle-orm';
 import type { FastifyPluginCallback, FastifyReply, FastifyRequest } from 'fastify';
 import type { PgBoss } from 'pg-boss';
 import { ZodError, z } from 'zod';
@@ -10,19 +10,23 @@ import type { Db } from './db/index.js';
 import {
   contato,
   conversa,
+  conversaLeitura,
   mensagem,
+  outbox,
   sinalAprendizado,
   ticket,
   traceTurno,
   turno,
+  user,
 } from './db/schema.js';
 import { agendarDebounce } from './wa/inbound.js';
 import { enqueueOutbound } from './wa/outbox.js';
-import { aplicarTransicao } from './wa/tickets.js';
+import { aplicarTransicao, garantirTicket } from './wa/tickets.js';
 
 /**
- * API do console HITL (007): inbox em três filas, detalhe do ticket com dados
- * do ERP via catálogo, ações assumir/responder/devolver/resolver e SSE.
+ * API do console HITL (007/#45): atendimento centrado em CONVERSA (lista com
+ * não-lidas, thread paginada, prefixo do atendente no envio), ações
+ * assumir/responder/devolver/resolver, trace e SSE.
  * Toda rota exige sessão Better Auth (papéis atendente|curador).
  */
 
@@ -32,8 +36,18 @@ export interface ConsoleRoutesOpts {
   readonly auth: Auth;
   readonly executor: Executor;
   readonly debounceMs: number;
+  /** maxCaracteresResposta da config do cliente — orçamento da resposta manual. */
+  readonly limiteResposta: number;
   /** Preço por 1M de tokens para o custo estimado do /metricas (010). */
   readonly precos: { readonly inPor1M: number; readonly outPor1M: number };
+}
+
+/** Teto duro da Meta Cloud API para corpo de texto. */
+const TETO_META = 4096;
+
+/** Prefixo da Parte B do #45: nome de quem atende, em negrito, no topo. */
+export function prefixarAtendente(nome: string, texto: string): string {
+  return `*${nome}*\n\n${texto}`;
 }
 
 const sessoes = new WeakMap<FastifyRequest, SessaoConsole>();
@@ -128,8 +142,10 @@ function criarHubConsole(db: Db, avisar: (obj: unknown, msg: string) => void): H
           `event: mensagem\ndata: ${JSON.stringify({
             id: m.id,
             conversaId: m.conversaId,
+            direcao: m.direcao,
             autor: m.autor,
             texto: m.texto,
+            status: m.status,
             criadoEm: m.criadoEm,
           })}\n\n`,
         );
@@ -242,6 +258,197 @@ export const consoleRoutes: FastifyPluginCallback<ConsoleRoutesOpts> = (app, opt
     };
   });
 
+  // #45: listagem centrada em CONVERSA (todas, não só escaladas) — UMA query
+  // com laterals (última mensagem + não-lidas do usuário); nada de N+1 (#31)
+  app.get('/api/console/conversas', async (req) => {
+    const sessao = sessaoDe(req);
+    const { filtro, q, limite, offset } = z
+      .object({
+        filtro: z.enum(['todas', 'aguardando', 'minhas', 'resolvidas']).default('todas'),
+        q: z.string().trim().max(80).optional(),
+        limite: z.coerce.number().int().min(1).max(200).default(50),
+        offset: z.coerce.number().int().min(0).default(0),
+      })
+      .parse(req.query ?? {});
+
+    const porFiltro = {
+      todas: sql`true`,
+      aguardando: sql`t.status = 'aguardando_humano'`,
+      minhas: sql`t.status = 'humano_ativo' AND t.atendente_id = ${sessao.userId}`,
+      resolvidas: sql`t.status = 'resolvido'`,
+    }[filtro];
+    // busca por nome OU telefone (só os dígitos do termo casam contra o wa_id)
+    const digitos = (q ?? '').replaceAll(/\D/g, '');
+    const busca = q
+      ? sql`(coalesce(ct.nome, '') ILIKE ${`%${q}%`} OR c.wa_id LIKE ${`%${digitos.length > 0 ? digitos : q}%`})`
+      : sql`true`;
+
+    const r = await db.execute(sql`
+      SELECT c.id AS conversa_id, c.wa_id, c.janela_expira_em,
+             ct.nome AS contato_nome, ct.cliente_erp_id,
+             t.id AS ticket_id, coalesce(t.status, 'bot_ativo') AS status,
+             t.atendente_id, u.name AS atendente_nome,
+             t.motivo_escalonamento, t.escalado_em,
+             um.texto AS ultima_texto, um.autor AS ultima_autor, um.criado_em AS ultima_em,
+             coalesce(nl.n, 0) AS nao_lidas
+      FROM conversa c
+      LEFT JOIN contato ct ON ct.wa_id = c.wa_id
+      LEFT JOIN ticket t ON t.conversa_id = c.id
+      LEFT JOIN "user" u ON u.id = t.atendente_id
+      LEFT JOIN conversa_leitura cl ON cl.conversa_id = c.id AND cl.user_id = ${sessao.userId}
+      LEFT JOIN LATERAL (
+        SELECT m.texto, m.autor, m.criado_em FROM mensagem m
+        WHERE m.conversa_id = c.id ORDER BY m.criado_em DESC LIMIT 1
+      ) um ON true
+      LEFT JOIN LATERAL (
+        SELECT count(*)::int AS n FROM mensagem m
+        WHERE m.conversa_id = c.id AND m.direcao = 'in'
+          AND m.criado_em > coalesce(cl.lida_ate, 'epoch'::timestamptz)
+      ) nl ON true
+      WHERE ${porFiltro} AND ${busca}
+      ORDER BY coalesce(um.criado_em, c.criado_em) DESC
+      LIMIT ${limite} OFFSET ${offset}
+    `);
+    const agora = Date.now();
+    const conversas = (
+      r.rows as {
+        conversa_id: string;
+        wa_id: string;
+        janela_expira_em: Date | null;
+        contato_nome: string | null;
+        cliente_erp_id: string | null;
+        ticket_id: string | null;
+        status: 'bot_ativo' | 'aguardando_humano' | 'humano_ativo' | 'resolvido';
+        atendente_id: string | null;
+        atendente_nome: string | null;
+        motivo_escalonamento: string | null;
+        escalado_em: Date | null;
+        ultima_texto: string | null;
+        ultima_autor: string | null;
+        ultima_em: Date | null;
+        nao_lidas: number;
+      }[]
+    ).map((linha) => ({
+      conversaId: linha.conversa_id,
+      waId: linha.wa_id,
+      contatoNome: linha.contato_nome,
+      clienteErpId: linha.cliente_erp_id,
+      ticketId: linha.ticket_id,
+      status: linha.status,
+      atendenteId: linha.atendente_id,
+      atendenteNome: linha.atendente_nome,
+      motivoEscalonamento: linha.motivo_escalonamento,
+      esperaSegundos: linha.escalado_em
+        ? Math.round((agora - new Date(linha.escalado_em).getTime()) / 1000)
+        : null,
+      janelaExpiraEm: linha.janela_expira_em,
+      naoLidas: linha.nao_lidas,
+      ultimaMensagem: linha.ultima_texto
+        ? { texto: linha.ultima_texto, autor: linha.ultima_autor, em: linha.ultima_em }
+        : null,
+    }));
+    return { conversas, temMais: conversas.length === limite };
+  });
+
+  // #45: detalhe da conversa com thread paginada (rolagem infinita via antesDe)
+  app.get('/api/console/conversa/:id', async (req, reply) => {
+    const { id } = z.object({ id: z.uuid() }).parse(req.params);
+    const { antesDe, limite } = z
+      .object({
+        antesDe: z.iso.datetime({ offset: true }).optional(),
+        limite: z.coerce.number().int().min(1).max(200).default(50),
+      })
+      .parse(req.query ?? {});
+    const [conv] = await db.select().from(conversa).where(eq(conversa.id, id));
+    if (!conv) return reply.code(404).send({ erro: 'conversa inexistente' });
+    const t = await garantirTicket(db, id); // toda conversa é acionável na tela
+
+    const pagina = await db
+      .select({
+        id: mensagem.id,
+        autor: mensagem.autor,
+        atendenteId: mensagem.atendenteId,
+        atendenteNome: user.name,
+        texto: mensagem.texto,
+        status: mensagem.status,
+        criadoEm: mensagem.criadoEm,
+      })
+      .from(mensagem)
+      .leftJoin(user, eq(user.id, mensagem.atendenteId))
+      .where(
+        antesDe
+          ? and(eq(mensagem.conversaId, id), lt(mensagem.criadoEm, new Date(antesDe)))
+          : eq(mensagem.conversaId, id),
+      )
+      .orderBy(desc(mensagem.criadoEm))
+      .limit(limite + 1);
+    const temMais = pagina.length > limite;
+    const mensagens = pagina.slice(0, limite).reverse();
+
+    // páginas antigas não pagam o custo do vínculo/ERP — só a carga inicial
+    if (antesDe) return { mensagens, temMais };
+
+    const [vinculo] = await db.select().from(contato).where(eq(contato.waId, conv.waId));
+    const [atendente] = t.atendenteId
+      ? await db.select({ name: user.name }).from(user).where(eq(user.id, t.atendenteId))
+      : [undefined];
+    let perfilErp: Record<string, unknown> | null = null;
+    if (vinculo?.clienteErpId) {
+      try {
+        const sessaoErp = { traceId: newTraceId(), clienteId: vinculo.clienteErpId };
+        const [produto, cota] = await Promise.all([
+          executor.run('contrato.meu_produto', {}, sessaoErp),
+          executor.run('contrato.minha_cota', {}, sessaoErp),
+        ]);
+        const combinado = {
+          ...(produto.rows[0] as Record<string, unknown> | undefined),
+          ...(cota.rows[0] as Record<string, unknown> | undefined),
+        };
+        perfilErp = Object.keys(combinado).length > 0 ? combinado : null;
+      } catch (err) {
+        req.log.warn({ err }, 'perfil ERP indisponível para o painel');
+      }
+    }
+    return {
+      conversaId: conv.id,
+      waId: conv.waId,
+      contatoNome: vinculo?.nome ?? null,
+      clienteErpId: vinculo?.clienteErpId ?? null,
+      janelaExpiraEm: conv.janelaExpiraEm,
+      limiteResposta: Math.min(TETO_META, opts.limiteResposta),
+      ticket: {
+        id: t.id,
+        status: t.status,
+        atendenteId: t.atendenteId,
+        atendenteNome: atendente?.name ?? null,
+        motivoEscalonamento: t.motivoEscalonamento,
+        esperaSegundos: t.escaladoEm
+          ? Math.round((Date.now() - t.escaladoEm.getTime()) / 1000)
+          : null,
+      },
+      mensagens,
+      temMais,
+      perfilErp,
+    };
+  });
+
+  // #45: marca de leitura por atendente — zera o badge de não-lidas
+  app.post('/api/console/conversa/:id/lida', async (req, reply) => {
+    const sessao = sessaoDe(req);
+    const { id } = z.object({ id: z.uuid() }).parse(req.params);
+    const [conv] = await db.select({ id: conversa.id }).from(conversa).where(eq(conversa.id, id));
+    if (!conv) return reply.code(404).send({ erro: 'conversa inexistente' });
+    const agora = new Date();
+    await db
+      .insert(conversaLeitura)
+      .values({ conversaId: id, userId: sessao.userId, lidaAte: agora })
+      .onConflictDoUpdate({
+        target: [conversaLeitura.conversaId, conversaLeitura.userId],
+        set: { lidaAte: agora },
+      });
+    return { ok: true };
+  });
+
   app.get('/api/console/ticket/:id', async (req, reply) => {
     const { id } = z.object({ id: z.uuid() }).parse(req.params);
     const [t] = await db.select().from(ticket).where(eq(ticket.id, id));
@@ -334,8 +541,38 @@ export const consoleRoutes: FastifyPluginCallback<ConsoleRoutesOpts> = (app, opt
       return reply.code(409).send({ erro: 'ticket não está sob seu atendimento' });
     }
     const body = z
-      .object({ texto: z.string().min(1).max(4096), chave: z.string().min(8).max(64) })
+      .object({ texto: z.string().min(1).max(TETO_META), chave: z.string().min(8).max(64) })
       .parse(req.body);
+
+    // #45: janela de 24h fechada bloqueia AQUI, com explicação — antes o envio
+    // falhava em silêncio no worker (outbox.status janela_fechada) e o
+    // atendente não descobria
+    const [conv] = await db.select().from(conversa).where(eq(conversa.id, t.conversaId));
+    if (!conv?.janelaExpiraEm || conv.janelaExpiraEm.getTime() <= Date.now()) {
+      return reply.code(409).send({
+        erro: 'janela de 24h fechada — a Meta só aceita template de reengajamento (fora da POC)',
+      });
+    }
+
+    // Parte B do #45: nome de quem atende em negrito no topo, SÓ quando muda
+    // quem fala (mensagens consecutivas do mesmo atendente não repetem).
+    // A última linha do outbox é a fonte (existe já no enfileiramento — a
+    // `mensagem` só nasce depois do envio, o que criaria corrida).
+    const [ultimaSaida] = await db
+      .select({ autor: outbox.autor, atendenteId: outbox.atendenteId })
+      .from(outbox)
+      .where(eq(outbox.conversaId, t.conversaId))
+      .orderBy(desc(outbox.criadoEm))
+      .limit(1);
+    const mesmoAtendente =
+      ultimaSaida?.autor === 'atendente' && ultimaSaida.atendenteId === sessao.userId;
+    const textoEntregue = mesmoAtendente ? body.texto : prefixarAtendente(sessao.nome, body.texto);
+    const teto = Math.min(TETO_META, opts.limiteResposta);
+    if (textoEntregue.length > teto) {
+      return reply.code(400).send({
+        erro: `resposta excede o limite de ${teto} caracteres (o prefixo com seu nome conta no orçamento)`,
+      });
+    }
 
     // sinal de correção HITL (insumo da 009): primeira resposta do atendente
     // desde a escalada é pareada ao último draft/resposta do bot
@@ -378,7 +615,15 @@ export const consoleRoutes: FastifyPluginCallback<ConsoleRoutesOpts> = (app, opt
 
     const r = await enqueueOutbound(
       { db, boss },
-      { conversaId: t.conversaId, chave: body.chave, texto: body.texto, autor: 'atendente' },
+      {
+        conversaId: t.conversaId,
+        chave: body.chave,
+        // persiste-se o texto ENTREGUE (com prefixo): o histórico do console
+        // reflete o que o cliente realmente viu (decisão registrada no #45)
+        texto: textoEntregue,
+        autor: 'atendente',
+        atendenteId: sessao.userId,
+      },
     );
     return reply.code(202).send(r);
   });

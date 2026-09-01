@@ -18,9 +18,14 @@ const ContatosSchema = z.object({
   ),
 });
 
-export type Vinculos = ReadonlyMap<string, string>;
+export type Vinculos = ReadonlyMap<string, { clienteErpId: string; apelido: string | null }>;
 
 export function loadVinculos(path: string): Vinculos {
   const parsed = ContatosSchema.parse(parse(readFileSync(path, 'utf-8')));
-  return new Map(parsed.contatos.map((c) => [c.wa_id, c.cliente_erp]));
+  return new Map(
+    parsed.contatos.map((c) => [
+      c.wa_id,
+      { clienteErpId: c.cliente_erp, apelido: c.apelido ?? null },
+    ]),
+  );
 }

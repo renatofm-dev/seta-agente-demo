@@ -5,6 +5,7 @@ import {
   integer,
   jsonb,
   pgTable,
+  primaryKey,
   text,
   timestamp,
   unique,
@@ -49,6 +50,8 @@ export const mensagem = pgTable('mensagem', {
   autor: text('autor', { enum: ['contato', 'bot', 'atendente'] })
     .notNull()
     .default('contato'),
+  /** #45: qual atendente falou (user.id) — atribuição por mensagem na thread. */
+  atendenteId: text('atendente_id'),
   waMessageId: text('wa_message_id').unique(),
   texto: text('texto').notNull(),
   status: text('status', {
@@ -71,6 +74,8 @@ export const outbox = pgTable('outbox', {
   autor: text('autor', { enum: ['bot', 'atendente'] })
     .notNull()
     .default('bot'),
+  /** #45: atendente autor da resposta manual (propagado à mensagem no envio). */
+  atendenteId: text('atendente_id'),
   texto: text('texto').notNull(),
   status: text('status', {
     enum: ['pendente', 'enviada', 'falha', 'janela_fechada'],
@@ -82,6 +87,22 @@ export const outbox = pgTable('outbox', {
   criadoEm: timestamp('criado_em', { withTimezone: true }).notNull().defaultNow(),
   atualizadoEm: timestamp('atualizado_em', { withTimezone: true }).notNull().defaultNow(),
 });
+
+/**
+ * #45: marca de leitura POR ATENDENTE — não-lidas = mensagens `in` da conversa
+ * com criado_em > lida_ate do usuário (sem linha ⇒ tudo conta como não lido).
+ */
+export const conversaLeitura = pgTable(
+  'conversa_leitura',
+  {
+    conversaId: uuid('conversa_id')
+      .notNull()
+      .references(() => conversa.id),
+    userId: text('user_id').notNull(),
+    lidaAte: timestamp('lida_ate', { withTimezone: true }).notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.conversaId, t.userId] })],
+);
 
 /** Contato WhatsApp com vínculo verificado ao cliente do ERP (seed na POC — corte da 000). */
 export const contato = pgTable('contato', {

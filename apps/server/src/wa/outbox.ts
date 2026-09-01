@@ -35,6 +35,8 @@ export type OutboundItem =
       readonly chave: string;
       readonly texto: string;
       readonly autor: 'atendente';
+      /** #45: user.id de quem respondeu — propaga à mensagem para a thread. */
+      readonly atendenteId: string;
     };
 
 export async function enqueueOutbound(
@@ -51,6 +53,7 @@ export async function enqueueOutbound(
       seq: manual ? 1 : item.seq,
       dedupeKey: manual ? `manual:${item.chave}` : `${item.turnoId}:${item.seq}`,
       autor: item.autor ?? 'bot',
+      atendenteId: manual ? item.atendenteId : null,
       texto: item.texto,
     })
     .onConflictDoNothing({ target: outbox.dedupeKey })
@@ -124,6 +127,7 @@ export async function enviarLinha(
         conversaId: conv.id,
         direcao: 'out',
         autor: linha.autor,
+        atendenteId: linha.atendenteId,
         waMessageId,
         texto: linha.texto,
         status: 'enviada',

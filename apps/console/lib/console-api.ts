@@ -42,6 +42,62 @@ export interface TicketDetalhe extends TicketResumo {
   perfilErp: Record<string, unknown> | null;
 }
 
+// --- Atendimento centrado em conversa (#45) --------------------------------
+
+export type StatusTicket = TicketResumo['status'];
+export type FiltroConversas = 'todas' | 'aguardando' | 'minhas' | 'resolvidas';
+
+export interface ConversaResumo {
+  conversaId: string;
+  waId: string;
+  contatoNome: string | null;
+  clienteErpId: string | null;
+  ticketId: string | null;
+  status: StatusTicket;
+  atendenteId: string | null;
+  atendenteNome: string | null;
+  motivoEscalonamento: string | null;
+  esperaSegundos: number | null;
+  janelaExpiraEm: string | null;
+  naoLidas: number;
+  ultimaMensagem: { texto: string; autor: string; em: string } | null;
+}
+
+export interface MensagemThread {
+  id: string;
+  autor: 'contato' | 'bot' | 'atendente';
+  atendenteId: string | null;
+  atendenteNome: string | null;
+  texto: string;
+  status: 'recebida' | 'pendente' | 'enviada' | 'entregue' | 'lida' | 'falha';
+  criadoEm: string;
+}
+
+export interface ConversaDetalhe {
+  conversaId: string;
+  waId: string;
+  contatoNome: string | null;
+  clienteErpId: string | null;
+  janelaExpiraEm: string | null;
+  limiteResposta: number;
+  ticket: {
+    id: string;
+    status: StatusTicket;
+    atendenteId: string | null;
+    atendenteNome: string | null;
+    motivoEscalonamento: string | null;
+    esperaSegundos: number | null;
+  };
+  mensagens: MensagemThread[];
+  temMais: boolean;
+  perfilErp: Record<string, unknown> | null;
+}
+
+export interface PaginaMensagens {
+  mensagens: MensagemThread[];
+  temMais: boolean;
+}
+
 // --- Observabilidade (010) -------------------------------------------------
 
 export type TraceEvento =
@@ -118,6 +174,23 @@ export const api = {
     return res.ok ? (res.json() as Promise<Sessao>) : null;
   },
   inbox: () => fetch('/api/console/inbox').then((r) => json<Inbox>(r)),
+  conversas: (filtro: FiltroConversas, q: string) => {
+    const params = new URLSearchParams({ filtro });
+    if (q.trim()) params.set('q', q.trim());
+    return fetch(`/api/console/conversas?${params}`).then((r) =>
+      json<{ conversas: ConversaResumo[]; temMais: boolean }>(r),
+    );
+  },
+  conversa: (id: string) =>
+    fetch(`/api/console/conversa/${id}`).then((r) => json<ConversaDetalhe>(r)),
+  conversaMensagens: (id: string, antesDe: string) =>
+    fetch(`/api/console/conversa/${id}?antesDe=${encodeURIComponent(antesDe)}`).then((r) =>
+      json<PaginaMensagens>(r),
+    ),
+  marcarLida: (id: string) =>
+    fetch(`/api/console/conversa/${id}/lida`, { method: 'POST' }).then((r) =>
+      json<{ ok: boolean }>(r),
+    ),
   ticket: (id: string) => fetch(`/api/console/ticket/${id}`).then((r) => json<TicketDetalhe>(r)),
   acao: (id: string, acao: 'assumir' | 'devolver' | 'resolver') =>
     fetch(`/api/console/ticket/${id}/${acao}`, { method: 'POST' }).then((r) =>

@@ -41,11 +41,12 @@ export async function seedApp(db: Db, env: ReturnType<typeof loadEnv>): Promise<
     ? env.CONTATOS_PATH
     : resolve(join(import.meta.dirname, '../../..'), env.CONTATOS_PATH);
   const vinculos = loadVinculos(contatosPath);
-  for (const [waId, clienteErpId] of vinculos) {
+  for (const [waId, { clienteErpId, apelido }] of vinculos) {
+    // #45: o apelido do vínculo vira contato.nome — é o nome da lista de conversas
     await db
       .insert(contato)
-      .values({ id: newTraceId(), waId, clienteErpId, verificadoEm: new Date() })
-      .onConflictDoUpdate({ target: contato.waId, set: { clienteErpId } });
+      .values({ id: newTraceId(), waId, nome: apelido, clienteErpId, verificadoEm: new Date() })
+      .onConflictDoUpdate({ target: contato.waId, set: { clienteErpId, nome: apelido } });
   }
 
   // 2 skills escritos à mão (009) — prova do formato SKILL.md
