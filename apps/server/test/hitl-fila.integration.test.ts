@@ -257,8 +257,12 @@ describe('#47 — bot ativo na fila de humano', () => {
     // 3) o TEMA ESCALADO volta → reconhecimento da fila, SEM repetir a
     //    escalada e SEM nova transição de ticket
     const transicoesAntes = (await db.select().from(eventoTicket)).length;
+    const tracesAntes = await contarTraces();
     fake = createFakeProvider().respondeTexto('negociar_preco');
     await mensagemDoContato('e aí, me dá logo o desconto');
+    // espera o TRACE (gravado por último no turno) — só o outbox era corrida:
+    // no runner lento do CI a resposta chegava antes do trace aterrissar
+    await aguardar(async () => (await contarTraces()) > tracesAntes);
     await aguardar(async () => (await respostasDoBot()).length === 3);
     expect((await respostasDoBot()).at(-1)?.texto).toBe(TEXTO_JA_NA_FILA);
     expect((await db.select().from(eventoTicket)).length).toBe(transicoesAntes);
