@@ -10,6 +10,36 @@ import { z } from 'zod';
 
 export const NOME_ESCALAR = 'escalar_para_humano';
 export const NOME_BUSCAR_CONHECIMENTO = 'buscar_conhecimento';
+/** 014: interceptada pelo grafo — o server inicia o fluxo de cobrança após a resposta. */
+export const NOME_INICIAR_PAGAMENTO = 'iniciar_pagamento';
+
+export function toolIniciarPagamento(): ToolSpec {
+  return {
+    name: NOME_INICIAR_PAGAMENTO,
+    entryId: 'interno.iniciar_pagamento',
+    description:
+      'Inicia o fluxo de pagamento: lista as parcelas em aberto do contrato e conduz o ' +
+      'cliente até gerar boleto, PIX ou link de cartão. Use quando o cliente quiser pagar, ' +
+      'quitar ou regularizar parcelas, ou pedir boleto/PIX/link PARA PAGAR. Não cite valores ' +
+      'nem prometa condições: o fluxo mostra os dados reais logo em seguida. Depois de chamar, ' +
+      'responda em UMA frase curta que vai verificar as pendências.',
+    schema: z.object({}),
+    priceSource: false,
+    async execute() {
+      return {
+        rows: [
+          {
+            ok: true,
+            instrucao:
+              'fluxo de pagamento iniciado; responda em uma frase que vai listar as pendências, sem valores',
+          },
+        ],
+        rowCount: 1,
+        truncated: false,
+      };
+    },
+  };
+}
 
 export function toolEscalarParaHumano(): ToolSpec {
   return {

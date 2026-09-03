@@ -13,6 +13,8 @@
     { "path": "packages/skills" },
     { "path": "packages/observability" },
     { "path": "packages/client-config" },
+    { "path": "packages/payment-provider" },
+    { "path": "packages/cobranca" },
     { "path": "apps/server" },
     { "path": "infra/erp-mock" }
   ]

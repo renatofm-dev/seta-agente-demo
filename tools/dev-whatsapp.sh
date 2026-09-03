@@ -39,6 +39,17 @@ DEV_PID=""
 TUNNEL_PID=""
 TUNNEL_URL=""
 LOG=""
+ASAAS_WEBHOOK_ID=""
+ASAAS_BASE="${ASAAS_BASE_URL:-https://api-sandbox.asaas.com/v3}"
+asaas() { # método, path, [corpo]
+  if [ -n "${3:-}" ]; then
+    curl -s --max-time 20 -X "$1" "$ASAAS_BASE$2" -H "access_token: ${ASAAS_API_KEY:-}" \
+      -H "User-Agent: seta-agente/dev" -H "Content-Type: application/json" -d "$3"
+  else
+    curl -s --max-time 20 -X "$1" "$ASAAS_BASE$2" -H "access_token: ${ASAAS_API_KEY:-}" \
+      -H "User-Agent: seta-agente/dev"
+  fi
+}
 limpar() {
   echo
   if [ -n "$TUNNEL_URL" ]; then
@@ -46,6 +57,11 @@ limpar() {
     curl -s --max-time 20 -X POST "$GRAPH/$WA_PHONE_NUMBER_ID" \
       -H "Authorization: Bearer $WA_ACCESS_TOKEN" -H "Content-Type: application/json" \
       -d '{"webhook_configuration":{"override_callback_uri":""}}' >/dev/null || true
+  fi
+  if [ -n "$ASAAS_WEBHOOK_ID" ]; then
+    # 014: a URL do quick tunnel morre junto — webhook ligado apontaria para o nada
+    echo "→ desligando o webhook do Asaas (seta-dev)…"
+    asaas PUT "/webhooks/$ASAAS_WEBHOOK_ID" '{"enabled":false}' >/dev/null || true
   fi
   [ -n "$TUNNEL_PID" ] && kill "$TUNNEL_PID" 2>/dev/null || true
   [ -n "$LOG" ] && rm -f "$LOG" || true
@@ -165,6 +181,48 @@ echo
 echo "✔ pronto — webhooks do número de teste chegam no seu server local."
 printf '%s\n' "$DESTINO" | python3 -m json.tool 2>/dev/null || printf '%s\n' "$DESTINO"
 echo
+# 014: webhook do Asaas pelo mesmo túnel (só com a chave e o token no .env). Best-effort:
+# falha aqui não derruba o teste do WhatsApp — o pagamento só não confirma sozinho.
+if [ -n "${ASAAS_API_KEY:-}" ] && [ -n "${ASAAS_WEBHOOK_TOKEN:-}" ]; then
+  if [ -z "${ASAAS_WEBHOOK_EMAIL:-}" ]; then
+    echo "aviso: ASAAS_WEBHOOK_EMAIL ausente no .env — webhook do Asaas NÃO registrado" >&2
+  else
+    echo "→ registrando o webhook do Asaas ($ASAAS_BASE) → $TUNNEL_URL/webhooks/asaas…"
+    ASAAS_WEBHOOK_ID="$(asaas GET '/webhooks?limit=100' | python3 -c '
+import sys, json
+try:
+    d = json.load(sys.stdin)
+except Exception:
+    d = {}
+print(next((w["id"] for w in d.get("data", []) if w.get("name") == "seta-dev"), ""))' 2>/dev/null || true)"
+    CORPO_WEBHOOK="$(python3 -c '
+import json, sys
+print(json.dumps({
+  "name": "seta-dev", "url": sys.argv[1] + "/webhooks/asaas", "email": sys.argv[2],
+  "enabled": True, "interrupted": False, "apiVersion": 3, "authToken": sys.argv[3],
+  "sendType": "SEQUENTIALLY",
+  "events": ["PAYMENT_CREATED", "PAYMENT_CONFIRMED", "PAYMENT_RECEIVED", "PAYMENT_OVERDUE",
+             "PAYMENT_DELETED", "PAYMENT_REFUNDED", "PAYMENT_RECEIVED_IN_CASH_UNDONE"]}))' \
+      "$TUNNEL_URL" "$ASAAS_WEBHOOK_EMAIL" "$ASAAS_WEBHOOK_TOKEN")"
+    if [ -n "$ASAAS_WEBHOOK_ID" ]; then
+      RESP_ASAAS="$(asaas PUT "/webhooks/$ASAAS_WEBHOOK_ID" "$CORPO_WEBHOOK" || true)"
+    else
+      RESP_ASAAS="$(asaas POST '/webhooks' "$CORPO_WEBHOOK" || true)"
+      ASAAS_WEBHOOK_ID="$(printf '%s' "$RESP_ASAAS" | python3 -c 'import sys,json
+try: print(json.load(sys.stdin).get("id",""))
+except Exception: print("")' 2>/dev/null || true)"
+    fi
+    if [ -n "$ASAAS_WEBHOOK_ID" ] && printf '%s' "$RESP_ASAAS" | grep -q '"enabled":true'; then
+      echo "  webhook Asaas seta-dev: $ASAAS_WEBHOOK_ID ✔ (desligado no Ctrl+C)"
+    else
+      echo "aviso: não consegui registrar o webhook do Asaas: ${RESP_ASAAS:0:300}" >&2
+      ASAAS_WEBHOOK_ID=""
+    fi
+  fi
+else
+  echo "(sem ASAAS_API_KEY/ASAAS_WEBHOOK_TOKEN no .env: PSP simulado, sem webhook)"
+fi
+
 echo "Mande uma mensagem do celular e acompanhe no console: http://localhost:3000/inbox"
 if [ -n "$DEV_PID" ]; then
   echo "(Ctrl+C encerra o túnel, remove o override e derruba o pnpm dev)"

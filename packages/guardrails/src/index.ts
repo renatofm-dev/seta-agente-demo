@@ -111,6 +111,8 @@ export {
   classificarIntencao,
   INTENCOES,
   type Intencao,
+  type IntencaoQueEscala,
+  intencaoEscala,
   TRIGGER_POR_INTENCAO,
 } from './intencao.js';
 export { extrairValoresMonetarios, guardrailPreco } from './preco.js';

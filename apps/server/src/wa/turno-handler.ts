@@ -5,11 +5,19 @@ import {
   TEXTO_TRANSICAO,
   type TraceEvento,
   toolEscalarParaHumano,
+  toolIniciarPagamento,
 } from '@seta/agent';
 import type { AIProvider, ChatMessage } from '@seta/ai-provider';
 import type { ClientConfig } from '@seta/client-config';
-import { classificarIntencao, guardrailPreco, TRIGGER_POR_INTENCAO } from '@seta/guardrails';
+import { TEXTO_INTERESSE_COMPRA } from '@seta/cobranca';
+import {
+  classificarIntencao,
+  guardrailPreco,
+  intencaoEscala,
+  TRIGGER_POR_INTENCAO,
+} from '@seta/guardrails';
 import { newTraceId, type ObsEmitter } from '@seta/observability';
+import type { PaymentProvider } from '@seta/payment-provider';
 import { buildToolSpecs, type CatalogIndex, type Executor } from '@seta/query-catalog';
 import type { VectorStore } from '@seta/rag';
 import type { SkillRegistry } from '@seta/skills';
@@ -18,6 +26,15 @@ import type { PgBoss } from 'pg-boss';
 import type { Logger } from 'pino';
 import type { Db } from '../db/index.js';
 import { contato, conversa, mensagem, sinalAprendizado, ticket, traceTurno } from '../db/schema.js';
+import {
+  continuarFluxo,
+  type EnvFluxo,
+  type FluxoDeps,
+  iniciarFluxo,
+  type ResultadoFluxo,
+} from '../pagamentos/fluxo.js';
+import type { PagamentosRepo } from '../pagamentos/repo.js';
+import { toolCobrancaEmAberto } from '../pagamentos/tool-cobranca-em-aberto.js';
 import { toolBuscarConhecimento } from '../rag/tool-buscar-conhecimento.js';
 import type { TurnoHandler, TurnoPronto } from './debounce.js';
 import { agendarDebounce } from './inbound.js';
@@ -49,7 +66,22 @@ export interface AgentTurnoHandlerDeps {
   readonly resumoACadaTurnos: number;
   /** #46: janela usada para reagendar o debounce após um turno descartado. */
   readonly debounceMs?: number;
+  /** 014: fluxo de cobrança; ausente ⇒ turno igual ao de antes da 014. */
+  readonly pagamentos?: PagamentosTurnoDeps;
 }
+
+/** 014: o que o agente de cobrança precisa além do que o turno já tem. */
+export interface PagamentosTurnoDeps {
+  readonly repo: PagamentosRepo;
+  readonly psp: PaymentProvider;
+  readonly env: EnvFluxo;
+}
+
+/** Nota na persona quando o fluxo de cobrança acabou de sair da frente (2 respostas não entendidas). */
+const NOTA_FLUXO_ABANDONADO =
+  '\n\nATENÇÃO: o cliente estava num fluxo de pagamento que foi encerrado porque as últimas ' +
+  'respostas não foram reconhecidas. Responda ao que ele disse agora; se ele quiser pagar ' +
+  'parcelas, use a tool iniciar_pagamento.';
 
 /**
  * #46: teto de descartes consecutivos — cliente que digita sem parar recebe
@@ -84,9 +116,10 @@ type ResultadoComFusao = ResultadoTurno & {
 async function enfileirarComFusao(
   deps: AgentTurnoHandlerDeps,
   t: TurnoPronto,
-  texto: string,
-  opts: { ignorarPendentes?: boolean } = {},
+  textos: readonly string[],
+  opts: { ignorarPendentes?: boolean; seqInicial?: number } = {},
 ): Promise<FusaoResultado> {
+  const seqInicial = opts.seqInicial ?? 1;
   const r = await deps.db.transaction(async (tx) => {
     const [conv] = await tx
       .select({ descartes: conversa.descartesConsecutivos })
@@ -136,16 +169,24 @@ async function enfileirarComFusao(
         .set({ descartesConsecutivos: 0 })
         .where(eq(conversa.id, t.conversaId));
     }
-    const inserido = await inserirOutbound(tx, {
-      conversaId: t.conversaId,
-      turnoId: t.id,
-      seq: 1,
-      texto,
-    });
-    return { resultado: 'enviado' as const, outboxId: inserido.outboxId };
+    // 014: um turno pode sair em N mensagens (ex.: explicação + código PIX);
+    // seq crescente na mesma transação, jobs após o commit — na ordem
+    const outboxIds: string[] = [];
+    for (const [i, texto] of textos.entries()) {
+      const inserido = await inserirOutbound(tx, {
+        conversaId: t.conversaId,
+        turnoId: t.id,
+        seq: seqInicial + i,
+        texto,
+      });
+      if (inserido.outboxId) outboxIds.push(inserido.outboxId);
+    }
+    return { resultado: 'enviado' as const, outboxIds };
   });
   // o job vai DEPOIS do commit — rollback nunca deixa job órfão na fila
-  if (r.resultado === 'enviado' && r.outboxId) await enviarJobOutbound(deps.boss, r.outboxId);
+  if (r.resultado === 'enviado') {
+    for (const id of r.outboxIds) await enviarJobOutbound(deps.boss, id);
+  }
   return r.resultado;
 }
 
@@ -247,9 +288,68 @@ async function processarComAgente(
     textoEnviado: null,
   };
   const enviar = async (texto: string, opts: { ignorarPendentes?: boolean } = {}) => {
-    fusao.resultado = await enfileirarComFusao(deps, t, texto, opts);
+    fusao.resultado = await enfileirarComFusao(deps, t, [texto], opts);
     fusao.textoEnviado = fusao.resultado === 'enviado' ? texto : null;
   };
+  // 014: N mensagens do fluxo de cobrança num turno só
+  const enviarVarias = async (textos: readonly string[], seqInicial = 1) => {
+    if (textos.length === 0) return;
+    fusao.resultado = await enfileirarComFusao(deps, t, textos, {
+      seqInicial,
+      ignorarPendentes: seqInicial > 1,
+    });
+    fusao.textoEnviado = fusao.resultado === 'enviado' ? textos.join('\n\n') : null;
+  };
+
+  // 014: agente de cobrança — só com o módulo ligado, vínculo e deps presentes
+  const pagamentos =
+    deps.clientConfig.modulos.pagamentos && deps.pagamentos && clienteId !== ''
+      ? deps.pagamentos
+      : null;
+  const fluxoDeps: FluxoDeps | null = pagamentos
+    ? {
+        db: deps.db,
+        boss: deps.boss,
+        executor: deps.executor,
+        repo: pagamentos.repo,
+        provider: deps.provider,
+        psp: pagamentos.psp,
+        env: pagamentos.env,
+        logger: deps.logger,
+      }
+    : null;
+  const ctxFluxo = {
+    conversaId: t.conversaId,
+    turnoId: t.id,
+    session,
+    textoUsuario: t.textoAgregado,
+  };
+  const resultadoDoFluxo = (r: ResultadoFluxo): ResultadoComFusao => ({
+    resposta: r.mensagens.join('\n\n'),
+    escalado: r.escalado,
+    escaladoTrigger: r.escaladoTrigger,
+    fallback: false,
+    fallbackMotivo: null,
+    eventos: [...r.eventos, ...(r.escalado ? [{ tipo: 'escalado' as const }] : [])],
+    tokensEntrada: usageExtra.entrada + r.tokensEntrada,
+    tokensSaida: usageExtra.saida + r.tokensSaida,
+    latenciaMs: Date.now() - inicioTurno,
+    fusao: fusao.resultado,
+    respostaEnviada: fusao.textoEnviado,
+  });
+  let personaExtra = '';
+  if (fluxoDeps) {
+    const ativo = await fluxoDeps.repo.fluxoAtivo(t.conversaId);
+    if (ativo) {
+      const r = await continuarFluxo(fluxoDeps, ativo, ctxFluxo);
+      if (!r.abandonado) {
+        await enviarVarias(r.mensagens);
+        return resultadoDoFluxo(r);
+      }
+      // saiu da frente: o agente geral responde este turno sabendo do contexto
+      personaExtra = NOTA_FLUXO_ABANDONADO;
+    }
+  }
   const efeitos = {
     gravarResposta: async (texto: string, meta?: { escalado: boolean; fallback: boolean }) => {
       // #46/#47: escalada não é silenciada por pendência (o contato precisa
@@ -296,8 +396,16 @@ async function processarComAgente(
   const intencao = cls.intencao;
   usageExtra.entrada += cls.tokensEntrada;
   usageExtra.saida += cls.tokensSaida;
-  if (intencao !== 'outro') {
+  // 014: "quero pagar" inicia o agente de cobrança em vez de escalar
+  if (intencao === 'pagar' && fluxoDeps) {
+    const r = await iniciarFluxo(fluxoDeps, ctxFluxo);
+    await enviarVarias(r.mensagens);
+    return resultadoDoFluxo(r);
+  }
+  if (intencaoEscala(intencao)) {
     const trigger = TRIGGER_POR_INTENCAO[intencao];
+    // 014: interesse em cota nova vai para o comercial com texto próprio
+    const textoTransicao = intencao === 'comprar_cota' ? TEXTO_INTERESSE_COMPRA : TEXTO_TRANSICAO;
     // #47: já na fila ⇒ o tema segue proibido (006), mas a escalada não se
     // repete — o contato ouve que o assunto já está com um atendente
     if (filaHumano) {
@@ -327,9 +435,9 @@ async function processarComAgente(
         respostaEnviada: fusao.textoEnviado,
       };
     }
-    await efeitos.gravarResposta(TEXTO_TRANSICAO, { escalado: true, fallback: false });
+    await efeitos.gravarResposta(textoTransicao, { escalado: true, fallback: false });
     return {
-      resposta: TEXTO_TRANSICAO,
+      resposta: textoTransicao,
       escalado: true,
       escaladoTrigger: trigger,
       fallback: false,
@@ -381,6 +489,8 @@ async function processarComAgente(
       embed: (texto) => provider.embed([texto]).then((v) => Array.from(v[0] ?? [])),
     }),
     toolEscalarParaHumano(),
+    // 014: o agente geral pode entregar ao fluxo de cobrança e reler a última cobrança
+    ...(pagamentos ? [toolIniciarPagamento(), toolCobrancaEmAberto(pagamentos.repo)] : []),
   ];
 
   // skills top-2 no contexto (009); ids entram no trace p/ atribuição de uso
@@ -404,13 +514,14 @@ async function processarComAgente(
 
   // #47: com a conversa na fila, o agente sabe que o humano já foi acionado —
   // atende outros assuntos e não promete (nem escala) de novo o mesmo tema
-  const persona = filaHumano
-    ? `${deps.clientConfig.persona}\n\nATENÇÃO: um atendente humano JÁ FOI ACIONADO para esta ` +
-      `conversa (motivo: ${motivoEscalada}) e ela está na fila de atendimento. Sobre ESSE ` +
-      'assunto, apenas informe que um atendente vai assumir em instantes — não responda o ' +
-      'tema, não prometa acionar de novo e não use a tool escalar_para_humano para o mesmo ' +
-      'motivo. Continue ajudando normalmente em qualquer outro assunto.'
-    : deps.clientConfig.persona;
+  const persona =
+    (filaHumano
+      ? `${deps.clientConfig.persona}\n\nATENÇÃO: um atendente humano JÁ FOI ACIONADO para esta ` +
+        `conversa (motivo: ${motivoEscalada}) e ela está na fila de atendimento. Sobre ESSE ` +
+        'assunto, apenas informe que um atendente vai assumir em instantes — não responda o ' +
+        'tema, não prometa acionar de novo e não use a tool escalar_para_humano para o mesmo ' +
+        'motivo. Continue ajudando normalmente em qualquer outro assunto.'
+      : deps.clientConfig.persona) + personaExtra;
 
   const runtime = createAgentRuntime({
     provider: deps.provider,
@@ -431,16 +542,32 @@ async function processarComAgente(
     },
     efeitos,
   });
+
+  // 014: o agente entregou ao fluxo de cobrança (tool iniciar_pagamento) — a
+  // listagem sai como seq 2..n do MESMO turno, logo após a frase do agente.
+  // Só se a frase do agente realmente saiu (turno fundido/descartado ⇒ nada).
+  let fluxoIniciado: ResultadoFluxo | null = null;
+  const textoAgente = fusao.textoEnviado;
+  if (resultado.fluxoPagamentoSolicitado && fluxoDeps && fusao.resultado === 'enviado') {
+    fluxoIniciado = await iniciarFluxo(fluxoDeps, ctxFluxo);
+    await enviarVarias(fluxoIniciado.mensagens, 2);
+  }
+  const escalado = (resultado.escalado || fluxoIniciado?.escalado === true) && !filaHumano;
   return {
     ...resultado,
     // #47: escalada com a conversa JÁ na fila não é nova escalada — o ticket
     // não muda e a métrica de escalonamento não conta duas vezes
-    escalado: resultado.escalado && !filaHumano,
-    escaladoTrigger: filaHumano ? null : resultado.escaladoTrigger,
+    escalado,
+    escaladoTrigger: filaHumano
+      ? null
+      : (resultado.escaladoTrigger ?? fluxoIniciado?.escaladoTrigger ?? null),
+    eventos: [...resultado.eventos, ...(fluxoIniciado?.eventos ?? [])],
     tokensEntrada: resultado.tokensEntrada + usageExtra.entrada,
     tokensSaida: resultado.tokensSaida + usageExtra.saida,
     fusao: fusao.resultado,
-    respostaEnviada: fusao.textoEnviado,
+    respostaEnviada: fluxoIniciado
+      ? [textoAgente, ...fluxoIniciado.mensagens].filter((s) => s).join('\n\n')
+      : fusao.textoEnviado,
   };
 }
 

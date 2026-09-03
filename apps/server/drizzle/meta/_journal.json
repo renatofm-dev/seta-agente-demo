@@ -99,6 +99,13 @@
       "when": 1788303962770,
       "tag": "0013_disparos-carteira",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1788387550089,
+      "tag": "0014_cobranca-pagamento",
+      "breakpoints": true
     }
   ]
 }

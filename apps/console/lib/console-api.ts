@@ -199,6 +199,49 @@ export interface Metricas {
   custoTotal: number;
 }
 
+/** 014: cobrança gerada pelo fluxo de pagamento (espelho de /api/console/cobrancas). */
+export type StatusCobranca =
+  | 'aguardando_aprovacao'
+  | 'emitindo'
+  | 'emitida'
+  | 'paga'
+  | 'expirada'
+  | 'cancelada'
+  | 'recusada'
+  | 'falha'
+  | 'estornada';
+
+export interface CobrancaView {
+  id: string;
+  conversaId: string;
+  contratoId: string;
+  status: StatusCobranca;
+  metodo: 'boleto' | 'pix' | 'cartao';
+  valorCentavos: number;
+  vencimentoPsp: string;
+  psp: string;
+  pspCobrancaId: string | null;
+  urlFatura: string | null;
+  urlBoleto: string | null;
+  motivo: string | null;
+  aprovadoPor: string | null;
+  pagoEm: string | null;
+  criadoEm: string;
+  atualizadoEm: string;
+  waId: string;
+  contatoNome: string | null;
+  ticketId: string | null;
+  parcelas: string | null;
+}
+
+export interface CobrancasResposta {
+  psp: string;
+  ambiente: string;
+  simuladorAtivo: boolean;
+  contagens: Partial<Record<StatusCobranca, number>>;
+  cobrancas: CobrancaView[];
+}
+
 async function json<T>(res: Response): Promise<T> {
   if (!res.ok) throw new Error(`${res.status}: ${await res.text()}`);
   return res.json() as Promise<T>;
@@ -283,6 +326,36 @@ export const api = {
     ),
   metricas: (dias: 7 | 30) =>
     fetch(`/api/console/metricas?dias=${dias}`).then((r) => json<Metricas>(r)),
+  cobrancas: (status?: StatusCobranca) =>
+    fetch(`/api/console/cobrancas${status ? `?status=${status}` : ''}`).then((r) =>
+      json<CobrancasResposta>(r),
+    ),
+  aprovarCobranca: (id: string) =>
+    fetch(`/api/console/cobrancas/${id}/aprovar`, { method: 'POST' }).then((r) =>
+      json<{ ok: boolean }>(r),
+    ),
+  recusarCobranca: (id: string, motivo: string) =>
+    fetch(`/api/console/cobrancas/${id}/recusar`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ motivo }),
+    }).then((r) => json<{ ok: boolean }>(r)),
+  simularPagamento: (id: string) =>
+    fetch(`/api/console/cobrancas/${id}/simular-pagamento`, { method: 'POST' }).then((r) =>
+      json<{ ok: boolean; psp: string }>(r),
+    ),
+};
+
+export const STATUS_COBRANCA_LABEL: Record<StatusCobranca, string> = {
+  aguardando_aprovacao: 'Aguardando aprovação',
+  emitindo: 'Gerando',
+  emitida: 'Aguardando pagamento',
+  paga: 'Paga',
+  expirada: 'Expirada',
+  cancelada: 'Cancelada',
+  recusada: 'Recusada',
+  falha: 'Falha',
+  estornada: 'Estornada',
 };
 
 export const STATUS_LABEL: Record<TicketResumo['status'], string> = {

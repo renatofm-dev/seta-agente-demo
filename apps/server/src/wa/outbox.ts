@@ -37,6 +37,17 @@ export type OutboundItem =
       readonly autor: 'atendente';
       /** #45: user.id de quem respondeu — propaga à mensagem para a thread. */
       readonly atendenteId: string;
+    }
+  | {
+      /**
+       * 014: mensagem do bot FORA de um turno (worker de emissão, confirmação de
+       * pagamento pelo webhook): dedupe por chave (`cobranca:{id}:{seq}`).
+       */
+      readonly conversaId: string;
+      readonly turnoId?: undefined;
+      readonly chave: string;
+      readonly texto: string;
+      readonly autor: 'bot';
     };
 
 /**
@@ -48,17 +59,20 @@ export async function inserirOutbound(
   db: Pick<Db, 'insert'>,
   item: OutboundItem,
 ): Promise<{ duplicada: boolean; outboxId?: string }> {
-  const manual = item.turnoId === undefined;
+  const semTurno = item.turnoId === undefined;
+  const dedupeKey = semTurno
+    ? `${item.autor === 'atendente' ? 'manual' : 'bot'}:${item.chave}`
+    : `${item.turnoId}:${item.seq}`;
   const [linha] = await db
     .insert(outbox)
     .values({
       id: newTraceId(),
       conversaId: item.conversaId,
-      turnoId: manual ? null : item.turnoId,
-      seq: manual ? 1 : item.seq,
-      dedupeKey: manual ? `manual:${item.chave}` : `${item.turnoId}:${item.seq}`,
+      turnoId: semTurno ? null : item.turnoId,
+      seq: semTurno ? 1 : item.seq,
+      dedupeKey,
       autor: item.autor ?? 'bot',
-      atendenteId: manual ? item.atendenteId : null,
+      atendenteId: semTurno && item.autor === 'atendente' ? item.atendenteId : null,
       texto: item.texto,
     })
     .onConflictDoNothing({ target: outbox.dedupeKey })

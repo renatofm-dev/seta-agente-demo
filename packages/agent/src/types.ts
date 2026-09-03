@@ -37,7 +37,9 @@ export type TraceEvento =
   | { tipo: 'fallback'; motivo: string }
   | { tipo: 'escalado' }
   /** #46: turno superado — resposta descartada; o próximo turno agrega tudo. */
-  | { tipo: 'descartado'; motivo: string };
+  | { tipo: 'descartado'; motivo: string }
+  /** 014: passo do fluxo de cobrança que atendeu (ou iniciou) o turno. */
+  | { tipo: 'cobranca'; etapa: string; acao: string; cobrancaId?: string };
 
 /** Efeitos do nó responder — implementados pelo server (outbox, resumo). */
 export interface ResponderEfeitos {
@@ -76,6 +78,8 @@ export interface ResultadoTurno {
   readonly tokensEntrada: number;
   readonly tokensSaida: number;
   readonly latenciaMs: number;
+  /** 014: o agente chamou `iniciar_pagamento` — o server inicia o fluxo após a resposta. */
+  readonly fluxoPagamentoSolicitado?: boolean;
 }
 
 export interface AgentRuntimeDeps {

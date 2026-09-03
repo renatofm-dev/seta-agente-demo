@@ -2,6 +2,11 @@ import { createOpenAICompatibleProvider } from '@seta/ai-provider';
 import { loadClientConfig } from '@seta/client-config';
 import { createPgConnector } from '@seta/erp-connector';
 import { createLogger } from '@seta/observability';
+import {
+  createAsaasProvider,
+  createSimulatedPaymentProvider,
+  type PaymentProvider,
+} from '@seta/payment-provider';
 import { createExecutor, loadCatalog } from '@seta/query-catalog';
 import {
   createLogGateway,
@@ -15,6 +20,10 @@ import { startBoss } from './boss.js';
 import { createDb } from './db/index.js';
 import { loadEnv } from './env.js';
 import { createDrizzleObsEmitter } from './obs-emitter.js';
+import { createExecutorConciliado } from './pagamentos/conciliacao.js';
+import { registerCobrancaEmitirWorker } from './pagamentos/emitir.js';
+import { registerCobrancaEventoWorker } from './pagamentos/eventos.js';
+import { createPagamentosRepo } from './pagamentos/repo.js';
 import { createDrizzleQueryEventSink } from './query-event-sink.js';
 import { createPgVectorStore } from './rag/pgvector-store.js';
 import { createSkillRegistry } from './skills/registry.js';
@@ -35,12 +44,24 @@ const boss = await startBoss(env.DATABASE_URL, logger);
 // catálogo de queries: única via de dado do ERP (003)
 const catalog = loadCatalog(env.CATALOG_DIR);
 const connector = createPgConnector({ url: env.ERP_DATABASE_URL });
-const executor = createExecutor({
-  catalog,
-  connector,
-  sink: createDrizzleQueryEventSink(db),
-  logger,
-});
+// 014: a conciliação faz as leituras financeiro.* refletirem as baixas
+// registradas aqui (o ERP é read-only); em produção o ERP faz a baixa e a
+// camada some — por isso fica atrás do port, transparente para todos
+const pagamentosRepo = createPagamentosRepo(db);
+const executor = createExecutorConciliado(
+  createExecutor({
+    catalog,
+    connector,
+    sink: createDrizzleQueryEventSink(db),
+    logger,
+  }),
+  pagamentosRepo,
+);
+
+// 014: PSP (ADR 0001) — sem chave, simulado; a base URL decide sandbox/produção
+const psp: PaymentProvider = env.ASAAS_API_KEY
+  ? createAsaasProvider({ baseUrl: env.ASAAS_BASE_URL, apiKey: env.ASAAS_API_KEY })
+  : createSimulatedPaymentProvider();
 
 // provedor LLM (005): ausente ⇒ agente responde fallback honesto
 const provider =
@@ -103,18 +124,30 @@ await registerDebounceWorker({
     turnoTimeoutMs: env.AGENT_TURN_TIMEOUT_MS,
     resumoACadaTurnos: env.AGENT_RESUMO_A_CADA_TURNOS,
     debounceMs: env.WA_DEBOUNCE_MS, // #46: reagendamento após turno descartado
+    pagamentos: { repo: pagamentosRepo, psp, env }, // 014
   }),
   logger,
 });
 await registerOutboxWorker({ db, boss, gateway, logger });
 await registerOutboxSweeper({ db, boss, gateway, logger });
 await registerDisparoWorker({ db, boss, gateway, logger }); // 013
+// 014: emissão no PSP e eventos do webhook
+await registerCobrancaEmitirWorker({
+  db,
+  boss,
+  repo: pagamentosRepo,
+  psp,
+  logger,
+  nomeCliente: clientConfig.nome,
+});
+await registerCobrancaEventoWorker({ db, boss, repo: pagamentosRepo, gateway, env, logger });
 
 const app = buildApp({
   env,
   clientConfig,
   wa: { db, boss },
   console: { auth, executor, registry, provider, templateApi },
+  pagamentos: { repo: pagamentosRepo, psp },
 });
 
 try {
@@ -126,6 +159,9 @@ try {
       gateway: env.WA_ACCESS_TOKEN ? 'meta' : 'log-only',
       llm: provider ? provider.modelId : 'não configurado (fallback)',
       toolsCatalogo: catalog.list().filter((e) => e.tool.expose).length,
+      // 014: confundir sandbox com produção é mandar cobrança de verdade
+      psp: psp.nome === 'asaas' ? `asaas-${psp.ambiente}` : 'simulado',
+      pagamentos: clientConfig.modulos.pagamentos,
     },
     'server no ar',
   );

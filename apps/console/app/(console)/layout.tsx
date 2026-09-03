@@ -58,6 +58,12 @@ export default function ConsoleLayout({ children }: { children: React.ReactNode 
               Disparos
             </Link>
             <Link
+              href="/cobrancas"
+              className={pathname === '/cobrancas' ? 'font-medium' : 'text-muted-foreground'}
+            >
+              Cobranças
+            </Link>
+            <Link
               href="/metricas"
               className={pathname === '/metricas' ? 'font-medium' : 'text-muted-foreground'}
             >

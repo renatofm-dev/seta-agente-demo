@@ -2,6 +2,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { AIProvider } from '@seta/ai-provider';
 import type { ClientConfig } from '@seta/client-config';
 import { createLogger, newTraceId, type ObsEmitter } from '@seta/observability';
+import type { PaymentProvider } from '@seta/payment-provider';
 import type { Executor } from '@seta/query-catalog';
 import type { SkillRegistry } from '@seta/skills';
 import type { TemplateApi } from '@seta/wa-meta';
@@ -15,6 +16,9 @@ import { consoleRoutes } from './console-routes.js';
 import type { Db } from './db/index.js';
 import { disparosRoutes } from './disparos-routes.js';
 import type { Env } from './env.js';
+import { cobrancasRoutes } from './pagamentos/cobrancas-routes.js';
+import type { PagamentosRepo } from './pagamentos/repo.js';
+import { webhookPspRoutes } from './pagamentos/webhook-routes.js';
 import { devRoutes } from './wa/dev-routes.js';
 import { waRoutes } from './wa/routes.js';
 
@@ -42,6 +46,12 @@ export interface ConsoleDeps {
   readonly templateApi?: TemplateApi | null;
 }
 
+/** 014: webhook do PSP (com `wa`) e console de cobranças (com `console`). */
+export interface PagamentosDeps {
+  readonly repo: PagamentosRepo;
+  readonly psp: PaymentProvider;
+}
+
 export interface BuildAppOptions {
   readonly env: Env;
   readonly clientConfig: ClientConfig;
@@ -49,9 +59,17 @@ export interface BuildAppOptions {
   readonly wa?: WaDeps;
   /** Sem deps do console, as rotas /api/* não são registradas. */
   readonly console?: ConsoleDeps;
+  /** Sem deps de pagamentos, nem webhook nem /api/console/cobrancas existem. */
+  readonly pagamentos?: PagamentosDeps;
 }
 
-export function buildApp({ env, clientConfig, wa, console: consoleDeps }: BuildAppOptions): App {
+export function buildApp({
+  env,
+  clientConfig,
+  wa,
+  console: consoleDeps,
+  pagamentos,
+}: BuildAppOptions): App {
   const app = fastify({
     loggerInstance: createLogger({ name: 'server', level: env.LOG_LEVEL }),
     genReqId: () => newTraceId(),
@@ -66,6 +84,7 @@ export function buildApp({ env, clientConfig, wa, console: consoleDeps }: BuildA
 
   if (wa) {
     app.register(waRoutes, { env, db: wa.db, boss: wa.boss });
+    if (pagamentos) app.register(webhookPspRoutes, { env, db: wa.db, boss: wa.boss });
     if (env.DEV_SIMULATOR) {
       // com console (auth) presente, o simulador exige sessão — plano B da
       // demo fica atrás de login quando exposto em produção (011)
@@ -88,6 +107,16 @@ export function buildApp({ env, clientConfig, wa, console: consoleDeps }: BuildA
         auth: consoleDeps.auth,
         templateApi: consoleDeps.templateApi ?? null,
       });
+      if (pagamentos) {
+        app.register(cobrancasRoutes, {
+          env,
+          db: wa.db,
+          boss: wa.boss,
+          auth: consoleDeps.auth,
+          repo: pagamentos.repo,
+          psp: pagamentos.psp,
+        });
+      }
       if (consoleDeps.registry) {
         app.register(aprendizadoRoutes, {
           db: wa.db,

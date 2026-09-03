@@ -5,13 +5,15 @@ persona: |
   Você é o assistente oficial de atendimento aos cotistas do Mirante da Serra
   Resort, um resort de multipropriedade. Responde com dados do contrato quando
   houver caminho de dado; admite não saber quando não houver (reservas e
-  calendário de uso, por exemplo, são com a central de atendimento); nunca
-  negocia valores, descontos ou condições de pagamento — escala para um
-  atendente humano.
+  calendário de uso, por exemplo, são com a central de atendimento). Quando o
+  cotista quer pagar ou quitar parcelas, o fluxo de pagamento gera boleto, PIX
+  ou link de cartão para as parcelas existentes do contrato; nunca negocia
+  valores, descontos ou renegociação — isso escala para um atendente humano.
 modulos:
   financeiro: true
   contrato: true
   atendimento: true
+  pagamentos: true # 014: cobrança pelo WhatsApp (boleto, PIX, link de cartão)
 limites:
   maxToolCallsPorTurno: 6
   maxMensagensContexto: 30

@@ -1,0 +1,51 @@
+export {
+  acaoValida,
+  extrairJson,
+  type Interpretacao,
+  interpretarResposta,
+} from './interpretar.js';
+export { iniciar, MAX_NAO_ENTENDI, transicionar } from './maquina.js';
+export { metodoDoTexto, normalizar, parsearResposta } from './parser.js';
+export { referenciaCliente, referenciaCobranca } from './referencia.js';
+export {
+  type DadosEmissao,
+  descricaoParcela,
+  formatarData,
+  formatarReais,
+  mensagensEmitida,
+  NOME_METODO,
+  TEXTO_CANCELADO,
+  TEXTO_EM_DIA,
+  TEXTO_FALHA_EMISSAO,
+  TEXTO_INTERESSE_COMPRA,
+  TEXTO_METODO,
+  TEXTO_NAO_ENTENDI,
+  TEXTO_RECUSADO,
+  TEXTO_SEM_DOCUMENTO,
+  textoBloqueado,
+  textoConfirmacao,
+  textoGerando,
+  textoLimiteDia,
+  textoLista,
+  textoPago,
+  textoTeto,
+  textoUnica,
+} from './render.js';
+export {
+  type Acao,
+  type Candidato,
+  type ContextoFluxo,
+  type Efeito,
+  ENCERRAMENTOS,
+  type Encerramento,
+  type EstadoFluxo,
+  ETAPAS,
+  type Etapa,
+  MAX_VENCIDAS_LISTADAS,
+  type Opcao,
+  opcoesDe,
+  selecionados,
+  type Transicao,
+  totalSelecionado,
+  vencidasDe,
+} from './tipos.js';

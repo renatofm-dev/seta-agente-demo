@@ -12,6 +12,21 @@ export function iniciais(nome: string | null | undefined): string {
   return letras.join('') || '?';
 }
 
+/** 014: centavos → "R$ 1.234,56" (espelho client-side do @seta/cobranca). */
+export function reaisDeCentavos(centavos: number): string {
+  const abs = Math.abs(centavos);
+  const inteiros = Math.floor(abs / 100)
+    .toString()
+    .replaceAll(/\B(?=(\d{3})+(?!\d))/g, '.');
+  return `${centavos < 0 ? '-' : ''}R$ ${inteiros},${String(abs % 100).padStart(2, '0')}`;
+}
+
+/** YYYY-MM-DD → DD/MM/AAAA (datas do PSP chegam como string de data). */
+export function dataCurta(iso: string | null | undefined): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso ?? '');
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : '—';
+}
+
 /** wa_id E.164 sem "+" → telefone legível (BR: +55 11 99999-0001). */
 export function telefoneBonito(waId: string | null | undefined): string {
   const d = (waId ?? '').replaceAll(/\D/g, '');

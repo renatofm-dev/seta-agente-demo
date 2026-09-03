@@ -66,6 +66,30 @@ reembolso do seed (tool `status_cancelamento`).
 11. Página **Métricas**: conversas/dia, taxa de resolução sem humano,
     escalonamentos por motivo, custo estimado do dia.
 
+## Ato 5 — Cobrança de ponta a ponta (014, ~3 min)
+
+Do número **…0002** (inadimplente), com a página **Cobranças** aberta no
+browser do atendente:
+
+12. **"quero pagar"** → o agente de cobrança lista as parcelas vencidas + a
+    próxima (valores reais do ERP) e "Todas as vencidas".
+13. **"1"** → escolhe a mais antiga; **"2"** → PIX; **"sim"** → "gerando seu
+    PIX" e, em seguida, DUAS mensagens: a explicação e o código copia-e-cola
+    sozinho (é só copiar). Narrar: "o valor nunca vem do modelo — veio do
+    ERP pelo catálogo; o modelo só interpretou a escolha".
+14. Na página **Cobranças** a cobrança aparece como "Aguardando pagamento" com o
+    link. Clicar **Simular pagamento** (sandbox do Asaas: `receiveInCash` →
+    webhook real; PSP simulado: evento injetado no mesmo caminho).
+15. O celular recebe **"Pagamento confirmado! ✅ …"** e a cobrança vira "Paga".
+    Perguntar **"o que está vencido?"** → a parcela paga **não aparece mais** e o
+    resumo da inadimplência foi recalculado. Narrar: "a baixa está na nossa
+    tabela `pagamento`, espelhando o que o ERP faria; o ERP continua read-only".
+16. Bônus de guardrail: com `PAGAMENTO_TETO_SEM_HITL_CENTAVOS` baixo, "todas as
+    vencidas" no cartão cai em **"Aguardando aprovação"** — aprovar no console
+    emite o link; do número **…0003** (distrato em análise) "quero pagar"
+    bloqueia e escala. E **"quero comprar mais uma cota"** vai para o comercial
+    com texto próprio, não mais "outro canal".
+
 Fechamento: "tudo isso rodando numa VPS de €4, com o LLM atrás de um port —
 levar para dentro de casa é trocar duas variáveis de ambiente."
 

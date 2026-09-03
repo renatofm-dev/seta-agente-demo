@@ -1,11 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import type { MensagemThread } from '../lib/console-api';
 import {
+  dataCurta,
   estadoJanela,
   horarioLista,
   iniciais,
   mesclarMensagens,
   prefixoSeAplica,
+  reaisDeCentavos,
   separadorDia,
   telefoneBonito,
 } from '../lib/formatos';
@@ -94,5 +96,16 @@ describe('formatos da tela de atendimento (#45)', () => {
       msg({ id: 'b', autor: 'contato', criadoEm: '2026-09-01T10:05:00' }),
     ];
     expect(prefixoSeAplica(minhaEContato, 'eu')).toBe(false);
+  });
+});
+
+describe('014 — formatos da página Cobranças', () => {
+  it('centavos → reais e data do PSP → DD/MM/AAAA', () => {
+    expect(reaisDeCentavos(85050)).toBe('R$ 850,50');
+    expect(reaisDeCentavos(123456789)).toBe('R$ 1.234.567,89');
+    expect(reaisDeCentavos(5)).toBe('R$ 0,05');
+    expect(dataCurta('2026-09-05')).toBe('05/09/2026');
+    expect(dataCurta('2026-09-05T00:00:00.000Z')).toBe('05/09/2026');
+    expect(dataCurta(null)).toBe('—');
   });
 });
