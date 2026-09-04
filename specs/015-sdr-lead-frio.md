@@ -109,6 +109,15 @@ redige sobre números que já vieram prontos.
   `preço especial`, `condição especial`, `baixar o preço` e **`faço por`** — este último
   pega desprevenido, porque é fraseado comercial neutro que o guardrail trata como oferta
   de condição. Use "fecho em R$ X" / "está R$ X". `RE_PERCENTUAL` barra qualquer `%`.
+- **Lacuna conhecida — percentual por extenso não é barrado.** `RE_PERCENTUAL` exige
+  dígito, então "aplico **três por cento**" passa; e como `aplicar` não está no
+  `RE_CONDICAO_ESPECIAL`, não há segunda rede. Passa **em qualquer contexto**, inclusive
+  sem nenhuma tool no turno. Na raia do cotista o classificador de intenção
+  (`negociar_preco`) pega antes; na raia do SDR, que negocia, é exposição real. Mitigado
+  pelo desenho — as mensagens de oferta são renderizadas pela máquina de estados, não pelo
+  LLM — mas a fase de qualificação é texto livre. Travado em teste
+  (`015: alçada > LACUNA: percentual por extenso NÃO é barrado`); **decisão pendente** se
+  corrige o `RE_PERCENTUAL` (afeta também a raia do cotista) ou se fica só a mitigação.
 - As duas raias são **disjuntas por construção** (`vinculo == null`): o SDR não consegue
   regredir o fluxo do cotista.
 - Mensagens de valor são determinísticas (calculadas no servidor), não rascunhos do LLM.
