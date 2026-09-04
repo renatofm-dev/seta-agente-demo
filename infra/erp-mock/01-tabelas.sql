@@ -35,6 +35,16 @@ CREATE TABLE IF NOT EXISTS modelocota (
   qtdperiodos   integer NOT NULL -- períodos de uso que a cota confere
 );
 
+-- Preço de tabela por combinação tier × modelo de uso (015). No espelho real o
+-- valor vem da tabela de vendas; aqui é o grão mínimo que sustenta a oferta do
+-- SDR. Em centavos, como todo dinheiro do sistema.
+CREATE TABLE IF NOT EXISTS tabelapreco (
+  idgrupocota   integer NOT NULL REFERENCES grupocota (idgrupocota),
+  idmodelocota  integer NOT NULL REFERENCES modelocota (idmodelocota),
+  valorcentavos bigint NOT NULL,
+  PRIMARY KEY (idgrupocota, idmodelocota)
+);
+
 CREATE TABLE IF NOT EXISTS cotauh (
   idcotauh            integer PRIMARY KEY,
   idunidadehoteleira  integer NOT NULL REFERENCES unidadehoteleira (idunidadehoteleira),
