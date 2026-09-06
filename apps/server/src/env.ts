@@ -1,7 +1,19 @@
 import { z } from 'zod';
 
+/**
+ * P-28: valores que só servem em dev. Em NODE_ENV=production o boot RECUSA
+ * qualquer um deles — o servidor exposto nunca sobe com segredo de exemplo.
+ */
+export const DEFAULTS_DE_DEV = {
+  WA_VERIFY_TOKEN: 'dev-verify-token',
+  WA_APP_SECRET: 'dev-app-secret',
+  BETTER_AUTH_SECRET: 'dev-secret-trocar-em-prod',
+} as const;
+/** Senhas do init de dev do Postgres — nunca numa URL de banco em produção. */
+export const SENHAS_DE_DEV = ['app_owner_dev', 'erp_ro_dev'] as const;
+
 /** Contrato de ambiente do server. Env inválida derruba o boot — nunca sobe "meio configurado". */
-export const EnvSchema = z.object({
+export const EnvSchemaBase = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   PORT: z.coerce.number().int().min(1).max(65_535).default(3001),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
@@ -106,6 +118,27 @@ export const EnvSchema = z.object({
     .enum(['true', 'false'])
     .default('true')
     .transform((v) => v === 'true'),
+});
+export const EnvSchema = EnvSchemaBase.superRefine((env, ctx) => {
+  if (env.NODE_ENV !== 'production') return;
+  for (const [chave, valorDev] of Object.entries(DEFAULTS_DE_DEV)) {
+    if (env[chave as keyof typeof DEFAULTS_DE_DEV] === valorDev) {
+      ctx.addIssue({
+        code: 'custom',
+        path: [chave],
+        message: `valor de desenvolvimento não é aceito em produção — defina ${chave} no .env.prod`,
+      });
+    }
+  }
+  for (const chave of ['DATABASE_URL', 'ERP_DATABASE_URL'] as const) {
+    if (SENHAS_DE_DEV.some((s) => env[chave].includes(s))) {
+      ctx.addIssue({
+        code: 'custom',
+        path: [chave],
+        message: `senha de desenvolvimento na URL do banco em produção — defina ${chave} com a senha real`,
+      });
+    }
+  }
 });
 export type Env = z.infer<typeof EnvSchema>;
 

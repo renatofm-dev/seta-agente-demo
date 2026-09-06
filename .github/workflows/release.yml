@@ -1,7 +1,12 @@
 # Build + push das imagens de produção (011). A VPS nunca builda — só pull.
+# P-30: roda DEPOIS do workflow `ci` terminar com sucesso no main — push com
+# teste quebrado não gera imagem. `workflow_dispatch` continua disponível para
+# republicar um SHA à mão.
 name: release
 on:
-  push:
+  workflow_run:
+    workflows: [ci]
+    types: [completed]
     branches: [main]
   workflow_dispatch:
 
@@ -11,7 +16,12 @@ permissions:
 
 jobs:
   imagens:
+    # só publica se o CI que disparou este run passou (ou se foi pedido à mão)
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
+    env:
+      # o SHA do commit que o CI validou — não o HEAD do momento do build
+      SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
     strategy:
       fail-fast: false # falha de uma imagem não cancela o build da outra
       matrix:
@@ -22,6 +32,8 @@ jobs:
             dockerfile: infra/docker/console.Dockerfile
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.SHA }}
       - uses: docker/setup-buildx-action@v3
       - uses: docker/login-action@v3
         with:
@@ -35,6 +47,6 @@ jobs:
           push: true
           tags: |
             ghcr.io/${{ github.repository_owner }}/seta-agente-${{ matrix.nome }}:latest
-            ghcr.io/${{ github.repository_owner }}/seta-agente-${{ matrix.nome }}:${{ github.sha }}
+            ghcr.io/${{ github.repository_owner }}/seta-agente-${{ matrix.nome }}:${{ env.SHA }}
           cache-from: type=gha,scope=${{ matrix.nome }}
           cache-to: type=gha,scope=${{ matrix.nome }},mode=max

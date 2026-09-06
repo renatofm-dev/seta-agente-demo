@@ -68,7 +68,7 @@ export interface TurnoInput {
   readonly session: SessionCtx;
   readonly persona: string;
   readonly resumo: string | null;
-  /** ids+conteúdo de skills top-k (009; stub [] até lá). */
+  /** ids+conteúdo das skills ativas top-k (009) — [] quando não há registry. */
   readonly skills: readonly { id: string; conteudo: string }[];
   readonly historico: readonly ChatMessage[];
   readonly textoUsuario: string;

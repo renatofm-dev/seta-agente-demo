@@ -43,18 +43,6 @@ export interface TurnoHandler {
   processar(turno: TurnoPronto): Promise<void>;
 }
 
-/** Stub da 005: o runtime LangGraph chega lá; aqui só registra o turno pronto. */
-export function turnoHandlerLog(logger: Logger): TurnoHandler {
-  return {
-    async processar(t) {
-      logger.info(
-        { turnoId: t.id, conversaId: t.conversaId },
-        'turno agregado — runtime do agente chega na spec 005',
-      );
-    },
-  };
-}
-
 export interface DebounceDeps {
   readonly db: Db;
   readonly boss: PgBoss;
