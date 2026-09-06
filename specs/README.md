@@ -31,6 +31,17 @@ autônomo sobre WhatsApp, rodando local (repo privado + homelab), fora da org se
 3. 007 (console mínimo) → 006 → 009 (o diferencial da demo).
 4. 008 → 010 → 011 e ensaio do roteiro.
 
+## Depois da POC (012 em diante)
+| Spec | O que | Estado em 06/09/2026 |
+|---|---|---|
+| 012 | Domínio de multipropriedade (corrige a 002 a partir do espelho real) | ✅ no `main` |
+| 013 | Disparos de template para a carteira (reverte o corte da 004) | ✅ código pronto — PR #59 |
+| 014 | Compra e cobrança pelo WhatsApp (PSP Asaas, ADR 0001) | ✅ código pronto — PR #59 |
+| 015 | Agente SDR para lead frio (alçada de 3%) | 🟡 base de dados — PR #60 |
+| 016+ | Conexão ao espelho real, embeddings, KB de produtos, release por cliente, operação, LGPD | planejadas |
+
+A ordem, o calendário e as decisões pendentes estão em **[`docs/roadmap.md`](../docs/roadmap.md)**.
+
 ## Convenções
 - Toda fronteira valida com Zod. IDs UUIDv7. Logs pino estruturados com traceId.
 - Interfaces dos ports (`AIProvider`, `DbConnector`, `VectorStore`, `SkillRegistry`)
