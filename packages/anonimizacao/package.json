@@ -1,0 +1,20 @@
+{
+  "name": "@seta/anonimizacao",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "modelo:baixar": "node scripts/baixar-modelo.mjs"
+  },
+  "dependencies": {
+    "@huggingface/transformers": "^4.2.0",
+    "@seta/ai-provider": "workspace:*",
+    "zod": "^4.4.3"
+  }
+}

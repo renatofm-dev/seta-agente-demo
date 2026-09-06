@@ -26,3 +26,6 @@
   recém-lançada; migrar só com aprovação explícita.
 - Deps além da lista travada aprovadas em 2026-08-26: `yaml` (parser p/ client-config e
   catalog), `uuid` (UUIDv7) e `pg` (driver do Drizzle/Postgres).
+- `@huggingface/transformers` aprovada em 2026-09-06 (spec 016): NER local para
+  anonimização do que sai para a LLM — ONNX em Node, sem Python; modelo embarcado na
+  imagem. Só `packages/anonimizacao` pode importar.

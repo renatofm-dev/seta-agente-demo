@@ -80,10 +80,12 @@ export async function interpretarResposta(
   provider: AIProvider,
   estado: EstadoFluxo,
   texto: string,
+  opts?: { readonly traceId?: string },
 ): Promise<Interpretacao> {
   try {
     const res = await provider.chat({
       signal: AbortSignal.timeout(TIMEOUT_MS),
+      traceId: opts?.traceId, // 016
       temperature: 0,
       maxOutputTokens: 40,
       messages: [

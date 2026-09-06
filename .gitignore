@@ -12,6 +12,9 @@ out/
 .env.*
 !.env.example
 
+# modelos ML baixados (016: NER da anonimização — `pnpm anonimizacao:modelo`)
+.modelos/
+
 # logs & misc
 *.log
 .DS_Store

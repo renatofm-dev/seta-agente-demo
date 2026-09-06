@@ -75,6 +75,30 @@ export const EnvSchema = z.object({
     .string()
     .regex(/^[a-z0-9_]+$/)
     .optional(),
+  /**
+   * 016: anonimização do que sai para a LLM (decorator do AIProvider). Ligada por
+   * default — desligar é decisão explícita. NER local via @huggingface/transformers;
+   * sem o modelo no cache, o boot segue só com regex + dicionário e loga.
+   */
+  LLM_ANONIMIZAR: z
+    .enum(['true', 'false'])
+    .default('true')
+    .transform((v) => v === 'true'),
+  ANONIMIZACAO_NER: z
+    .enum(['true', 'false'])
+    .default('true')
+    .transform((v) => v === 'true'),
+  ANONIMIZACAO_NER_MODELO: z
+    .string()
+    .min(1)
+    .default('Xenova/distilbert-base-multilingual-cased-ner-hrl'),
+  /** Cache dos modelos (a imagem de produção já traz o modelo aqui). */
+  ANONIMIZACAO_MODELOS_DIR: z.string().min(1).default('.modelos'),
+  /** Permite baixar do Hugging Face se o modelo não estiver no cache. */
+  ANONIMIZACAO_NER_DOWNLOAD: z
+    .enum(['true', 'false'])
+    .default('true')
+    .transform((v) => v === 'true'),
 });
 export type Env = z.infer<typeof EnvSchema>;
 

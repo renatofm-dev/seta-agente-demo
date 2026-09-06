@@ -68,6 +68,8 @@ export interface AgentTurnoHandlerDeps {
   readonly debounceMs?: number;
   /** 014: fluxo de cobrança; ausente ⇒ turno igual ao de antes da 014. */
   readonly pagamentos?: PagamentosTurnoDeps;
+  /** 016: acumulador do decorator de anonimização — drenado para o trace do turno. */
+  readonly anonimizacao?: { consumir(traceId: string): TraceEvento | null };
 }
 
 /** 014: o que o agente de cobrança precisa além do que o turno já tem. */
@@ -205,6 +207,9 @@ export function createAgentTurnoHandler(deps: AgentTurnoHandlerDeps): TurnoHandl
         // #46/#47: turno com resposta descartada fica VISÍVEL no trace
         // (tokens/latência foram reais e entram nas métricas)
         const eventos: TraceEvento[] = [...resultado.eventos];
+        // 016: quanto foi anonimizado neste turno (classificador + agente + resumo)
+        const anon = deps.anonimizacao?.consumir(traceId);
+        if (anon) eventos.push(anon);
         if (resultado.fusao === 'fundido') {
           eventos.push({
             tipo: 'descartado',
@@ -364,7 +369,7 @@ async function processarComAgente(
       await enviar(texto);
     },
     atualizarResumoSePreciso: async () => {
-      const uso = await atualizarResumo(deps, conv.id);
+      const uso = await atualizarResumo(deps, conv.id, traceId);
       usageExtra.entrada += uso.tokensEntrada;
       usageExtra.saida += uso.tokensSaida;
     },
@@ -392,6 +397,7 @@ async function processarComAgente(
     deps.provider,
     t.textoAgregado,
     deps.clientConfig.guardrails.temasSensiveis,
+    { traceId }, // 016
   ).catch(() => ({ intencao: 'outro' as const, tokensEntrada: 0, tokensSaida: 0 }));
   const intencao = cls.intencao;
   usageExtra.entrada += cls.tokensEntrada;
@@ -702,6 +708,7 @@ const TIMEOUT_RESUMO_MS = 20_000;
 async function atualizarResumo(
   deps: AgentTurnoHandlerDeps,
   conversaId: string,
+  traceId: string,
 ): Promise<{ tokensEntrada: number; tokensSaida: number }> {
   const [conv] = await deps.db
     .update(conversa)
@@ -724,6 +731,7 @@ async function atualizarResumo(
   try {
     const res = await deps.provider.chat({
       signal: AbortSignal.timeout(TIMEOUT_RESUMO_MS), // pendurado não segura o turno (#27)
+      traceId, // 016
       messages: [
         {
           role: 'system',

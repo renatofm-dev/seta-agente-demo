@@ -14,6 +14,7 @@ import {
   createMetaTemplateApi,
   type OutboundGateway,
 } from '@seta/wa-meta';
+import { montarProviderAnonimizado } from './anonimizacao.js';
 import { buildApp } from './app.js';
 import { createAuth } from './auth.js';
 import { startBoss } from './boss.js';
@@ -64,7 +65,7 @@ const psp: PaymentProvider = env.ASAAS_API_KEY
   : createSimulatedPaymentProvider();
 
 // provedor LLM (005): ausente ⇒ agente responde fallback honesto
-const provider =
+const providerBase =
   env.LLM_BASE_URL && env.LLM_API_KEY && env.LLM_MODEL
     ? createOpenAICompatibleProvider({
         baseUrl: env.LLM_BASE_URL,
@@ -73,6 +74,13 @@ const provider =
         embeddingModel: env.EMBEDDING_MODEL,
       })
     : null;
+// 016: tudo que sai para a LLM passa pelo decorator de anonimização — um
+// ponto de corte cobre os cinco chamadores sem que nenhum deles mude
+const anonimizacao =
+  providerBase && env.LLM_ANONIMIZAR
+    ? await montarProviderAnonimizado({ env, db, logger, provider: providerBase })
+    : null;
+const provider = anonimizacao?.provider ?? providerBase;
 
 const gateway: OutboundGateway =
   env.WA_ACCESS_TOKEN && env.WA_PHONE_NUMBER_ID
@@ -125,6 +133,7 @@ await registerDebounceWorker({
     resumoACadaTurnos: env.AGENT_RESUMO_A_CADA_TURNOS,
     debounceMs: env.WA_DEBOUNCE_MS, // #46: reagendamento após turno descartado
     pagamentos: { repo: pagamentosRepo, psp, env }, // 014
+    ...(anonimizacao ? { anonimizacao: anonimizacao.acumulador } : {}), // 016
   }),
   logger,
 });
@@ -158,6 +167,8 @@ try {
       simulador: env.DEV_SIMULATOR,
       gateway: env.WA_ACCESS_TOKEN ? 'meta' : 'log-only',
       llm: provider ? provider.modelId : 'não configurado (fallback)',
+      // 016: o que fica entre o texto e o provedor — "off" é decisão explícita
+      anonimizacao: anonimizacao ? anonimizacao.detectores.join('+') : 'off',
       toolsCatalogo: catalog.list().filter((e) => e.tool.expose).length,
       // 014: confundir sandbox com produção é mandar cobrança de verdade
       psp: psp.nome === 'asaas' ? `asaas-${psp.ambiente}` : 'simulado',

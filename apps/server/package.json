@@ -12,6 +12,7 @@
   "dependencies": {
     "@seta/agent": "workspace:*",
     "@seta/ai-provider": "workspace:*",
+    "@seta/anonimizacao": "workspace:*",
     "@seta/client-config": "workspace:*",
     "@seta/cobranca": "workspace:*",
     "@seta/crm": "workspace:*",

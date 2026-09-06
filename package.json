@@ -21,6 +21,7 @@
     "db:seed": "pnpm db:seed:erp && pnpm --filter @seta/server db:seed:app",
     "db:seed:erp": "tsc -b && node --env-file-if-exists=.env infra/erp-mock/seed.ts",
     "kb:ingest": "tsc -b && pnpm --filter @seta/server kb:ingest",
+    "anonimizacao:modelo": "pnpm --filter @seta/anonimizacao modelo:baixar",
     "demo:seed": "pnpm db:seed && pnpm kb:ingest"
   },
   "devDependencies": {

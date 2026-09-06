@@ -28,6 +28,27 @@ module.exports = {
       from: { path: '^packages/cobranca' },
       to: { path: ['^packages/erp-connector', '^@seta/erp-connector'] },
     },
+    {
+      name: 'anonimizacao-so-conhece-ai-provider',
+      comment:
+        'anonimizacao (016) é camada de texto sobre o port AIProvider; nunca vê catálogo, ERP, agent ou guardrails',
+      severity: 'error',
+      from: { path: '^packages/anonimizacao' },
+      to: {
+        path: [
+          '^packages/(erp-connector|query-catalog|agent|guardrails|cobranca|skills|rag|crm|wa-meta|payment-provider)',
+          '^@seta/(erp-connector|query-catalog|agent|guardrails|cobranca|skills|rag|crm|wa-meta|payment-provider)',
+        ],
+      },
+    },
+    {
+      name: 'so-anonimizacao-usa-transformers',
+      comment:
+        'a dependência nativa de NER fica atrás do port; ninguém mais importa @huggingface/transformers',
+      severity: 'error',
+      from: { path: '^(apps|packages)', pathNot: '^packages/anonimizacao' },
+      to: { path: '@huggingface/transformers' },
+    },
   ],
   options: {
     doNotFollow: { path: ['node_modules', '/dist/'] },

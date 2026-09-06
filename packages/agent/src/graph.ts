@@ -119,6 +119,7 @@ export function createAgentRuntime(deps: AgentRuntimeDeps): AgentRuntime {
             messages: state.mensagens,
             tools: toolDefs,
             signal: abortoTurno.signal,
+            traceId: input.session.traceId, // 016: anonimização atribuída ao turno
           });
         } catch (err) {
           if (abortoTurno.signal.aborted) {

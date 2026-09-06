@@ -15,6 +15,7 @@
     { "path": "packages/client-config" },
     { "path": "packages/payment-provider" },
     { "path": "packages/cobranca" },
+    { "path": "packages/anonimizacao" },
     { "path": "apps/server" },
     { "path": "infra/erp-mock" }
   ]

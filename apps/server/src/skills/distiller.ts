@@ -73,6 +73,9 @@ export async function gerarPropostas(deps: DistillerDeps): Promise<ResultadoDist
       messages: [{ role: 'user', content: renderPromptDistiller(resumoSinais) }],
       temperature: 0,
       maxOutputTokens: 1024,
+      traceId: traceIdRodada,
+      // 016: skill destilada fica com [NOME_1] — generaliza e não grava PII na proposta
+      anonimizacao: { destokenizar: false },
     });
     deps.obs?.llm({
       traceId: traceIdRodada,
