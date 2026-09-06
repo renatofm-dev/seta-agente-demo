@@ -1,0 +1,41 @@
+id: comercial.estoque_disponivel
+version: 1
+description: >-
+  Cotas DISPONÍVEIS para venda no resort, com tier (OURO/DIAMANTE ×
+  PREMIUM/MASTER/SPECIAL), modelo de uso (períodos por ano), torre, unidade,
+  capacidade de hóspedes e valor de tabela em centavos. Use quando alguém SEM
+  contrato quer saber o que existe para comprar. Filtre por capacidade mínima
+  (quantas pessoas viajam) e por períodos por ano (1, 2 ou 3; 0 = qualquer).
+  Não é para cotista consultar o próprio contrato.
+entities: [cota]
+modules: [sdr]
+params:
+  capacidade_min:
+    type: int
+    source: agent
+    required: false
+    default: 1
+    description: Mínimo de hóspedes que a unidade precisa acomodar.
+  periodos:
+    type: int
+    source: agent
+    required: false
+    default: 0
+    description: Períodos de uso por ano desejados (1, 2 ou 3); 0 traz qualquer modelo.
+sql: >-
+  SELECT cota_id, cota_codigo, bloco, andar, uh, capacidade, tier, modelo, periodos,
+         valor_tabela_centavos
+  FROM v_cota_disponivel
+  WHERE capacidade >= :capacidade_min
+    AND (:periodos = 0 OR periodos = :periodos)
+  ORDER BY valor_tabela_centavos ASC, cota_codigo ASC
+limits:
+  timeout_ms: 3000
+  max_rows: 12
+output:
+  columns:
+    [cota_id, cota_codigo, bloco, andar, uh, capacidade, tier, modelo, periodos, valor_tabela_centavos]
+  masking: {}
+tool:
+  expose: true
+  name: estoque_disponivel

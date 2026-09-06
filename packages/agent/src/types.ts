@@ -40,6 +40,8 @@ export type TraceEvento =
   | { tipo: 'descartado'; motivo: string }
   /** 014: passo do fluxo de cobrança que atendeu (ou iniciou) o turno. */
   | { tipo: 'cobranca'; etapa: string; acao: string; cobrancaId?: string }
+  /** 015: passo do fluxo SDR (lead frio) que atendeu o turno. */
+  | { tipo: 'sdr'; etapa: string; acao: string; propostaId?: string }
   /** 016: o que foi anonimizado antes de sair para a LLM — contagens, nunca valores. */
   | {
       tipo: 'anonimizacao';

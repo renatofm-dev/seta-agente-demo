@@ -302,6 +302,122 @@ export const cobrancaTitulo = pgTable(
   (t) => [primaryKey({ columns: [t.cobrancaId, t.tituloId] })],
 );
 
+// --- SDR para lead frio (015) --------------------------------------------------
+
+export const STATUS_LEAD = [
+  'novo',
+  'qualificando',
+  'qualificado',
+  'proposta',
+  'agendado',
+  'perdido',
+] as const;
+export const STATUS_PROPOSTA_SDR = [
+  'rascunho',
+  'ofertada',
+  'aguardando_aprovacao',
+  'aceita',
+  'recusada',
+  'expirada',
+] as const;
+export type StatusPropostaSdr = (typeof STATUS_PROPOSTA_SDR)[number];
+/** Proposta "aberta": bloqueia uma segunda para o mesmo lead×cota. */
+export const STATUS_PROPOSTA_SDR_ABERTA: readonly StatusPropostaSdr[] = [
+  'ofertada',
+  'aguardando_aprovacao',
+];
+
+/** Lead NÃO existe no ERP até virar contrato — mora aqui. `perfil` é o jsonb da qualificação. */
+export const lead = pgTable(
+  'lead',
+  {
+    id: uuid('id').primaryKey(),
+    waId: text('wa_id').notNull(),
+    nome: text('nome'),
+    origem: text('origem').notNull().default('inbound'),
+    perfil: jsonb('perfil').notNull().default({}),
+    status: text('status', { enum: STATUS_LEAD }).notNull().default('novo'),
+    conversaId: uuid('conversa_id').references(() => conversa.id),
+    traceId: text('trace_id'),
+    criadoEm: timestamp('criado_em', { withTimezone: true }).notNull().defaultNow(),
+    atualizadoEm: timestamp('atualizado_em', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [unique('lead_wa_id_uq').on(t.waId)],
+);
+
+/** Estado do fluxo SDR por conversa (máquina do @seta/sdr). `opcoes` é o snapshot apresentado. */
+export const fluxoSdr = pgTable(
+  'fluxo_sdr',
+  {
+    id: uuid('id').primaryKey(),
+    conversaId: uuid('conversa_id')
+      .notNull()
+      .references(() => conversa.id),
+    leadId: uuid('lead_id')
+      .notNull()
+      .references(() => lead.id),
+    etapa: text('etapa', {
+      enum: ['qualificacao', 'apresentacao', 'oferta', 'agendamento', 'encerrado'],
+    }).notNull(),
+    encerramento: text('encerramento'),
+    perfil: jsonb('perfil').notNull().default({}),
+    opcoes: jsonb('opcoes').notNull().default([]),
+    escolha: integer('escolha'),
+    oferta: text('oferta', { enum: ['tabela', 'piso'] }),
+    naoEntendi: integer('nao_entendi').notNull().default(0),
+    propostaId: uuid('proposta_id'),
+    expiraEm: timestamp('expira_em', { withTimezone: true }).notNull(),
+    criadoEm: timestamp('criado_em', { withTimezone: true }).notNull().defaultNow(),
+    atualizadoEm: timestamp('atualizado_em', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    // 1 fluxo ativo por conversa
+    uniqueIndex('fluxo_sdr_ativo_uq').on(t.conversaId).where(sql`etapa <> 'encerrado'`),
+  ],
+);
+
+/**
+ * Proposta feita ao lead — gravada ANTES de ser enviada. É a trilha de
+ * auditoria e a fonte de verdade da alçada: tabela, piso e o que foi ofertado,
+ * sempre em centavos; `valor_pedido_centavos` é o que o lead pediu quando
+ * escalou.
+ */
+export const propostaSdr = pgTable(
+  'proposta_sdr',
+  {
+    id: uuid('id').primaryKey(),
+    leadId: uuid('lead_id')
+      .notNull()
+      .references(() => lead.id),
+    fluxoId: uuid('fluxo_id').references(() => fluxoSdr.id),
+    conversaId: uuid('conversa_id')
+      .notNull()
+      .references(() => conversa.id),
+    cotaId: text('cota_id').notNull(),
+    cotaCodigo: text('cota_codigo').notNull(),
+    /** `lead:{waId}:cota:{cotaId}` — uma proposta aberta por lead×cota. */
+    referencia: text('referencia').notNull(),
+    valorTabelaCentavos: integer('valor_tabela_centavos').notNull(),
+    valorMinimoCentavos: integer('valor_minimo_centavos').notNull(),
+    valorOfertadoCentavos: integer('valor_ofertado_centavos').notNull(),
+    descontoBps: integer('desconto_bps').notNull().default(0),
+    valorPedidoCentavos: integer('valor_pedido_centavos'),
+    status: text('status', { enum: STATUS_PROPOSTA_SDR }).notNull(),
+    motivo: text('motivo'),
+    aprovadoPor: text('aprovado_por'),
+    aprovadoEm: timestamp('aprovado_em', { withTimezone: true }),
+    criadoEm: timestamp('criado_em', { withTimezone: true }).notNull().defaultNow(),
+    atualizadoEm: timestamp('atualizado_em', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('proposta_sdr_referencia_aberta_uq')
+      .on(t.referencia)
+      .where(sql`status IN ('ofertada', 'aguardando_aprovacao')`),
+    index('proposta_sdr_conversa_idx').on(t.conversaId, t.criadoEm),
+    index('proposta_sdr_lead_idx').on(t.leadId, t.criadoEm),
+  ],
+);
+
 /**
  * Espelho da baixa que o ERP faria (o ERP é read-only por desenho): 1 linha por
  * título recebido. A camada de conciliação (pagamentos/conciliacao.ts) faz as

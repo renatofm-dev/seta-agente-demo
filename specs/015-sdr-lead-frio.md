@@ -18,11 +18,19 @@ redige sobre números que já vieram prontos.
 
 ## Escopo
 
-### `packages/sdr` — agente SDR (domínio puro, sem banco)
+> **Estado (06/09/2026):** ERP mock, `packages/sdr`, banco, catálogo e server entregues na
+> fatia **015a** (núcleo). Pendentes: **015b** (console Leads + aprovação acima da alçada) e
+> **015c** (guardrail da raia SDR para percentual por extenso).
+
+### `packages/sdr` — agente SDR (domínio puro, sem banco) — **feito (015a)**
 - Máquina de estados (`qualificacao → apresentacao → oferta → agendamento → encerrado`),
   parser determinístico das respostas e `interpretarResposta` (chamada curta ao LLM com
   saída JSON validada por Zod) só quando o parser não resolve — mesmo contrato de
   `packages/cobranca`.
+- Qualificação em duas perguntas (quantas pessoas viajam; quantas vezes por ano), estoque
+  filtrado por capacidade ≥ pessoas e períodos iguais, uma opção por tier×modelo (a mais
+  barata), até 3. Pedido de valor igual ou acima do vigente é aceite; dentro da faixa vai
+  para o piso (pontos discretos); abaixo do piso escala.
 - **Alçada em basis points, aritmética inteira em centavos**:
   `piso = floor(tabela * (10000 - SDR_DESCONTO_MAX_BPS) / 10000)`. Sem float.
   A base dos 3% é o **valor de tabela da cota a ser comprada**
@@ -32,7 +40,7 @@ redige sobre números que já vieram prontos.
   valor intermediário escalaria; e comercialmente evita fatiar desconto em salame.
 - `referenciaProposta(lead, cota)` determinística — idempotência da proposta.
 
-### Banco (`apps/server`, migração 0015)
+### Banco (`apps/server`, migração 0015) — **feito (015a)**
 - **`lead`**: `wa_id` (unique), `nome`, `origem`, `perfil` (jsonb da qualificação),
   `status` (`novo|qualificando|qualificado|proposta|agendado|perdido`), `traceId`.
   Lead **não existe no ERP** até virar contrato — mora no banco `app`.
@@ -51,7 +59,7 @@ redige sobre números que já vieram prontos.
   não é grão-contrato** — não recebe `contrato_id` e por isso é legível por sessão sem
   vínculo. `GRANT SELECT` para `erp_ro` em `03-grants.sql`.
 
-### Catálogo (`catalog/comercial/`)
+### Catálogo (`catalog/comercial/`) — **feito (015a)**
 - `estoque_disponivel.yaml` — filtra por tier/capacidade/períodos. `price_source: false`.
 - `condicoes_cota.yaml` — **`price_source: true`**, devolve `valor_tabela_centavos` **e**
   `valor_minimo_centavos` (o piso já calculado no servidor). É esta linha que autoriza a
@@ -59,7 +67,7 @@ redige sobre números que já vieram prontos.
 - Ambas **sem `contrato_id`** — são as primeiras entradas do catálogo que não são
   grão-contrato.
 
-### Server
+### Server — **feito (015a)**
 - `comprar_cota` **em conversa sem vínculo** inicia o fluxo SDR em vez de escalar (mesma
   forma que `pagar → fluxo` em `turno-handler.ts:400`). Com vínculo, o comportamento
   atual é preservado: continua escalando `interesse_compra` para o comercial.
@@ -71,7 +79,7 @@ redige sobre números que já vieram prontos.
 - Env: `SDR_DESCONTO_MAX_BPS` (default `300`), `SDR_FLUXO_EXPIRA_MIN`,
   `SDR_MAX_PROPOSTAS_DIA`. `client.yaml`: `modulos.sdr`, `personaSdr`.
 
-### Console
+### Console — **pendente (015b)**
 - Página **Leads**: lista com status, perfil da qualificação, propostas e histórico;
   aprovar/recusar proposta acima da alçada.
 

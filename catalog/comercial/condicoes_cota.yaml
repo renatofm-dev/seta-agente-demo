@@ -1,0 +1,37 @@
+id: comercial.condicoes_cota
+version: 1
+description: >-
+  Condições de venda de UMA cota disponível: valor de tabela e o menor valor
+  que você pode fechar sozinho (valor_minimo_centavos, já calculado pela
+  alçada). Só cite valores que vierem daqui, e SEMPRE em reais — nunca fale em
+  percentual nem em desconto. Abaixo do valor mínimo, encaminhe ao comercial.
+  Use depois de o interessado escolher uma cota de estoque_disponivel.
+entities: [cota]
+modules: [sdr]
+params:
+  cota_id:
+    type: string
+    source: agent
+    description: cota_id devolvido por estoque_disponivel.
+  desconto_max_bps:
+    type: int
+    source: session
+    description: Alçada do SDR em basis points (300 = 3%); política nossa, nunca do modelo.
+sql: >-
+  SELECT cota_id, cota_codigo, tier, modelo, periodos, capacidade, bloco, uh,
+         valor_tabela_centavos,
+         CAST((valor_tabela_centavos * (10000 - :desconto_max_bps)) / 10000 AS bigint)
+           AS valor_minimo_centavos
+  FROM v_cota_disponivel
+  WHERE cota_id = :cota_id
+limits:
+  timeout_ms: 2000
+  max_rows: 1
+output:
+  columns:
+    [cota_id, cota_codigo, tier, modelo, periodos, capacidade, bloco, uh, valor_tabela_centavos, valor_minimo_centavos]
+  masking: {}
+tool:
+  expose: true
+  name: condicoes_cota
+price_source: true

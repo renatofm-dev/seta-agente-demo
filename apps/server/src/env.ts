@@ -76,6 +76,13 @@ export const EnvSchema = z.object({
     .regex(/^[a-z0-9_]+$/)
     .optional(),
   /**
+   * 015: agente SDR para lead frio. Alçada em basis points (300 = 3%) sobre o
+   * valor de tabela da cota — política nossa, o ERP só conhece o preço cheio.
+   */
+  SDR_DESCONTO_MAX_BPS: z.coerce.number().int().min(0).max(10_000).default(300),
+  SDR_FLUXO_EXPIRA_MIN: z.coerce.number().int().min(1).default(60),
+  SDR_MAX_PROPOSTAS_DIA: z.coerce.number().int().min(1).default(3),
+  /**
    * 016: anonimização do que sai para a LLM (decorator do AIProvider). Ligada por
    * default — desligar é decisão explícita. NER local via @huggingface/transformers;
    * sem o modelo no cache, o boot segue só com regex + dicionário e loga.

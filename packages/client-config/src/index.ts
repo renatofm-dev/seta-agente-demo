@@ -16,7 +16,11 @@ export const ClientConfigSchema = z.object({
     atendimento: z.boolean(),
     /** 014: fluxo de cobrança/pagamento pelo WhatsApp (exige `financeiro`). */
     pagamentos: z.boolean().default(false),
+    /** 015: agente SDR na raia SEM vínculo (lead frio) + tools `comercial.*`. */
+    sdr: z.boolean().default(false),
   }),
+  /** 015: persona da raia do lead frio; ausente ⇒ usa `persona`. */
+  personaSdr: z.string().min(1).optional(),
   limites: z.object({
     maxToolCallsPorTurno: z.number().int().min(1).max(20),
     maxMensagensContexto: z.number().int().min(1).max(200),
