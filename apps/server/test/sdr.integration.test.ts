@@ -14,7 +14,7 @@ import {
   TEXTO_QUALIFICACAO_PERIODOS,
   TEXTO_QUALIFICACAO_PESSOAS,
 } from '@seta/sdr';
-import { asc, count, eq } from 'drizzle-orm';
+import { asc, count, desc, eq } from 'drizzle-orm';
 import { migrate } from 'drizzle-orm/node-postgres/migrator';
 import pg from 'pg';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
@@ -98,10 +98,9 @@ async function turnoDe(waId: string, text: string): Promise<string> {
   return linhas[linhas.length - 1]?.texto ?? '';
 }
 
+/** Sempre por criado_em: sem ORDER BY, o heap reusa espaço liberado pelos DELETE e a ordem mente. */
 async function ultimoTrace() {
-  const [t] = await db.select().from(traceTurno).orderBy(asc(traceTurno.criadoEm));
-  const linhas = await db.select().from(traceTurno);
-  const ultimo = linhas[linhas.length - 1] ?? t;
+  const [ultimo] = await db.select().from(traceTurno).orderBy(desc(traceTurno.criadoEm)).limit(1);
   if (!ultimo) throw new Error('sem trace');
   return ultimo;
 }
