@@ -1,11 +1,19 @@
 'use client';
 
+import Link from 'next/link';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { Button } from '@/components/ui/button';
+import { Chip, Eyebrow, Ponto } from '@/components/ui/chip';
+import { Campo, Input } from '@/components/ui/input';
+import { api } from '@/lib/console-api';
+import { hora, iniciais, telefoneBonito } from '@/lib/formatos';
 import { cn } from '@/lib/utils';
 
 /**
  * Simulador de WhatsApp (plano B da demo): injeta mensagens no mesmo caminho
  * do webhook e acompanha a conversa via SSE. Requer DEV_SIMULATOR=true no server.
+ * Visual do design: tela de celular com o fundo bege do WhatsApp — você fala
+ * como o cotista (direita) e vê o agente responder (esquerda).
  */
 
 interface MensagemEvento {
@@ -25,15 +33,29 @@ type Evento = { tipo: 'mensagem'; dados: MensagemEvento } | { tipo: 'turno'; dad
 
 const WA_ID_PADRAO = '5511999990001';
 
+function Checks({ status }: { status: string }) {
+  if (status === 'recebida') return null;
+  if (status === 'pendente') return <span title="pendente">🕓</span>;
+  if (status === 'falha') return <span className="text-brand">⚠</span>;
+  const dois = status === 'entregue' || status === 'lida';
+  return <span className={cn(status === 'lida' && 'text-info-2')}>{dois ? '✓✓' : '✓'}</span>;
+}
+
 export default function SimuladorClient() {
   const [waId, setWaId] = useState(WA_ID_PADRAO);
   const [conectado, setConectado] = useState(false);
   const [texto, setTexto] = useState('');
   const [eventos, setEventos] = useState<Evento[]>([]);
+  const [instalacao, setInstalacao] = useState<string | null>(null);
   const fimRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    api.instalacaoPublica().then((i) => setInstalacao(i?.nome ?? null));
+  }, []);
+
+  useEffect(() => {
     const vistos = new Set<string>();
+    setEventos([]);
     const es = new EventSource(`/api-dev/dev/events?waId=${encodeURIComponent(waId)}`);
     es.onopen = () => setConectado(true);
     es.onerror = () => setConectado(false);
@@ -69,79 +91,110 @@ export default function SimuladorClient() {
   }, [texto, waId]);
 
   return (
-    <main className="mx-auto flex h-dvh w-full max-w-2xl flex-col gap-3 p-4">
-      <header className="flex items-center gap-3">
-        <h1 className="text-lg font-semibold">Simulador WhatsApp</h1>
-        <span
-          className={cn(
-            'rounded-full px-2 py-0.5 text-xs',
-            conectado ? 'bg-green-500/15 text-green-600' : 'bg-red-500/15 text-red-600',
-          )}
-        >
-          {conectado ? 'conectado' : 'desconectado'}
-        </span>
-        <input
-          className="ml-auto w-44 rounded-md border bg-transparent px-2 py-1 text-sm"
-          value={waId}
-          onChange={(e) => setWaId(e.target.value.replace(/\D/g, ''))}
-          aria-label="wa_id do contato"
-        />
+    <main className="mx-auto flex h-dvh w-full max-w-[720px] flex-col gap-4 px-6 py-6">
+      <header className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <Eyebrow className="mb-1.5">Simulador · só em dev</Eyebrow>
+          <h1 className="m-0 flex items-center gap-3 font-heading text-[26px] font-semibold tracking-[-.02em]">
+            WhatsApp do cotista
+            <Chip papel={conectado ? 'ok' : 'risk'} tamanho="md">
+              <Ponto tom={conectado ? 'ok' : 'risk'} className="mr-1.5" />
+              {conectado ? 'ao vivo' : 'desconectado'}
+            </Chip>
+          </h1>
+          <p className="m-0 mt-1 text-[12.5px] text-text-3">
+            A mensagem entra pelo mesmo caminho do webhook (idempotência + debounce); o agente
+            responde aqui e no <Link href="/inbox">atendimento</Link>.
+          </p>
+        </div>
+        <Campo rotulo="Número (wa_id)">
+          <Input
+            compacto
+            mono
+            className="w-48"
+            value={waId}
+            onChange={(e) => setWaId(e.target.value.replace(/\D/g, ''))}
+            aria-label="wa_id do contato"
+          />
+        </Campo>
       </header>
 
-      <section className="flex-1 space-y-2 overflow-y-auto rounded-lg border p-3">
-        {eventos.length === 0 && (
-          <p className="text-sm text-muted-foreground">
-            Envie uma mensagem — ela entra pelo mesmo caminho do webhook (idempotência + debounce).
-          </p>
-        )}
-        {eventos.map((ev) =>
-          ev.tipo === 'mensagem' ? (
-            <div
-              key={ev.dados.id}
-              className={cn('flex', ev.dados.direcao === 'in' ? 'justify-end' : 'justify-start')}
-            >
+      <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-[18px] border border-line bg-whatsapp">
+        <div className="flex items-center gap-3 border-b border-line/60 bg-surface px-4 py-2.5">
+          <span className="flex size-9 items-center justify-center rounded-full bg-ink font-heading text-xs font-semibold text-white">
+            {instalacao ? iniciais(instalacao) : 'IA'}
+          </span>
+          <div className="min-w-0">
+            <div className="truncate text-[13.5px] font-semibold">{instalacao ?? 'Agente'}</div>
+            <div className="font-mono text-[10.5px] text-text-3">você é {telefoneBonito(waId)}</div>
+          </div>
+        </div>
+        <div className="flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto px-4 py-4">
+          {eventos.length === 0 && (
+            <p className="m-0 self-center rounded-full border border-line bg-surface px-3 py-1 font-mono text-[10.5px] text-text-3">
+              escreva como o cotista para começar
+            </p>
+          )}
+          {eventos.map((ev) =>
+            ev.tipo === 'mensagem' ? (
               <div
+                key={ev.dados.id}
                 className={cn(
-                  'max-w-[80%] rounded-lg px-3 py-2 text-sm',
-                  ev.dados.direcao === 'in' ? 'bg-primary text-primary-foreground' : 'bg-muted',
+                  'flex max-w-[min(520px,88%)] flex-col gap-[3px]',
+                  ev.dados.direcao === 'in' ? 'self-end' : 'self-start',
                 )}
               >
-                <p className="whitespace-pre-wrap">{ev.dados.texto}</p>
-                <p className="mt-1 text-[10px] opacity-60">
-                  {ev.dados.direcao === 'in' ? 'contato' : 'agente'} · {ev.dados.status}
-                </p>
+                {ev.dados.direcao === 'out' && (
+                  <span className="pl-1 font-mono text-[10px] uppercase tracking-[.08em] text-ok">
+                    Agente
+                  </span>
+                )}
+                <div
+                  className={cn(
+                    'whitespace-pre-wrap break-words px-3 py-2 text-[13.5px] text-ink shadow-[0_1px_2px_rgba(20,20,22,.08)]',
+                    ev.dados.direcao === 'in'
+                      ? 'rounded-[14px_4px_14px_14px] bg-[#dcf8c6]'
+                      : 'rounded-[4px_14px_14px_14px] bg-surface',
+                  )}
+                >
+                  {ev.dados.texto}
+                </div>
+                <div className="flex justify-end gap-1.5 pr-1 font-mono text-[10px] text-text-3">
+                  {hora(ev.dados.criadoEm)}
+                  <Checks status={ev.dados.status} />
+                </div>
               </div>
-            </div>
-          ) : (
-            <p key={ev.dados.id} className="text-center text-xs text-muted-foreground">
-              ⚙ turno agregado: “{ev.dados.textoAgregado.replaceAll('\n', ' · ')}”
-            </p>
-          ),
-        )}
-        <div ref={fimRef} />
-      </section>
-
-      <form
-        className="flex gap-2"
-        onSubmit={(e) => {
-          e.preventDefault();
-          void enviar();
-        }}
-      >
-        <input
-          className="flex-1 rounded-md border bg-transparent px-3 py-2 text-sm"
-          placeholder="Mensagem do contato…"
-          value={texto}
-          onChange={(e) => setTexto(e.target.value)}
-        />
-        <button
-          type="submit"
-          className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50"
-          disabled={!texto.trim()}
+            ) : (
+              <p
+                key={ev.dados.id}
+                className="m-0 my-1 self-center rounded-full border border-line bg-surface px-3 py-[3px] font-mono text-[10.5px] text-text-3"
+              >
+                turno agregado · “{ev.dados.textoAgregado.replaceAll('\n', ' · ')}”
+              </p>
+            ),
+          )}
+          <div ref={fimRef} />
+        </div>
+        <form
+          className="flex items-end gap-2.5 border-t border-line/60 bg-surface px-4 py-3"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void enviar();
+          }}
         >
-          Enviar
-        </button>
-      </form>
+          <Input
+            compacto
+            className="flex-1 h-10 rounded-full bg-background"
+            placeholder="Mensagem do cotista…"
+            value={texto}
+            onChange={(e) => setTexto(e.target.value)}
+            aria-label="Mensagem do cotista"
+          />
+          <Button type="submit" size="md" className="h-10 rounded-full" disabled={!texto.trim()}>
+            Enviar
+          </Button>
+        </form>
+      </section>
     </main>
   );
 }
