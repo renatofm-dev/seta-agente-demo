@@ -31,6 +31,9 @@ limites:
   maxToolCallsPorTurno: 6
   maxMensagensContexto: 30
   maxCaracteresResposta: 2000
+# 017: meta de conversão das campanhas (pagas ÷ entregues) — 30%
+campanhas:
+  metaConversaoBps: 3000
 guardrails:
   temasSensiveis:
     - jurídico

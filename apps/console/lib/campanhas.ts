@@ -63,11 +63,12 @@ export function resumoDoMes(disparos: readonly DisparoResumo[], agora: Date = ne
   };
 }
 
-/** CSV simples (RFC 4180) para exportar destinatários. */
+/** CSV simples (RFC 4180, separador `;`) para os exports do console. */
 export function paraCsv(linhas: readonly (string | number | null | undefined)[][]): string {
   const celula = (v: string | number | null | undefined) => {
     const s = v === null || v === undefined ? '' : String(v);
-    return /[",\n;]/.test(s) ? `"${s.replaceAll('"', '""')}"` : s;
+    // vírgula decimal não precisa de aspas: o separador é `;`
+    return /["\n;]/.test(s) ? `"${s.replaceAll('"', '""')}"` : s;
   };
   return linhas.map((l) => l.map(celula).join(';')).join('\n');
 }

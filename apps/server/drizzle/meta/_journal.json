@@ -113,6 +113,13 @@
       "when": 1788719509953,
       "tag": "0015_sdr-lead-frio",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1788891432235,
+      "tag": "0016_relatorio-campanhas",
+      "breakpoints": true
     }
   ]
 }

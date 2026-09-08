@@ -180,3 +180,25 @@
     }
   }
 }
+
+/*
+ * Impressão / PDF (017): a casca do console é uma pilha de contêineres com
+ * rolagem própria; no papel tudo vira fluxo. Header, avisos e filtros saem
+ * com `print:hidden` nos componentes.
+ */
+@media print {
+  body {
+    background: #fff;
+  }
+  .h-dvh,
+  .h-full,
+  .overflow-hidden,
+  .overflow-y-auto {
+    height: auto !important;
+    overflow: visible !important;
+  }
+  .rounded-\[14px\],
+  .rounded-\[10px\] {
+    break-inside: avoid;
+  }
+}

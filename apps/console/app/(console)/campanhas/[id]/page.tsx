@@ -1,16 +1,19 @@
 'use client';
 
+import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Chip, Eyebrow } from '@/components/ui/chip';
+import { Funil } from '@/components/ui/funil';
 import { PageHeader, Pagina } from '@/components/ui/page-header';
 import { Filtros, Linha, Tabela } from '@/components/ui/tabela';
 import { PreviewWhatsApp } from '@/components/ui/whatsapp';
 import { paraCsv, preencherModelo } from '@/lib/campanhas';
 import { api, type DisparoDestinatarioView, type DisparoDetalhe } from '@/lib/console-api';
-import { dataHoraCurta, nomeExibicao, porcentagem, telefoneMascarado } from '@/lib/formatos';
+import { dataHoraCurta, nomeExibicao, telefoneMascarado } from '@/lib/formatos';
+import { pctDeBps } from '@/lib/relatorio';
 import { STATUS_DESTINATARIO, STATUS_DISPARO } from '@/lib/rotulos';
 import { cn } from '@/lib/utils';
 
@@ -109,39 +112,35 @@ export default function CampanhaDetalhePage() {
         voltar={{ href: '/campanhas', rotulo: 'Campanhas' }}
         titulo={
           <>
-            {dados.modelo.nome}
+            {dados.disparo.nome ?? dados.modelo.nome}
             <Chip papel={st.papel} tamanho="md">
               {st.rotulo}
             </Chip>
           </>
         }
-        subtitulo={`${dados.modelo.nome} · ${total} contatos · envio ${dataHoraCurta(dados.disparo.criadoEm)}`}
+        subtitulo={`${dados.modelo.nome} · ${total} contatos · envio ${dataHoraCurta(dados.disparo.criadoEm)}${
+          dados.disparo.metaConversaoBps !== null
+            ? ` · meta de conversão ${pctDeBps(dados.disparo.metaConversaoBps)}`
+            : ''
+        }`}
         acoes={
-          <Button variant="outline" size="md" onClick={exportarCsv}>
-            Exportar CSV
-          </Button>
+          <>
+            <Link
+              href={`/metricas?v=campanhas&competencia=${dados.disparo.criadoEm.slice(0, 7)}`}
+              className={cn(buttonVariants({ size: 'md', variant: 'outline' }), 'no-underline')}
+            >
+              Ver no relatório
+            </Link>
+            <Button variant="outline" size="md" onClick={exportarCsv}>
+              Exportar CSV
+            </Button>
+          </>
         }
       />
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1.6fr)_minmax(280px,1fr)]">
         <Card className="p-5">
           <Eyebrow className="mb-3.5">Funil da campanha</Eyebrow>
-          <div className="grid grid-cols-5 gap-2">
-            {funil.map((e) => (
-              <div key={e.rotulo} className="flex flex-col gap-1.5">
-                <div className="flex h-16 items-end">
-                  <div
-                    className={cn('w-full rounded-[6px_6px_2px_2px]', e.cor)}
-                    style={{
-                      height: `${total ? Math.max(6, Math.round((e.n / total) * 64)) : 6}px`,
-                    }}
-                  />
-                </div>
-                <div className="font-heading text-xl font-semibold tracking-[-.02em]">{e.n}</div>
-                <div className="text-xs text-text-2">{e.rotulo}</div>
-                <div className="font-mono text-[10.5px] text-text-3">{porcentagem(e.n, total)}</div>
-              </div>
-            ))}
-          </div>
+          <Funil etapas={funil} base={total} />
         </Card>
         <div className="flex flex-col gap-3">
           <Eyebrow>Mensagem enviada</Eyebrow>

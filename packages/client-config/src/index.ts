@@ -32,6 +32,15 @@ export const ClientConfigSchema = z.object({
       temasSensiveis: z.array(z.string().min(1)).default([]),
     })
     .default({ temasSensiveis: [] }),
+  /**
+   * 017: meta de conversão das campanhas (pagas ÷ entregues), em bps. Vale
+   * para toda campanha sem meta própria; o wizard pode sobrescrever.
+   */
+  campanhas: z
+    .object({
+      metaConversaoBps: z.number().int().min(0).max(10_000).default(3000),
+    })
+    .default({ metaConversaoBps: 3000 }),
 });
 export type ClientConfig = z.infer<typeof ClientConfigSchema>;
 

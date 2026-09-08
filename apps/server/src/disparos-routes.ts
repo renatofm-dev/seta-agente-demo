@@ -149,6 +149,10 @@ export const disparosRoutes: FastifyPluginCallback<DisparosRoutesOpts> = (app, o
         modeloId: z.uuid(),
         variaveis: z.array(z.string().min(1).max(1024)).default([]),
         waIds: z.array(WaPhoneSchema).min(1).max(500),
+        /** 017: rótulo da campanha (ausente ⇒ nome do modelo). */
+        nome: z.string().trim().min(1).max(80).optional(),
+        /** 017: meta de conversão própria em bps (ausente ⇒ global do client.yaml). */
+        metaConversaoBps: z.number().int().min(0).max(10_000).optional(),
       })
       .parse(req.body);
 
@@ -186,6 +190,8 @@ export const disparosRoutes: FastifyPluginCallback<DisparosRoutesOpts> = (app, o
         id: disparoId,
         modeloId: modelo.id,
         variaveis: body.variaveis,
+        nome: body.nome ?? null,
+        metaConversaoBps: body.metaConversaoBps ?? null,
         criadoPor: sessao.userId,
       });
       await tx.insert(disparoDestinatario).values(
@@ -204,7 +210,8 @@ export const disparosRoutes: FastifyPluginCallback<DisparosRoutesOpts> = (app, o
   app.get('/api/console/disparos', async () => {
     // 1 query: disparo + modelo + contagem por status via lateral (sem N+1, #31)
     const r = await db.execute(sql`
-      SELECT d.id, d.status, d.variaveis, d.criado_em, m.nome AS modelo_nome,
+      SELECT d.id, d.status, d.variaveis, d.criado_em, d.nome, d.meta_conversao_bps,
+             m.nome AS modelo_nome,
              ct.total, ct.enviados, ct.entregues, ct.lidos, ct.falhas, ct.pendentes
       FROM disparo d
       JOIN modelo_mensagem m ON m.id = d.modelo_id

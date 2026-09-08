@@ -50,12 +50,20 @@ export default function CampanhasPage() {
         eyebrow={instalacao?.nome ?? 'Campanhas'}
         titulo="Campanhas"
         acoes={
-          <Link
-            href="/campanhas/nova"
-            className={cn(buttonVariants({ size: 'md' }), 'no-underline')}
-          >
-            + Nova campanha
-          </Link>
+          <>
+            <Link
+              href="/metricas?v=campanhas"
+              className={cn(buttonVariants({ size: 'md', variant: 'outline' }), 'no-underline')}
+            >
+              Relatório
+            </Link>
+            <Link
+              href="/campanhas/nova"
+              className={cn(buttonVariants({ size: 'md' }), 'no-underline')}
+            >
+              + Nova campanha
+            </Link>
+          </>
         }
       />
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -111,7 +119,7 @@ export default function CampanhasPage() {
             return (
               <Linha key={d.id} colunas={COLUNAS} onClick={() => router.push(`/campanhas/${d.id}`)}>
                 <span className="min-w-0">
-                  <span className="block truncate font-semibold">{d.modelo_nome}</span>
+                  <span className="block truncate font-semibold">{d.nome ?? d.modelo_nome}</span>
                   {d.variaveis.length > 0 && (
                     <span className="block truncate text-[11.5px] text-text-3">
                       {d.variaveis.join(' · ')}
