@@ -167,7 +167,8 @@ export async function enviarLinha(
     });
   } catch (err) {
     if (err instanceof JanelaFechadaError) {
-      // POC sem template: marca a linha E o ticket (spec 004) — reengajar é humano
+      // Envio LIVRE fora da janela de 24h não existe na Meta (só template aprovado — 013 usa
+      // nos disparos e no aviso de pagamento). Aqui marca a linha E o ticket: reengajar é humano.
       await deps.db
         .update(outbox)
         .set({ status: 'janela_fechada', atualizadoEm: new Date() })

@@ -17,10 +17,18 @@ export const CANONICAL_VIEWS = [
   'v_inadimplencia',
   'v_cancelamento',
   'v_chamado',
+  /** 015: estoque à venda — a única view que não é grão-contrato. */
+  'v_cota_disponivel',
 ] as const;
 
-/** Params de sessão que o executor sabe resolver (validado no load). */
-export const KNOWN_SESSION_PARAMS = ['contrato_id'] as const;
+/**
+ * Params de sessão que o executor sabe resolver (validado no load).
+ * `contrato_id` exige vínculo; `desconto_max_bps` (015) é política da
+ * implantação e existe em qualquer sessão.
+ */
+export const KNOWN_SESSION_PARAMS = ['contrato_id', 'desconto_max_bps'] as const;
+/** Params de sessão que só existem COM vínculo contato↔cliente. */
+export const SESSION_PARAMS_DE_VINCULO: readonly string[] = ['contrato_id'];
 
 const parser = new Parser();
 

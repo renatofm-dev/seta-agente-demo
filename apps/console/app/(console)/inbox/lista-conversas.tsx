@@ -1,30 +1,31 @@
 'use client';
 
-import type { ConversaResumo, FiltroConversas } from '@/lib/console-api';
-import { estadoJanela, horarioLista, iniciais, telefoneBonito } from '@/lib/formatos';
+import { useEffect, useRef } from 'react';
+import { Chip } from '@/components/ui/chip';
+import { Input } from '@/components/ui/input';
+import { Filtros } from '@/components/ui/tabela';
+import { Avatar } from '@/components/ui/whatsapp';
+import type { ContagensConversas, ConversaResumo, FiltroConversas } from '@/lib/console-api';
+import {
+  duracao,
+  estadoJanela,
+  horarioLista,
+  iniciais,
+  nomeExibicao,
+  prefixoAutor,
+} from '@/lib/formatos';
+import { STATUS_TICKET } from '@/lib/rotulos';
 import { cn } from '@/lib/utils';
 
-/** Coluna esquerda (#45): todas as conversas, busca, filtros e não-lidas. */
+/** Coluna esquerda: fila de atendimento com busca, filtros com contagem e não-lidas. */
 
-const FILTROS: { valor: FiltroConversas; rotulo: string }[] = [
-  { valor: 'todas', rotulo: 'Todas' },
-  { valor: 'aguardando', rotulo: 'Aguardando' },
-  { valor: 'minhas', rotulo: 'Minhas' },
-  { valor: 'resolvidas', rotulo: 'Resolvidas' },
+const FILTROS: { id: FiltroConversas; rotulo: string }[] = [
+  { id: 'todas', rotulo: 'Todas' },
+  { id: 'aguardando', rotulo: 'Aguardando humano' },
+  { id: 'minhas', rotulo: 'Minhas' },
+  { id: 'agente', rotulo: 'Com o agente' },
+  { id: 'resolvidas', rotulo: 'Resolvidas' },
 ];
-
-const CHIP_STATUS: Record<ConversaResumo['status'], { rotulo: string; classe: string }> = {
-  bot_ativo: { rotulo: 'Bot', classe: 'bg-sky-500/15 text-sky-600 dark:text-sky-400' },
-  aguardando_humano: {
-    rotulo: 'Aguardando',
-    classe: 'bg-amber-500/20 text-amber-700 dark:text-amber-400',
-  },
-  humano_ativo: {
-    rotulo: 'Em atendimento',
-    classe: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400',
-  },
-  resolvido: { rotulo: 'Resolvida', classe: 'bg-muted text-muted-foreground' },
-};
 
 function ItemConversa({
   c,
@@ -35,58 +36,49 @@ function ItemConversa({
   ativa: boolean;
   aoClicar: () => void;
 }) {
-  const chip = CHIP_STATUS[c.status];
+  const st = STATUS_TICKET[c.status];
   const janela = estadoJanela(c.janelaExpiraEm);
-  const nome = c.contatoNome ?? telefoneBonito(c.waId);
+  const nome = nomeExibicao(c.contatoNome, c.waId);
+  const rotuloStatus =
+    c.status === 'humano_ativo' && c.atendenteNome ? c.atendenteNome.split(' ')[0] : st.rotulo;
   return (
     <button
       type="button"
       onClick={aoClicar}
       className={cn(
-        'flex w-full items-start gap-3 border-b px-3 py-2.5 text-left transition-colors hover:bg-muted/50',
-        ativa && 'bg-muted/70',
-        c.status === 'aguardando_humano' && 'border-l-2 border-l-amber-500',
+        'grid w-full grid-cols-[38px_minmax(0,1fr)] gap-2.5 border-b border-l-[3px] border-line-soft px-3.5 py-3 text-left transition-colors hover:bg-surface-2',
+        ativa
+          ? 'border-l-brand bg-background'
+          : c.status === 'aguardando_humano'
+            ? 'border-l-warn-2'
+            : 'border-l-transparent',
       )}
     >
-      <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/15 text-xs font-semibold text-primary">
-        {iniciais(nome)}
-      </span>
-      <span className="min-w-0 flex-1">
+      <Avatar iniciais={c.contatoNome ? iniciais(c.contatoNome) : '?'} />
+      <span className="flex min-w-0 flex-col gap-[3px]">
         <span className="flex items-baseline justify-between gap-2">
-          <span className="truncate text-sm font-medium">{nome}</span>
-          <span className="shrink-0 text-[11px] text-muted-foreground">
+          <span className="truncate text-[13.5px] font-semibold">{nome}</span>
+          <span className="shrink-0 font-mono text-[10.5px] text-text-3">
             {c.ultimaMensagem ? horarioLista(c.ultimaMensagem.em) : ''}
           </span>
         </span>
-        <span className="mt-0.5 flex items-center justify-between gap-2">
-          <span className="truncate text-xs text-muted-foreground">
-            {c.ultimaMensagem
-              ? `${c.ultimaMensagem.autor === 'contato' ? '' : c.ultimaMensagem.autor === 'bot' ? 'Bot: ' : 'Você/atendente: '}${c.ultimaMensagem.texto}`
-              : 'Sem mensagens.'}
-          </span>
-          {c.naoLidas > 0 && (
-            <span className="shrink-0 rounded-full bg-emerald-500 px-1.5 py-0.5 text-[10px] font-semibold text-white">
-              {c.naoLidas}
-            </span>
-          )}
+        <span className="truncate text-[12.5px] text-text-2">
+          {c.ultimaMensagem
+            ? `${prefixoAutor(c.ultimaMensagem.autor, c.atendenteNome)}${c.ultimaMensagem.texto}`
+            : 'Sem mensagens.'}
         </span>
-        <span className="mt-1 flex flex-wrap items-center gap-1">
-          <span className={cn('rounded-full px-1.5 py-0.5 text-[10px] font-medium', chip.classe)}>
-            {chip.rotulo}
-          </span>
-          {c.status === 'humano_ativo' && c.atendenteNome && (
-            <span className="truncate text-[10px] text-muted-foreground">
-              com {c.atendenteNome}
+        <span className="mt-0.5 flex flex-wrap items-center gap-1.5">
+          <Chip papel={st.papel}>{rotuloStatus}</Chip>
+          {c.status === 'aguardando_humano' && c.esperaSegundos !== null && (
+            <span className="font-mono text-[10.5px] text-warn">
+              espera {duracao(c.esperaSegundos)}
             </span>
           )}
-          {janela.estado === 'fechada' && (
-            <span className="rounded-full bg-red-500/15 px-1.5 py-0.5 text-[10px] font-medium text-red-600">
-              janela 24h fechada
-            </span>
-          )}
-          {janela.estado === 'fechando' && (
-            <span className="rounded-full bg-orange-500/15 px-1.5 py-0.5 text-[10px] font-medium text-orange-600">
-              {janela.rotulo}
+          {janela.estado === 'fechada' && <Chip papel="risk">janela 24h fechada</Chip>}
+          {janela.estado === 'fechando' && <Chip papel="warn">{janela.rotulo}</Chip>}
+          {c.naoLidas > 0 && (
+            <span className="ml-auto inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-brand px-1.5 font-mono text-[10.5px] text-white">
+              {c.naoLidas}
             </span>
           )}
         </span>
@@ -97,57 +89,65 @@ function ItemConversa({
 
 export function ListaConversas({
   conversas,
+  contagens,
   selecionada,
   filtro,
   busca,
-  aoVivo,
   aoSelecionar,
   aoMudarFiltro,
   aoBuscar,
 }: {
   conversas: ConversaResumo[];
+  contagens: ContagensConversas | null;
   selecionada: string | null;
   filtro: FiltroConversas;
   busca: string;
-  aoVivo: boolean;
   aoSelecionar: (c: ConversaResumo) => void;
   aoMudarFiltro: (f: FiltroConversas) => void;
   aoBuscar: (q: string) => void;
 }) {
+  const buscaRef = useRef<HTMLInputElement>(null);
+
+  // "/" foca a busca (regra transversal do design), fora de campos de texto
+  useEffect(() => {
+    const aoTecla = (e: KeyboardEvent) => {
+      const alvo = e.target as HTMLElement | null;
+      const digitando =
+        alvo && (alvo.tagName === 'INPUT' || alvo.tagName === 'TEXTAREA' || alvo.isContentEditable);
+      if (e.key === '/' && !digitando) {
+        e.preventDefault();
+        buscaRef.current?.focus();
+      }
+    };
+    window.addEventListener('keydown', aoTecla);
+    return () => window.removeEventListener('keydown', aoTecla);
+  }, []);
+
+  const aguardando = contagens?.aguardando ?? 0;
   return (
-    <section className="flex h-full flex-col border-r">
-      <div className="space-y-2 border-b p-2">
-        <div className="flex items-center gap-2">
-          <input
-            value={busca}
-            onChange={(e) => aoBuscar(e.target.value)}
-            placeholder="Buscar por nome ou telefone…"
-            className="w-full rounded-md border bg-transparent px-3 py-1.5 text-sm"
-          />
-          <span
-            className={cn('h-2 w-2 shrink-0 rounded-full', aoVivo ? 'bg-green-500' : 'bg-red-500')}
-            title={aoVivo ? 'ao vivo (SSE)' : 'polling'}
-          />
+    <section className="flex h-full min-h-0 flex-col border-r border-line bg-surface">
+      <div className="flex flex-col gap-2.5 border-b border-line px-3.5 pt-3.5 pb-2.5">
+        <div className="flex items-center justify-between">
+          <h2 className="m-0 font-heading text-[17px] font-semibold tracking-[-.02em]">
+            Atendimento
+          </h2>
+          <span className="font-mono text-[11px] text-text-3">{aguardando} aguardando</span>
         </div>
-        <div className="flex gap-1">
-          {FILTROS.map((f) => (
-            <button
-              key={f.valor}
-              type="button"
-              onClick={() => aoMudarFiltro(f.valor)}
-              className={cn(
-                'rounded-full border px-2.5 py-0.5 text-xs',
-                filtro === f.valor
-                  ? 'border-primary bg-primary text-primary-foreground'
-                  : 'text-muted-foreground',
-              )}
-            >
-              {f.rotulo}
-            </button>
-          ))}
-        </div>
+        <Input
+          ref={buscaRef}
+          compacto
+          value={busca}
+          onChange={(e) => aoBuscar(e.target.value)}
+          placeholder="Buscar por nome ou telefone"
+          aria-label="Buscar conversa"
+        />
+        <Filtros
+          itens={FILTROS.map((f) => ({ ...f, n: contagens?.[f.id] }))}
+          ativo={filtro}
+          aoMudar={aoMudarFiltro}
+        />
       </div>
-      <div className="flex-1 overflow-y-auto">
+      <div className="min-h-0 flex-1 overflow-y-auto">
         {conversas.map((c) => (
           <ItemConversa
             key={c.conversaId}
@@ -157,7 +157,7 @@ export function ListaConversas({
           />
         ))}
         {conversas.length === 0 && (
-          <p className="p-4 text-xs text-muted-foreground">Nenhuma conversa aqui.</p>
+          <p className="p-4 text-center text-xs text-text-3">Nenhuma conversa aqui.</p>
         )}
       </div>
     </section>

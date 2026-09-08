@@ -16,6 +16,12 @@ export interface SessionCtx {
    * multipropriedade (bind `contrato_id`). Sem vínculo ⇒ sem acesso a dado.
    */
   readonly clienteId: string;
+  /**
+   * 015: alçada de desconto do SDR em basis points (bind `desconto_max_bps`).
+   * Política da implantação — nunca vem do modelo. Ausente ⇒ entradas que
+   * exigem o bind falham na validação, como qualquer param de sessão.
+   */
+  readonly descontoMaxBps?: number;
 }
 
 export interface QueryEvent {
@@ -58,7 +64,10 @@ const LOGGER_NULO: CatalogLogger = { info: () => {}, warn: () => {} };
 
 /** Valores de sessão disponíveis para params `source: session`, por nome. */
 function valoresDeSessao(session: SessionCtx): Record<string, Scalar> {
-  return { contrato_id: session.clienteId };
+  return {
+    contrato_id: session.clienteId,
+    ...(session.descontoMaxBps !== undefined ? { desconto_max_bps: session.descontoMaxBps } : {}),
+  };
 }
 
 export function createExecutor(opts: CreateExecutorOptions): Executor {

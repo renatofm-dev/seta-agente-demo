@@ -40,6 +40,8 @@ export type TraceEvento =
   | { tipo: 'descartado'; motivo: string }
   /** 014: passo do fluxo de cobrança que atendeu (ou iniciou) o turno. */
   | { tipo: 'cobranca'; etapa: string; acao: string; cobrancaId?: string }
+  /** 015: passo do fluxo SDR (lead frio) que atendeu o turno. */
+  | { tipo: 'sdr'; etapa: string; acao: string; propostaId?: string }
   /** 016: o que foi anonimizado antes de sair para a LLM — contagens, nunca valores. */
   | {
       tipo: 'anonimizacao';
@@ -66,7 +68,7 @@ export interface TurnoInput {
   readonly session: SessionCtx;
   readonly persona: string;
   readonly resumo: string | null;
-  /** ids+conteúdo de skills top-k (009; stub [] até lá). */
+  /** ids+conteúdo das skills ativas top-k (009) — [] quando não há registry. */
   readonly skills: readonly { id: string; conteudo: string }[];
   readonly historico: readonly ChatMessage[];
   readonly textoUsuario: string;

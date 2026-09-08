@@ -4,12 +4,17 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/*
+ * Tokens do console (Console SETA.dc.html, 2026-09): fundo "papel" quente,
+ * superfícies brancas, vermelho SETA como única cor de marca e papéis
+ * semânticos (ok / atenção / risco / info / neutro) para chips e balões.
+ */
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --font-sans: var(--font-sans);
-  --font-mono: var(--font-geist-mono);
-  --font-heading: var(--font-sans);
+  --font-mono: var(--font-mono);
+  --font-heading: var(--font-heading);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -46,85 +51,132 @@
   --radius-2xl: calc(var(--radius) * 1.8);
   --radius-3xl: calc(var(--radius) * 2.2);
   --radius-4xl: calc(var(--radius) * 2.6);
+
+  /* paleta do design */
+  --color-ink: var(--ink);
+  --color-text-2: var(--text-2);
+  --color-text-3: var(--text-3);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-surface-3: var(--surface-3);
+  --color-line: var(--line);
+  --color-line-soft: var(--line-soft);
+  --color-line-strong: var(--line-strong);
+  --color-brand: var(--brand);
+  --color-brand-hover: var(--brand-hover);
+  --color-brand-soft: var(--brand-soft);
+  --color-laranja: var(--laranja);
+  --color-ok: var(--ok);
+  --color-warn: var(--warn);
+  --color-warn-2: var(--warn-2);
+  --color-risk: var(--risk);
+  --color-info: var(--info);
+  --color-info-2: var(--info-2);
+  --color-roxo: var(--roxo);
+  --color-balao-agente: var(--balao-agente);
+  --color-balao-atendente: var(--balao-atendente);
+  --color-balao-campanha: var(--balao-campanha);
+  --color-whatsapp: var(--whatsapp);
 }
 
 :root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
+  --background: #fafaf7;
+  --foreground: #14141a;
+  --card: #ffffff;
+  --card-foreground: #14141a;
+  --popover: #ffffff;
+  --popover-foreground: #14141a;
+  --primary: #e63329;
+  --primary-foreground: #ffffff;
+  --secondary: #f4f3ee;
+  --secondary-foreground: #14141a;
+  --muted: #f4f3ee;
+  --muted-foreground: #87868f;
+  --accent: #f8f7f3;
+  --accent-foreground: #14141a;
+  --destructive: #e63329;
+  --border: #e8e5dc;
+  --input: #e8e5dc;
+  --ring: #e63329;
+  --chart-1: #e63329;
+  --chart-2: #f97316;
+  --chart-3: #0ea5e9;
+  --chart-4: #8b5cf6;
+  --chart-5: #87868f;
   --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
-}
+  --sidebar: #ffffff;
+  --sidebar-foreground: #14141a;
+  --sidebar-primary: #14141a;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #f4f3ee;
+  --sidebar-accent-foreground: #14141a;
+  --sidebar-border: #e8e5dc;
+  --sidebar-ring: #e63329;
 
-.dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
+  --ink: #14141a;
+  --text-2: #4a4a52;
+  --text-3: #87868f;
+  --surface: #ffffff;
+  --surface-2: #f8f7f3;
+  --surface-3: #f4f3ee;
+  --line: #e8e5dc;
+  --line-soft: #f4f3ee;
+  --line-strong: #d9d5c8;
+  --brand: #e63329;
+  --brand-hover: #c42820;
+  --brand-soft: #ff5a4d;
+  --laranja: #f97316;
+  --ok: #16a34a;
+  --warn: #b45309;
+  --warn-2: #fbbf24;
+  --risk: #e63329;
+  --info: #0369a1;
+  --info-2: #0ea5e9;
+  --roxo: #8b5cf6;
+  --balao-agente: #e9f7ee;
+  --balao-atendente: #fff1ef;
+  --balao-campanha: #fffbeb;
+  --whatsapp: #e5ddd5;
 }
 
 @layer base {
   * {
     @apply border-border outline-ring/50;
   }
-  body {
-    @apply bg-background text-foreground;
-  }
+  /*
+   * A raiz fica em 16px: as utilities do Tailwind 4 são em rem (h-14 = 56px,
+   * text-xs = 12px, p-4 = 16px), e o mock foi medido nessa base. O corpo de
+   * 14px do design entra no body, que não afeta o rem.
+   */
   html {
     @apply font-sans;
+    -webkit-font-smoothing: antialiased;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-size: 14px;
+    line-height: 1.45;
+  }
+  button {
+    cursor: pointer;
+  }
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--line-strong);
+    border-radius: 8px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    ::before,
+    ::after {
+      animation-duration: 0.01ms !important;
+      transition-duration: 0.01ms !important;
+    }
   }
 }

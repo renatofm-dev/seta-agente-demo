@@ -16,6 +16,10 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?defina no .env.prod}
+      # P-29: senhas dos papéis do produto (o init as usa no 1º boot do volume;
+      # em volume já existente, rotacionar com ALTER USER — ver docs/deploy-homelab.md)
+      APP_OWNER_PASSWORD: ${APP_OWNER_PASSWORD:?defina no .env.prod}
+      ERP_RO_PASSWORD: ${ERP_RO_PASSWORD:?defina no .env.prod}
     volumes:
       - seta_pg_prod:/var/lib/postgresql/data
       # cria bancos app + erp_mock, usuários e extensão pgvector no 1º boot
@@ -40,8 +44,9 @@ services:
       NODE_ENV: production
       NODE_OPTIONS: --max-old-space-size=512
       PORT: '3001'
-      DATABASE_URL: postgres://app_owner:app_owner_dev@db:5432/app
-      ERP_DATABASE_URL: postgres://erp_ro:erp_ro_dev@db:5432/erp_mock
+      # P-29: nenhuma senha literal aqui — vêm do .env.prod (o server recusa senha de dev em produção)
+      DATABASE_URL: postgres://app_owner:${APP_OWNER_PASSWORD}@db:5432/app
+      ERP_DATABASE_URL: postgres://erp_ro:${ERP_RO_PASSWORD}@db:5432/erp_mock
       ERP_MOCK_ADMIN_URL: postgres://postgres:${POSTGRES_PASSWORD}@db:5432/erp_mock
       # paths absolutos dentro da imagem
       CLIENT_CONFIG_PATH: /app/configs/demo/client.yaml

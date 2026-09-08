@@ -31,16 +31,39 @@ export interface IngestResultado {
   inalterados: number;
   reingeridos: number;
   chunks: number;
+  /** P-32: documentos cujo arquivo sumiu da pasta — removidos com seus chunks. */
+  removidos: number;
 }
 
 export async function ingestKb(deps: IngestDeps): Promise<IngestResultado> {
   const { db, dir } = deps;
   const log = deps.log ?? (() => {});
-  const resultado: IngestResultado = { arquivos: 0, inalterados: 0, reingeridos: 0, chunks: 0 };
+  const resultado: IngestResultado = {
+    arquivos: 0,
+    inalterados: 0,
+    reingeridos: 0,
+    chunks: 0,
+    removidos: 0,
+  };
 
   const arquivos = readdirSync(dir)
     .filter((f) => f.endsWith('.md'))
     .sort();
+
+  // P-32: arquivo que saiu da pasta sai da KB — senão o agente segue citando
+  // documento que não existe mais (3 docs de e-commerce sobraram até 03/09)
+  const presentes = new Set(arquivos);
+  const orfaos = (await db.select().from(documento).where(eq(documento.ns, 'kb'))).filter(
+    (d) => !presentes.has(d.fonte),
+  );
+  for (const d of orfaos) {
+    await db.transaction(async (tx) => {
+      await tx.delete(chunkTable).where(eq(chunkTable.documentoId, d.id));
+      await tx.delete(documento).where(eq(documento.id, d.id));
+    });
+    resultado.removidos += 1;
+    log(`${d.fonte}: removido (arquivo não existe mais)`);
+  }
   for (const arquivo of arquivos) {
     resultado.arquivos += 1;
     const conteudo = readFileSync(join(dir, arquivo), 'utf-8');
@@ -136,7 +159,7 @@ async function main(): Promise<void> {
     });
     console.log(
       `kb:ingest — ${r.arquivos} arquivos, ${r.inalterados} inalterados, ` +
-        `${r.reingeridos} (re)ingeridos, ${r.chunks} chunks gravados`,
+        `${r.reingeridos} (re)ingeridos, ${r.chunks} chunks gravados, ${r.removidos} removidos`,
     );
   } finally {
     await close();

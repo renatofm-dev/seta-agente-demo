@@ -1,0 +1,49 @@
+export {
+  acaoValida,
+  extrairJson,
+  type Interpretacao,
+  interpretarResposta,
+} from './interpretar.js';
+export { apresentar, iniciar, MAX_NAO_ENTENDI, transicionar } from './maquina.js';
+export { normalizar, numeroPequeno, parsearResposta, valorDoTexto } from './parser.js';
+export { referenciaProposta } from './referencia.js';
+export {
+  descricaoCota,
+  formatarReais,
+  TEXTO_AGENDAMENTO,
+  TEXTO_JA_NO_PISO,
+  TEXTO_NAO_ENTENDI,
+  TEXTO_QUALIFICACAO_PERIODOS,
+  TEXTO_QUALIFICACAO_PESSOAS,
+  TEXTO_SEM_ESTOQUE,
+  TEXTO_SEM_INTERESSE,
+  TEXTOS_FIXOS,
+  textoAgendado,
+  textoAlcada,
+  textoLimiteDia,
+  textoLista,
+  textoOfertaPiso,
+  textoOfertaTabela,
+} from './render.js';
+export {
+  type Acao,
+  type ContextoFluxo,
+  type CotaDisponivel,
+  cotaEscolhida,
+  type Efeito,
+  ENCERRAMENTOS,
+  type Encerramento,
+  type EstadoFluxo,
+  ETAPAS,
+  type Etapa,
+  MAX_OPCOES,
+  MAX_PESSOAS,
+  OFERTAS,
+  type Oferta,
+  PERIODOS_VALIDOS,
+  type Perfil,
+  pisoCentavos,
+  selecionarOpcoes,
+  type Transicao,
+  valorOfertadoCentavos,
+} from './tipos.js';

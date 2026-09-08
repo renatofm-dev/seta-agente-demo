@@ -49,6 +49,9 @@
     },
     {
       "path": "../../packages/cobranca"
+    },
+    {
+      "path": "../../packages/sdr"
     }
   ]
 }

@@ -5,7 +5,6 @@ import {
   Bar,
   BarChart,
   CartesianGrid,
-  Legend,
   Line,
   LineChart,
   ResponsiveContainer,
@@ -13,30 +12,56 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import { api, type Metricas } from '@/lib/console-api';
+import { Barra, Card, Kpi } from '@/components/ui/card';
+import { PageHeader, Pagina } from '@/components/ui/page-header';
+import { funilDe } from '@/lib/campanhas';
+import { api, type CobrancasResposta, type DisparoResumo, type Metricas } from '@/lib/console-api';
+import { porcentagem, reaisDeCentavos } from '@/lib/formatos';
+import { motivoLabel } from '@/lib/rotulos';
 import { cn } from '@/lib/utils';
+import { useInstalacao } from '../layout';
 
 /**
- * /metricas (010): conversas/dia, taxa de resolução sem humano, escalonamentos
- * por motivo, tokens + custo estimado/dia e p95 de latência. Janela 7/30 dias.
+ * Métricas (010 + design 5.7): KPIs do período, conversas por dia, motivos de
+ * escalada, funil de cobrança (014), atendimento humano e saúde do canal (013).
+ * Valor recuperado e funil vêm das cobranças; entrega vem das campanhas.
  */
 
-function Card({ titulo, valor, nota }: { titulo: string; valor: string; nota?: string }) {
+const CORES = ['bg-brand', 'bg-laranja', 'bg-info-2', 'bg-roxo', 'bg-text-3'];
+
+function Bloco({
+  titulo,
+  itens,
+}: {
+  titulo: string;
+  itens: { rotulo: string; valor: React.ReactNode; cor?: string }[];
+}) {
   return (
-    <div className="rounded-lg border p-4">
-      <p className="text-xs text-muted-foreground">{titulo}</p>
-      <p className="mt-1 text-2xl font-semibold">{valor}</p>
-      {nota && <p className="mt-1 text-[11px] text-muted-foreground">{nota}</p>}
-    </div>
+    <Card className="flex flex-col gap-1 p-5">
+      <div className="mb-1 font-semibold">{titulo}</div>
+      {itens.map((i) => (
+        <div
+          key={i.rotulo}
+          className="grid grid-cols-[1fr_auto] items-center gap-2 border-t border-line-soft py-1.5 text-[12.5px]"
+        >
+          <span className="text-text-2">{i.rotulo}</span>
+          <span className={cn('font-heading font-semibold', i.cor)}>{i.valor}</span>
+        </div>
+      ))}
+    </Card>
   );
 }
 
 const fmtMs = (v: number | null) => (v === null ? '—' : `${Math.round(v)} ms`);
 const fmtPct = (v: number | null) => (v === null ? '—' : `${(v * 100).toFixed(0)}%`);
+const diaCurto = (dia: string) => `${dia.slice(8, 10)}/${dia.slice(5, 7)}`;
 
 export default function MetricasPage() {
+  const instalacao = useInstalacao();
   const [dias, setDias] = useState<7 | 30>(7);
   const [m, setM] = useState<Metricas | null>(null);
+  const [cob, setCob] = useState<CobrancasResposta | null>(null);
+  const [disparos, setDisparos] = useState<DisparoResumo[]>([]);
   const [erro, setErro] = useState<string | null>(null);
 
   const carregar = useCallback(() => {
@@ -44,111 +69,312 @@ export default function MetricasPage() {
       .metricas(dias)
       .then(setM)
       .catch((e) => setErro(e instanceof Error ? e.message : String(e)));
+    api
+      .cobrancas()
+      .then(setCob)
+      .catch(() => setCob(null));
+    api
+      .disparos()
+      .then((r) => setDisparos(r.disparos))
+      .catch(() => {});
   }, [dias]);
 
   useEffect(() => {
     carregar();
   }, [carregar]);
 
-  if (erro) return <main className="p-6 text-sm text-red-600">{erro}</main>;
-  if (!m) return <main className="p-6 text-sm">Carregando métricas…</main>;
+  const desde = Date.now() - dias * 86_400_000;
+  const cobrancas = (cob?.cobrancas ?? []).filter((c) => new Date(c.criadoEm).getTime() >= desde);
+  const pagas = (cob?.cobrancas ?? []).filter(
+    (c) => c.pagoEm && new Date(c.pagoEm).getTime() >= desde,
+  );
+  const recuperado = pagas.reduce((s, c) => s + c.valorCentavos, 0);
+  const abertas = cobrancas.filter(
+    (c) => c.status === 'emitida' || c.status === 'emitindo' || c.status === 'aguardando_aprovacao',
+  );
+  const falhas = cobrancas.filter((c) => c.status === 'falha' || c.status === 'recusada');
+  const campanhas = disparos.filter((d) => new Date(d.criado_em).getTime() >= desde);
+  const funilCamp = campanhas.reduce(
+    (acc, d) => {
+      const f = funilDe(d);
+      return {
+        enviadas: acc.enviadas + f.enviadas,
+        entregues: acc.entregues + f.entregues,
+        lidas: acc.lidas + f.lidas,
+        falhas: acc.falhas + f.falhas,
+      };
+    },
+    { enviadas: 0, entregues: 0, lidas: 0, falhas: 0 },
+  );
+  const maxMotivo = Math.max(1, ...(m?.escalonamentosPorMotivo.map((x) => x.total) ?? [1]));
+  const tokens = (m?.tokensPorDia ?? []).reduce((s, d) => s + d.entrada + d.saida, 0);
 
   return (
-    <main className="space-y-6 overflow-y-auto p-6">
-      <header className="flex items-center gap-3">
-        <h1 className="text-lg font-semibold">Métricas</h1>
-        <div className="flex rounded-md border text-xs">
-          {([7, 30] as const).map((d) => (
-            <button
-              key={d}
-              type="button"
-              onClick={() => setDias(d)}
-              className={cn('px-3 py-1', dias === d && 'bg-muted font-medium')}
-            >
-              {d} dias
-            </button>
-          ))}
-        </div>
-        <button type="button" onClick={carregar} className="rounded-md border px-3 py-1 text-xs">
-          Atualizar
-        </button>
-      </header>
+    <Pagina>
+      <PageHeader
+        eyebrow={instalacao?.nome ?? 'Métricas'}
+        titulo="Métricas"
+        acoes={
+          <div className="flex gap-0.5 rounded-[10px] border border-line bg-surface p-[3px]">
+            {([7, 30] as const).map((d) => (
+              <button
+                key={d}
+                type="button"
+                onClick={() => setDias(d)}
+                className={cn(
+                  'h-[30px] rounded-[7px] px-3 text-[12.5px] font-semibold',
+                  dias === d ? 'bg-ink text-white' : 'text-text-2 hover:text-ink',
+                )}
+              >
+                {d} dias
+              </button>
+            ))}
+          </div>
+        }
+      />
+      {erro && <p className="m-0 text-xs text-brand">{erro}</p>}
+      {!m && !erro && <p className="m-0 text-sm text-text-3">Carregando métricas…</p>}
+      {m && (
+        <>
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+            <Kpi
+              rotulo="Valor recuperado"
+              valor={cob ? reaisDeCentavos(recuperado) : '—'}
+              tom="ok"
+              nota={
+                cob
+                  ? `${pagas.length} cobrança(s) paga(s) no período`
+                  : 'módulo de pagamentos desligado'
+              }
+            />
+            <Kpi
+              rotulo="Resolvido pelo agente"
+              valor={fmtPct(m.taxaResolucaoSemHumano)}
+              nota={`${m.totalEscaladas} de ${m.totalConversas} conversas passaram por gente`}
+            />
+            <Kpi
+              rotulo="Conversas no período"
+              valor={m.totalConversas}
+              nota={`p95 do turno ${fmtMs(m.p95TurnoMs)}`}
+            />
+            <Kpi
+              rotulo="Custo estimado (LLM)"
+              valor={m.custoTotal.toFixed(m.custoTotal < 1 ? 4 : 2)}
+              nota={`${tokens.toLocaleString('pt-BR')} tokens · na unidade do preço por 1M do env`}
+            />
+          </div>
 
-      <section className="grid grid-cols-2 gap-3 lg:grid-cols-5">
-        <Card titulo="Conversas no período" valor={String(m.totalConversas)} />
-        <Card
-          titulo="Resolução sem humano"
-          valor={fmtPct(m.taxaResolucaoSemHumano)}
-          nota={`${m.totalEscaladas} conversa(s) escalada(s)`}
-        />
-        <Card titulo="p95 turno" valor={fmtMs(m.p95TurnoMs)} />
-        <Card titulo="p95 query ERP" valor={fmtMs(m.p95QueryMs)} />
-        <Card
-          titulo="Custo estimado"
-          valor={m.custoTotal.toFixed(4)}
-          nota="preço por 1M tokens no env"
-        />
-      </section>
+          <div className="grid gap-4 lg:grid-cols-[1.6fr_1fr]">
+            <Card className="flex flex-col gap-3.5 p-5">
+              <div className="flex items-baseline justify-between">
+                <div className="font-semibold">Conversas por dia</div>
+                <div className="flex items-center gap-1.5 text-xs text-text-2">
+                  <span className="size-2.5 rounded-[3px] bg-brand" /> conversas com turno do agente
+                </div>
+              </div>
+              <ResponsiveContainer width="100%" height={200}>
+                <BarChart data={m.conversasPorDia.map((d) => ({ ...d, dia: diaCurto(d.dia) }))}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--line)" vertical={false} />
+                  <XAxis
+                    dataKey="dia"
+                    fontSize={10}
+                    stroke="var(--text-3)"
+                    tickLine={false}
+                    axisLine={false}
+                  />
+                  <YAxis
+                    allowDecimals={false}
+                    fontSize={10}
+                    stroke="var(--text-3)"
+                    tickLine={false}
+                    axisLine={false}
+                    width={28}
+                  />
+                  <Tooltip
+                    cursor={{ fill: 'var(--surface-3)' }}
+                    contentStyle={{
+                      borderRadius: 10,
+                      border: '1px solid var(--line)',
+                      fontSize: 12,
+                    }}
+                  />
+                  <Bar
+                    dataKey="conversas"
+                    fill="var(--brand)"
+                    radius={[3, 3, 0, 0]}
+                    name="conversas"
+                  />
+                </BarChart>
+              </ResponsiveContainer>
+            </Card>
+            <Card className="flex flex-col gap-3 p-5">
+              <div className="font-semibold">Motivos de escalada</div>
+              {m.escalonamentosPorMotivo.length === 0 && (
+                <p className="m-0 text-xs text-text-3">Nenhum escalonamento no período.</p>
+              )}
+              {m.escalonamentosPorMotivo.map((x, i) => (
+                <div key={x.motivo} className="flex flex-col gap-1">
+                  <div className="flex justify-between text-[12.5px]">
+                    <span className="text-text-2" title={x.motivo}>
+                      {motivoLabel(x.motivo)}
+                    </span>
+                    <span className="font-mono text-[11px] text-text-3">{x.total}</span>
+                  </div>
+                  <Barra fracao={x.total / maxMotivo} cor={CORES[i % CORES.length]} />
+                </div>
+              ))}
+            </Card>
+          </div>
 
-      <section className="grid gap-6 lg:grid-cols-2">
-        <div className="rounded-lg border p-4">
-          <h2 className="mb-2 text-sm font-medium">Conversas por dia</h2>
-          <ResponsiveContainer width="100%" height={220}>
-            <BarChart data={m.conversasPorDia}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="dia" fontSize={11} />
-              <YAxis allowDecimals={false} fontSize={11} />
-              <Tooltip />
-              <Bar dataKey="conversas" fill="var(--color-primary, #2563eb)" name="conversas" />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
+          <div className="grid gap-4 md:grid-cols-3">
+            <Bloco
+              titulo="Funil de cobrança"
+              itens={[
+                { rotulo: 'Mensagens de campanha', valor: funilCamp.enviadas },
+                { rotulo: 'Cobranças geradas', valor: cob ? cobrancas.length : '—' },
+                { rotulo: 'Aguardando pagamento', valor: cob ? abertas.length : '—' },
+                {
+                  rotulo: 'Pagas',
+                  valor: cob
+                    ? `${pagas.length} · ${porcentagem(pagas.length, cobrancas.length)}`
+                    : '—',
+                  cor: 'text-ok',
+                },
+                {
+                  rotulo: 'Falhas e recusas',
+                  valor: cob ? falhas.length : '—',
+                  cor: falhas.length > 0 ? 'text-brand' : '',
+                },
+                {
+                  rotulo: 'Ticket médio',
+                  valor:
+                    pagas.length > 0 ? reaisDeCentavos(Math.round(recuperado / pagas.length)) : '—',
+                },
+              ]}
+            />
+            <Bloco
+              titulo="Atendimento humano"
+              itens={[
+                { rotulo: 'Escaladas', valor: m.totalEscaladas },
+                { rotulo: 'Resolvido sem humano', valor: fmtPct(m.taxaResolucaoSemHumano) },
+                { rotulo: 'p95 do turno do agente', valor: fmtMs(m.p95TurnoMs) },
+                { rotulo: 'p95 das consultas ao ERP', valor: fmtMs(m.p95QueryMs) },
+              ]}
+            />
+            <Bloco
+              titulo="Saúde do canal"
+              itens={[
+                {
+                  rotulo: 'Entrega das campanhas',
+                  valor: porcentagem(funilCamp.entregues, funilCamp.enviadas),
+                  cor: 'text-ok',
+                },
+                { rotulo: 'Leitura', valor: porcentagem(funilCamp.lidas, funilCamp.entregues) },
+                {
+                  rotulo: 'Falhas de envio',
+                  valor: funilCamp.falhas,
+                  cor: funilCamp.falhas > 0 ? 'text-brand' : '',
+                },
+                {
+                  rotulo: 'Custo por conversa',
+                  valor: m.totalConversas > 0 ? (m.custoTotal / m.totalConversas).toFixed(4) : '—',
+                },
+              ]}
+            />
+          </div>
 
-        <div className="rounded-lg border p-4">
-          <h2 className="mb-2 text-sm font-medium">Tokens por dia (entrada × saída)</h2>
-          <ResponsiveContainer width="100%" height={220}>
-            <LineChart data={m.tokensPorDia}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="dia" fontSize={11} />
-              <YAxis fontSize={11} />
-              <Tooltip />
-              <Legend />
-              <Line type="monotone" dataKey="entrada" stroke="#2563eb" name="entrada" />
-              <Line type="monotone" dataKey="saida" stroke="#16a34a" name="saída" />
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
-
-        <div className="rounded-lg border p-4">
-          <h2 className="mb-2 text-sm font-medium">Escalonamentos por motivo</h2>
-          {m.escalonamentosPorMotivo.length === 0 ? (
-            <p className="text-xs text-muted-foreground">Nenhum escalonamento no período.</p>
-          ) : (
-            <ResponsiveContainer width="100%" height={220}>
-              <BarChart data={m.escalonamentosPorMotivo} layout="vertical">
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis type="number" allowDecimals={false} fontSize={11} />
-                <YAxis type="category" dataKey="motivo" width={140} fontSize={11} />
-                <Tooltip />
-                <Bar dataKey="total" fill="#d97706" name="escalonamentos" />
-              </BarChart>
-            </ResponsiveContainer>
-          )}
-        </div>
-
-        <div className="rounded-lg border p-4">
-          <h2 className="mb-2 text-sm font-medium">Custo estimado por dia</h2>
-          <ResponsiveContainer width="100%" height={220}>
-            <BarChart data={m.tokensPorDia}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="dia" fontSize={11} />
-              <YAxis fontSize={11} />
-              <Tooltip />
-              <Bar dataKey="custo" fill="#7c3aed" name="custo" />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      </section>
-    </main>
+          <div className="grid gap-4 lg:grid-cols-2">
+            <Card className="flex flex-col gap-3 p-5">
+              <div className="flex items-baseline justify-between">
+                <div className="font-semibold">Tokens por dia</div>
+                <div className="flex gap-3.5 text-xs text-text-2">
+                  <span className="flex items-center gap-1.5">
+                    <span className="size-2.5 rounded-[3px] bg-brand" />
+                    entrada
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <span className="size-2.5 rounded-[3px] bg-laranja" />
+                    saída
+                  </span>
+                </div>
+              </div>
+              <ResponsiveContainer width="100%" height={200}>
+                <LineChart data={m.tokensPorDia.map((d) => ({ ...d, dia: diaCurto(d.dia) }))}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--line)" vertical={false} />
+                  <XAxis
+                    dataKey="dia"
+                    fontSize={10}
+                    stroke="var(--text-3)"
+                    tickLine={false}
+                    axisLine={false}
+                  />
+                  <YAxis
+                    fontSize={10}
+                    stroke="var(--text-3)"
+                    tickLine={false}
+                    axisLine={false}
+                    width={44}
+                  />
+                  <Tooltip
+                    contentStyle={{
+                      borderRadius: 10,
+                      border: '1px solid var(--line)',
+                      fontSize: 12,
+                    }}
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="entrada"
+                    stroke="var(--brand)"
+                    strokeWidth={2}
+                    dot={false}
+                    name="entrada"
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="saida"
+                    stroke="var(--laranja)"
+                    strokeWidth={2}
+                    dot={false}
+                    name="saída"
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            </Card>
+            <Card className="flex flex-col gap-3 p-5">
+              <div className="font-semibold">Custo estimado por dia</div>
+              <ResponsiveContainer width="100%" height={200}>
+                <BarChart data={m.tokensPorDia.map((d) => ({ ...d, dia: diaCurto(d.dia) }))}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--line)" vertical={false} />
+                  <XAxis
+                    dataKey="dia"
+                    fontSize={10}
+                    stroke="var(--text-3)"
+                    tickLine={false}
+                    axisLine={false}
+                  />
+                  <YAxis
+                    fontSize={10}
+                    stroke="var(--text-3)"
+                    tickLine={false}
+                    axisLine={false}
+                    width={44}
+                  />
+                  <Tooltip
+                    cursor={{ fill: 'var(--surface-3)' }}
+                    contentStyle={{
+                      borderRadius: 10,
+                      border: '1px solid var(--line)',
+                      fontSize: 12,
+                    }}
+                  />
+                  <Bar dataKey="custo" fill="var(--roxo)" radius={[3, 3, 0, 0]} name="custo" />
+                </BarChart>
+              </ResponsiveContainer>
+            </Card>
+          </div>
+        </>
+      )}
+    </Pagina>
   );
 }

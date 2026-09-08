@@ -27,6 +27,7 @@ import { registerCobrancaEventoWorker } from './pagamentos/eventos.js';
 import { createPagamentosRepo } from './pagamentos/repo.js';
 import { createDrizzleQueryEventSink } from './query-event-sink.js';
 import { createPgVectorStore } from './rag/pgvector-store.js';
+import { createSdrRepo } from './sdr/repo.js';
 import { createSkillRegistry } from './skills/registry.js';
 import { registerSinaisDiarios } from './skills/sinais-job.js';
 import { registerDebounceWorker } from './wa/debounce.js';
@@ -133,6 +134,7 @@ await registerDebounceWorker({
     resumoACadaTurnos: env.AGENT_RESUMO_A_CADA_TURNOS,
     debounceMs: env.WA_DEBOUNCE_MS, // #46: reagendamento após turno descartado
     pagamentos: { repo: pagamentosRepo, psp, env }, // 014
+    sdr: { repo: createSdrRepo(db), env }, // 015: só age na raia sem vínculo com modulos.sdr
     ...(anonimizacao ? { anonimizacao: anonimizacao.acumulador } : {}), // 016
   }),
   logger,
@@ -173,6 +175,7 @@ try {
       // 014: confundir sandbox com produção é mandar cobrança de verdade
       psp: psp.nome === 'asaas' ? `asaas-${psp.ambiente}` : 'simulado',
       pagamentos: clientConfig.modulos.pagamentos,
+      sdr: clientConfig.modulos.sdr ? `alçada ${env.SDR_DESCONTO_MAX_BPS} bps` : false, // 015
     },
     'server no ar',
   );

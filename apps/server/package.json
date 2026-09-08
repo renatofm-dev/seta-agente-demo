@@ -22,6 +22,7 @@
     "@seta/payment-provider": "workspace:*",
     "@seta/query-catalog": "workspace:*",
     "@seta/rag": "workspace:*",
+    "@seta/sdr": "workspace:*",
     "@seta/skills": "workspace:*",
     "@seta/wa-meta": "workspace:*",
     "better-auth": "^1.7.2",

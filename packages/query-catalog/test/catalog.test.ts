@@ -71,4 +71,28 @@ describe('#35: tools filtradas por vínculo na sessão', () => {
     });
     expect(semVinculo).toEqual([]);
   });
+
+  it('015: o portão é por escopo — sem vínculo, só entradas sem param de vínculo (comercial.*)', async () => {
+    const catalog = loadCatalog(join(import.meta.dirname, '../../../catalog'));
+    const executor = { run: async () => ({ rows: [], rowCount: 0, truncated: false }) };
+    const lead = buildToolSpecs(catalog, executor as never, {
+      modulosHabilitados: { financeiro: true, contrato: true, atendimento: true, sdr: true },
+      temVinculo: false,
+    });
+    expect(lead.map((t) => t.name).sort()).toEqual(['condicoes_cota', 'estoque_disponivel']);
+    // a tool de condições é a fonte de preço reconhecida pelo guardrail
+    expect(lead.find((t) => t.name === 'condicoes_cota')?.priceSource).toBe(true);
+    expect(lead.find((t) => t.name === 'estoque_disponivel')?.priceSource).toBe(false);
+    // sem vínculo, a tool grão-contrato nem existe; a comercial executa normalmente
+    const sessao = { traceId: 't', clienteId: '', descontoMaxBps: 300 };
+    await expect(lead[0]?.execute({}, sessao)).resolves.toBeDefined();
+    // com vínculo e módulo sdr, as duas famílias convivem
+    const cotista = buildToolSpecs(catalog, executor as never, {
+      modulosHabilitados: { financeiro: true, contrato: true, atendimento: true, sdr: true },
+      temVinculo: true,
+    });
+    expect(cotista.map((t) => t.name)).toEqual(
+      expect.arrayContaining(['minha_cota', 'estoque_disponivel']),
+    );
+  });
 });

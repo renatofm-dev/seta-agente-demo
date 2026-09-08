@@ -30,6 +30,11 @@ sudo systemctl reload caddy
 ```bash
 # Postgres do compose (superuser do container)
 POSTGRES_PASSWORD=<forte>
+# P-29: senhas dos papéis do produto — o init as usa no 1º boot do volume e o
+# compose monta DATABASE_URL/ERP_DATABASE_URL com elas. O server RECUSA subir em
+# produção com app_owner_dev/erp_ro_dev (P-28). Sem aspas simples, por segurança.
+APP_OWNER_PASSWORD=<forte>
+ERP_RO_PASSWORD=<forte>
 
 # WhatsApp Meta Cloud API — docs/meta-setup.md
 WA_VERIFY_TOKEN=<token do handshake>
@@ -56,7 +61,25 @@ NODE_ENV=production
 LOG_LEVEL=info
 ```
 
-DATABASE_URL/ERP_* e paths ficam no próprio `compose.prod.yml` (rede interna).
+DATABASE_URL/ERP_DATABASE_URL são montadas no `compose.prod.yml` a partir de
+`APP_OWNER_PASSWORD`/`ERP_RO_PASSWORD` (rede interna); os paths ficam no compose.
+
+### Rotação de senha em instalação já existente
+
+O init só roda no primeiro boot do volume. Numa instalação que subiu com as
+senhas de dev, rotacione uma vez — a senha entra como variável do psql (`:'pw'`),
+nunca interpolada no SQL:
+
+```bash
+docker compose -f infra/compose.prod.yml --env-file .env.prod exec db \
+  psql -U postgres -v pw="$APP_OWNER_PASSWORD" -c "ALTER USER app_owner PASSWORD :'pw'"
+docker compose -f infra/compose.prod.yml --env-file .env.prod exec db \
+  psql -U postgres -v pw="$ERP_RO_PASSWORD" -c "ALTER USER erp_ro PASSWORD :'pw'"
+docker compose -f infra/compose.prod.yml --env-file .env.prod up -d server
+```
+
+Sem isso o `server` não sobe (P-28 recusa a URL com senha de dev) — falha ruidosa,
+de propósito.
 
 ## Deploy e seed
 
@@ -97,10 +120,13 @@ retry — os testes de integração da 004 cobrem exatamente isso.
 
 ## Premissas registradas
 
-- Os usuários `app_owner`/`erp_ro` são criados pelo init com as senhas de dev.
-  O banco NÃO publica porta (só rede interna do compose), então o risco é
-  contido; hardening opcional: `ALTER USER app_owner PASSWORD '...'` + ajustar
-  as URLs no compose.
+- P-28/P-29: os papéis `app_owner`/`erp_ro` nascem com as senhas do `.env.prod`
+  (`infra/postgres/init/01-init.sh`); o compose não tem senha literal e o server
+  recusa subir em produção com segredo/senha de dev. O banco continua sem porta
+  publicada (só rede interna do compose).
+- P-30: a imagem só é publicada no GHCR depois do workflow `ci` passar no `main`
+  (`release.yml` dispara por `workflow_run`); `workflow_dispatch` republica um
+  SHA à mão.
 - Imagem do server carrega o monorepo compilado com install prod filtrado
   (`--filter @seta/server...`) — gorda o bastante para rodar seed/ingestão
   dentro do container, pequena o bastante para a CX23.

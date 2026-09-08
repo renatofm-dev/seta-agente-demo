@@ -10,6 +10,48 @@ export interface Sessao {
   role: 'atendente' | 'curador';
 }
 
+/** Instalação (client.yaml + env, só leitura): cabeçalho, nav por módulo e Configurações. */
+export interface Instalacao {
+  nome: string;
+  modulos: {
+    financeiro: boolean;
+    contrato: boolean;
+    atendimento: boolean;
+    pagamentos: boolean;
+    sdr: boolean;
+  };
+  limites: {
+    maxToolCallsPorTurno: number;
+    maxMensagensContexto: number;
+    maxCaracteresResposta: number;
+  };
+  guardrails: { temasSensiveis: string[] };
+  alcadas: {
+    tetoAprovacaoCentavos: number;
+    maxCobrancasDia: number;
+    diasVencimento: number;
+    descontoMaxBps: number;
+    maxPropostasDia: number;
+  };
+  canal: { gateway: 'meta' | 'log-only'; metaConfigurada: boolean; simulador: boolean };
+  psp: { nome: string; ambiente: string } | null;
+}
+
+/** Badges da barra superior. */
+export interface Resumo {
+  aguardandoHumano: number;
+  cobrancasAguardandoAprovacao: number;
+  leadsAguardandoAprovacao: number;
+}
+
+export interface PessoaEquipe {
+  id: string;
+  nome: string;
+  email: string;
+  role: Sessao['role'];
+  criadoEm: string;
+}
+
 export interface TicketResumo {
   id: string;
   conversaId: string;
@@ -45,7 +87,7 @@ export interface TicketDetalhe extends TicketResumo {
 // --- Atendimento centrado em conversa (#45) --------------------------------
 
 export type StatusTicket = TicketResumo['status'];
-export type FiltroConversas = 'todas' | 'aguardando' | 'minhas' | 'resolvidas';
+export type FiltroConversas = 'todas' | 'aguardando' | 'minhas' | 'agente' | 'resolvidas';
 
 export interface ConversaResumo {
   conversaId: string;
@@ -63,6 +105,8 @@ export interface ConversaResumo {
   ultimaMensagem: { texto: string; autor: string; em: string } | null;
 }
 
+export type ContagensConversas = Record<FiltroConversas, number>;
+
 export interface MensagemThread {
   id: string;
   autor: 'contato' | 'bot' | 'atendente' | 'campanha';
@@ -73,6 +117,22 @@ export interface MensagemThread {
   criadoEm: string;
 }
 
+/** Resumo da inadimplência do contrato (financeiro.titulos_atraso); null sem vínculo/ERP. */
+export interface FinanceiroContrato {
+  vencidas: number;
+  saldoVencidoCentavos: number;
+  maiorAtrasoDias: number;
+  vencimentoMaisAntigo: string | null;
+}
+
+/** Campanha (disparo) mais recente que alcançou o número da conversa. */
+export interface OrigemCampanha {
+  disparoId: string;
+  modelo: string;
+  enviadoEm: string;
+  statusDestinatario: 'pendente' | 'enviado' | 'entregue' | 'lido' | 'falha';
+}
+
 export interface ConversaDetalhe {
   conversaId: string;
   waId: string;
@@ -80,6 +140,8 @@ export interface ConversaDetalhe {
   clienteErpId: string | null;
   janelaExpiraEm: string | null;
   limiteResposta: number;
+  financeiro: FinanceiroContrato | null;
+  origem: OrigemCampanha | null;
   ticket: {
     id: string;
     status: StatusTicket;
@@ -98,7 +160,7 @@ export interface PaginaMensagens {
   temMais: boolean;
 }
 
-// --- Disparos de template (013) --------------------------------------------
+// --- Disparos de template (013) → Campanhas --------------------------------
 
 export interface Modelo {
   id: string;
@@ -138,6 +200,21 @@ export interface DisparoDestinatarioView {
   contatoNome: string | null;
   status: 'pendente' | 'enviado' | 'entregue' | 'lido' | 'falha';
   erro: string | null;
+  atualizadoEm: string;
+}
+
+export interface DisparoDetalhe {
+  disparo: {
+    id: string;
+    modeloId: string;
+    variaveis: string[];
+    status: 'enviando' | 'concluido';
+    criadoPor: string;
+    criadoEm: string;
+    atualizadoEm: string;
+  };
+  modelo: Modelo;
+  destinatarios: DisparoDestinatarioView[];
 }
 
 // --- Observabilidade (010) -------------------------------------------------
@@ -169,6 +246,12 @@ export type TraceEvento =
   | { tipo: 'escalado' }
   | { tipo: 'descartado'; motivo: string };
 
+export interface FeedbackTurno {
+  avaliacao: 'bom' | 'ruim';
+  motivos: string[];
+  sugestao: string | null;
+}
+
 export interface TraceTurnoView {
   id: string;
   traceId: string;
@@ -184,6 +267,7 @@ export interface TraceTurnoView {
   tokensSaida: number;
   latenciaMs: number;
   criadoEm: string;
+  feedback: FeedbackTurno | null;
 }
 
 export interface Metricas {
@@ -199,7 +283,8 @@ export interface Metricas {
   custoTotal: number;
 }
 
-/** 014: cobrança gerada pelo fluxo de pagamento (espelho de /api/console/cobrancas). */
+// --- Cobranças (014) --------------------------------------------------------
+
 export type StatusCobranca =
   | 'aguardando_aprovacao'
   | 'emitindo'
@@ -211,12 +296,14 @@ export type StatusCobranca =
   | 'falha'
   | 'estornada';
 
+export type MetodoCobranca = 'boleto' | 'pix' | 'cartao';
+
 export interface CobrancaView {
   id: string;
   conversaId: string;
   contratoId: string;
   status: StatusCobranca;
-  metodo: 'boleto' | 'pix' | 'cartao';
+  metodo: MetodoCobranca;
   valorCentavos: number;
   vencimentoPsp: string;
   psp: string;
@@ -242,10 +329,127 @@ export interface CobrancasResposta {
   cobrancas: CobrancaView[];
 }
 
+export interface CobrancaDetalhe {
+  cobranca: {
+    id: string;
+    conversaId: string;
+    contratoId: string;
+    referenciaExterna: string;
+    status: StatusCobranca;
+    metodo: MetodoCobranca;
+    valorCentavos: number;
+    vencimentoPsp: string;
+    psp: string;
+    pspCobrancaId: string | null;
+    urlFatura: string | null;
+    urlBoleto: string | null;
+    linhaDigitavel: string | null;
+    pixCopiaCola: string | null;
+    motivo: string | null;
+    aprovadoPor: string | null;
+    aprovadoEm: string | null;
+    pagoEm: string | null;
+    tentativas: number;
+    criadoEm: string;
+    atualizadoEm: string;
+  };
+  titulos: {
+    tituloId: string;
+    origem: 'entrada' | 'saldo';
+    parcela: number;
+    totalParcelas: number | null;
+    valorCentavos: number;
+    vencimento: string;
+  }[];
+  eventos: {
+    id: string;
+    tipo: string;
+    recebidoEm: string;
+    processadoEm: string | null;
+    erro: string | null;
+  }[];
+}
+
+// --- Leads (015, leitura) ---------------------------------------------------
+
+export type StatusLead =
+  | 'novo'
+  | 'qualificando'
+  | 'qualificado'
+  | 'proposta'
+  | 'agendado'
+  | 'perdido';
+export type StatusPropostaSdr =
+  | 'rascunho'
+  | 'ofertada'
+  | 'aguardando_aprovacao'
+  | 'aceita'
+  | 'recusada'
+  | 'expirada';
+
+export interface PerfilLead {
+  pessoas: number | null;
+  periodos: number | null;
+  contato: string | null;
+}
+
+export interface PropostaSdrView {
+  id: string;
+  status: StatusPropostaSdr;
+  cotaCodigo: string;
+  valorTabelaCentavos: number;
+  valorMinimoCentavos: number;
+  valorOfertadoCentavos: number;
+  descontoBps: number;
+  valorPedidoCentavos: number | null;
+  motivo: string | null;
+  criadoEm: string | null;
+}
+
+export interface LeadView {
+  id: string;
+  waId: string;
+  nome: string | null;
+  status: StatusLead;
+  perfil: PerfilLead;
+  conversaId: string | null;
+  criadoEm: string;
+  atualizadoEm: string;
+  proposta: PropostaSdrView | null;
+}
+
+export interface LeadDetalhe {
+  lead: Omit<LeadView, 'proposta'> & { origem: string };
+  propostas: (PropostaSdrView & { aprovadoPor: string | null; atualizadoEm: string })[];
+  fluxo: {
+    etapa: 'qualificacao' | 'apresentacao' | 'oferta' | 'agendamento' | 'encerrado';
+    oferta: 'tabela' | 'piso' | null;
+    encerramento: string | null;
+    atualizadoEm: string;
+  } | null;
+}
+
 async function json<T>(res: Response): Promise<T> {
-  if (!res.ok) throw new Error(`${res.status}: ${await res.text()}`);
+  if (!res.ok) {
+    const corpo = await res.text();
+    let msg = corpo;
+    try {
+      const j = JSON.parse(corpo) as { erro?: string; detalhe?: string };
+      msg = j.erro ? `${j.erro}${j.detalhe ? ` — ${j.detalhe}` : ''}` : corpo;
+    } catch {
+      // corpo não é JSON: mantém o texto
+    }
+    throw new Error(`${res.status}: ${msg}`);
+  }
   return res.json() as Promise<T>;
 }
+
+const post = (url: string, body?: unknown) =>
+  fetch(url, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+  });
 
 export const api = {
   login: (email: string, password: string) =>
@@ -259,12 +463,20 @@ export const api = {
     const res = await fetch('/api/console/me');
     return res.ok ? (res.json() as Promise<Sessao>) : null;
   },
+  /** Público (tela de login): só o nome da instalação. */
+  instalacaoPublica: async (): Promise<{ nome: string } | null> => {
+    const res = await fetch('/api/instalacao').catch(() => null);
+    return res?.ok ? (res.json() as Promise<{ nome: string }>) : null;
+  },
+  instalacao: () => fetch('/api/console/instalacao').then((r) => json<Instalacao>(r)),
+  resumo: () => fetch('/api/console/resumo').then((r) => json<Resumo>(r)),
+  equipe: () => fetch('/api/console/equipe').then((r) => json<{ pessoas: PessoaEquipe[] }>(r)),
   inbox: () => fetch('/api/console/inbox').then((r) => json<Inbox>(r)),
   conversas: (filtro: FiltroConversas, q: string) => {
     const params = new URLSearchParams({ filtro });
     if (q.trim()) params.set('q', q.trim());
     return fetch(`/api/console/conversas?${params}`).then((r) =>
-      json<{ conversas: ConversaResumo[]; temMais: boolean }>(r),
+      json<{ conversas: ConversaResumo[]; temMais: boolean; contagens: ContagensConversas }>(r),
     );
   },
   conversa: (id: string) =>
@@ -274,22 +486,23 @@ export const api = {
       json<PaginaMensagens>(r),
     ),
   marcarLida: (id: string) =>
-    fetch(`/api/console/conversa/${id}/lida`, { method: 'POST' }).then((r) =>
-      json<{ ok: boolean }>(r),
-    ),
+    post(`/api/console/conversa/${id}/lida`).then((r) => json<{ ok: boolean }>(r)),
   ticket: (id: string) => fetch(`/api/console/ticket/${id}`).then((r) => json<TicketDetalhe>(r)),
   acao: (id: string, acao: 'assumir' | 'devolver' | 'resolver') =>
-    fetch(`/api/console/ticket/${id}/${acao}`, { method: 'POST' }).then((r) =>
-      json<{ status: string }>(r),
-    ),
+    post(`/api/console/ticket/${id}/${acao}`).then((r) => json<{ status: string }>(r)),
   responder: (id: string, texto: string) =>
-    fetch(`/api/console/ticket/${id}/responder`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ texto, chave: crypto.randomUUID() }),
-    }).then((r) => json<{ duplicada: boolean }>(r)),
+    post(`/api/console/ticket/${id}/responder`, { texto, chave: crypto.randomUUID() }).then((r) =>
+      json<{ duplicada: boolean }>(r),
+    ),
   traces: (id: string) =>
     fetch(`/api/console/ticket/${id}/traces`).then((r) => json<{ traces: TraceTurnoView[] }>(r)),
+  feedbackTurno: (
+    traceTurnoId: string,
+    corpo: { avaliacao: 'bom' | 'ruim'; motivos?: string[]; sugestao?: string },
+  ) =>
+    post(`/api/console/traces/${traceTurnoId}/feedback`, corpo).then((r) =>
+      json<{ ok: boolean; feedback: FeedbackTurno }>(r),
+    ),
   modelos: () =>
     fetch('/api/console/modelos').then((r) =>
       json<{ modelos: Modelo[]; metaConfigurada: boolean }>(r),
@@ -300,14 +513,9 @@ export const api = {
     categoria?: string;
     corpo: string;
     rodape?: string;
-  }) =>
-    fetch('/api/console/modelos', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(def),
-    }).then((r) => json<{ modelo: Modelo }>(r)),
+  }) => post('/api/console/modelos', def).then((r) => json<{ modelo: Modelo }>(r)),
   sincronizarModelos: () =>
-    fetch('/api/console/modelos/sincronizar', { method: 'POST' }).then((r) =>
+    post('/api/console/modelos/sincronizar').then((r) =>
       json<{ modelos: Modelo[]; atualizados: number }>(r),
     ),
   carteira: () =>
@@ -315,52 +523,32 @@ export const api = {
   disparos: () =>
     fetch('/api/console/disparos').then((r) => json<{ disparos: DisparoResumo[] }>(r)),
   criarDisparo: (corpo: { modeloId: string; variaveis: string[]; waIds: string[] }) =>
-    fetch('/api/console/disparos', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(corpo),
-    }).then((r) => json<{ disparoId: string; destinatarios: number }>(r)),
-  disparo: (id: string) =>
-    fetch(`/api/console/disparos/${id}`).then((r) =>
-      json<{ destinatarios: DisparoDestinatarioView[]; modelo: Modelo }>(r),
+    post('/api/console/disparos', corpo).then((r) =>
+      json<{ disparoId: string; destinatarios: number }>(r),
     ),
+  disparo: (id: string) =>
+    fetch(`/api/console/disparos/${id}`).then((r) => json<DisparoDetalhe>(r)),
   metricas: (dias: 7 | 30) =>
     fetch(`/api/console/metricas?dias=${dias}`).then((r) => json<Metricas>(r)),
-  cobrancas: (status?: StatusCobranca) =>
-    fetch(`/api/console/cobrancas${status ? `?status=${status}` : ''}`).then((r) =>
+  cobrancas: (filtro?: { status?: StatusCobranca; conversaId?: string }) => {
+    const params = new URLSearchParams();
+    if (filtro?.status) params.set('status', filtro.status);
+    if (filtro?.conversaId) params.set('conversaId', filtro.conversaId);
+    const qs = params.toString();
+    return fetch(`/api/console/cobrancas${qs ? `?${qs}` : ''}`).then((r) =>
       json<CobrancasResposta>(r),
-    ),
+    );
+  },
+  cobranca: (id: string) =>
+    fetch(`/api/console/cobrancas/${id}`).then((r) => json<CobrancaDetalhe>(r)),
   aprovarCobranca: (id: string) =>
-    fetch(`/api/console/cobrancas/${id}/aprovar`, { method: 'POST' }).then((r) =>
-      json<{ ok: boolean }>(r),
-    ),
+    post(`/api/console/cobrancas/${id}/aprovar`).then((r) => json<{ ok: boolean }>(r)),
   recusarCobranca: (id: string, motivo: string) =>
-    fetch(`/api/console/cobrancas/${id}/recusar`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ motivo }),
-    }).then((r) => json<{ ok: boolean }>(r)),
+    post(`/api/console/cobrancas/${id}/recusar`, { motivo }).then((r) => json<{ ok: boolean }>(r)),
   simularPagamento: (id: string) =>
-    fetch(`/api/console/cobrancas/${id}/simular-pagamento`, { method: 'POST' }).then((r) =>
+    post(`/api/console/cobrancas/${id}/simular-pagamento`).then((r) =>
       json<{ ok: boolean; psp: string }>(r),
     ),
-};
-
-export const STATUS_COBRANCA_LABEL: Record<StatusCobranca, string> = {
-  aguardando_aprovacao: 'Aguardando aprovação',
-  emitindo: 'Gerando',
-  emitida: 'Aguardando pagamento',
-  paga: 'Paga',
-  expirada: 'Expirada',
-  cancelada: 'Cancelada',
-  recusada: 'Recusada',
-  falha: 'Falha',
-  estornada: 'Estornada',
-};
-
-export const STATUS_LABEL: Record<TicketResumo['status'], string> = {
-  bot_ativo: 'Bot ativo',
-  aguardando_humano: 'Aguardando humano',
-  humano_ativo: 'Em atendimento',
-  resolvido: 'Resolvido',
+  leads: () => fetch('/api/console/leads').then((r) => json<{ leads: LeadView[] }>(r)),
+  lead: (id: string) => fetch(`/api/console/leads/${id}`).then((r) => json<LeadDetalhe>(r)),
 };

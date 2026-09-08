@@ -280,10 +280,19 @@ describe('critérios spec 005 (via simulador)', () => {
     await enviarPeloSimulador('5511888880000', 'quanto falta pagar do meu contrato?');
     const { trace } = await aguardarResposta();
 
-    // spec 003: sem vínculo na sessão, o modelo só vê KB + escalar — nada de
-    // colher erros de tool de dado
+    // spec 003 (#35): sem vínculo na sessão, nenhuma tool grão-contrato — nada de
+    // colher erros de tool de dado. 015: as comerciais (sem contrato_id) entram,
+    // porque o portão passou a ser por escopo da entrada, não por vínculo.
     const contexto = trace.contexto as { tools: string[] };
-    expect(contexto.tools).toEqual(['buscar_conhecimento', 'escalar_para_humano']);
+    expect([...contexto.tools].sort()).toEqual([
+      'buscar_conhecimento',
+      'condicoes_cota',
+      'escalar_para_humano',
+      'estoque_disponivel',
+    ]);
+    for (const t of ['saldo_contrato', 'minha_cota', 'titulos_atraso', 'iniciar_pagamento']) {
+      expect(contexto.tools).not.toContain(t);
+    }
   }, 20_000);
 
   it('contexto usa as N mensagens mais RECENTES e enxerga respostas do atendente', async () => {

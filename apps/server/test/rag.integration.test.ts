@@ -220,6 +220,32 @@ describe('008 — ingestão da KB', () => {
     }
   }, 20_000);
 
+  it('P-32: arquivo que sai da pasta sai da KB (documento + chunks), sem tocar os demais', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'kb-'));
+    try {
+      cpSync(FIXTURES, dir, { recursive: true });
+      await ingestKb({ db, dim: DIM, embed: embedContando, dir });
+      expect(await db.select().from(documento).where(eq(documento.ns, 'kb'))).toHaveLength(3);
+
+      rmSync(join(dir, 'entrega.md'));
+      const r = await ingestKb({ db, dim: DIM, embed: embedContando, dir });
+      expect(r).toMatchObject({ arquivos: 2, inalterados: 2, reingeridos: 0, removidos: 1 });
+
+      const docs = await db.select().from(documento).where(eq(documento.ns, 'kb'));
+      expect(docs.map((d) => d.fonte).sort()).not.toContain('entrega.md');
+      expect(docs).toHaveLength(2);
+      const orfaos = await db
+        .select()
+        .from(chunk)
+        .where(and(eq(chunk.ns, 'kb'), eq(chunk.fonte, 'entrega.md')));
+      expect(orfaos).toHaveLength(0);
+      // os outros seguem intactos, com seus chunks
+      expect((await db.select().from(chunk).where(eq(chunk.ns, 'kb'))).length).toBeGreaterThan(0);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }, 20_000);
+
   it('ensureIndex cria o índice HNSW (expressão com a dimensão do env)', async () => {
     const r = await db.execute(
       sql`SELECT indexdef FROM pg_indexes WHERE indexname = 'chunk_embedding_hnsw'`,

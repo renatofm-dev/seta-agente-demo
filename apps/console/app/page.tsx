@@ -1,7 +1,6 @@
+import { redirect } from 'next/navigation';
+
+/** A raiz é o atendimento (007/#45); sem sessão, o layout do console manda para /login. */
 export default function Home() {
-  return (
-    <main className="flex flex-1 items-center justify-center">
-      <p className="text-sm text-muted-foreground">SETA Console — telas chegam na spec 007.</p>
-    </main>
-  );
+  redirect('/inbox');
 }

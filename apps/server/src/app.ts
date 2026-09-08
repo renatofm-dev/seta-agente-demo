@@ -19,6 +19,7 @@ import type { Env } from './env.js';
 import { cobrancasRoutes } from './pagamentos/cobrancas-routes.js';
 import type { PagamentosRepo } from './pagamentos/repo.js';
 import { webhookPspRoutes } from './pagamentos/webhook-routes.js';
+import { leadsRoutes } from './sdr/leads-routes.js';
 import { devRoutes } from './wa/dev-routes.js';
 import { waRoutes } from './wa/routes.js';
 
@@ -81,6 +82,8 @@ export function buildApp({
     cliente: clientConfig.nome,
     uptimeSegundos: Math.round(process.uptime()),
   }));
+  // tela de login: nome da instalação (o mesmo dado público do /healthz)
+  app.get('/api/instalacao', async () => ({ nome: clientConfig.nome }));
 
   if (wa) {
     app.register(waRoutes, { env, db: wa.db, boss: wa.boss });
@@ -100,7 +103,28 @@ export function buildApp({
         debounceMs: env.WA_DEBOUNCE_MS,
         limiteResposta: clientConfig.limites.maxCaracteresResposta,
         precos: { inPor1M: env.LLM_PRECO_IN_POR_1M, outPor1M: env.LLM_PRECO_OUT_POR_1M },
+        instalacao: {
+          nome: clientConfig.nome,
+          modulos: clientConfig.modulos,
+          limites: clientConfig.limites,
+          guardrails: clientConfig.guardrails,
+          alcadas: {
+            tetoAprovacaoCentavos: env.PAGAMENTO_TETO_SEM_HITL_CENTAVOS,
+            maxCobrancasDia: env.PAGAMENTO_MAX_COBRANCAS_DIA,
+            diasVencimento: env.PAGAMENTO_DIAS_VENCIMENTO,
+            descontoMaxBps: env.SDR_DESCONTO_MAX_BPS,
+            maxPropostasDia: env.SDR_MAX_PROPOSTAS_DIA,
+          },
+          canal: {
+            gateway: env.WA_ACCESS_TOKEN ? 'meta' : 'log-only',
+            metaConfigurada: Boolean(consoleDeps.templateApi),
+            simulador: env.DEV_SIMULATOR,
+          },
+          psp: pagamentos ? { nome: pagamentos.psp.nome, ambiente: pagamentos.psp.ambiente } : null,
+        },
       });
+      // Leads (015): leitura das tabelas do SDR; ações ficam com a 015b
+      app.register(leadsRoutes, { db: wa.db, auth: consoleDeps.auth });
       app.register(disparosRoutes, {
         db: wa.db,
         boss: wa.boss,

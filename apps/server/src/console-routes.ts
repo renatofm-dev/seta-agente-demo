@@ -1,3 +1,4 @@
+import type { ClientConfig } from '@seta/client-config';
 import { TransicaoInvalidaError } from '@seta/crm';
 import { newTraceId } from '@seta/observability';
 import type { Executor } from '@seta/query-catalog';
@@ -11,7 +12,10 @@ import {
   contato,
   conversa,
   conversaLeitura,
+  disparo,
+  disparoDestinatario,
   mensagem,
+  modeloMensagem,
   outbox,
   sinalAprendizado,
   ticket,
@@ -30,6 +34,31 @@ import { aplicarTransicao, garantirTicket } from './wa/tickets.js';
  * Toda rota exige sessão Better Auth (papéis atendente|curador).
  */
 
+/**
+ * O que a instalação expõe ao console (cabeçalho, nav por módulo e a tela
+ * Configurações, só leitura): nome, módulos, limites e alçadas vêm do
+ * client.yaml + env — nunca segredos.
+ */
+export interface InstalacaoInfo {
+  readonly nome: string;
+  readonly modulos: ClientConfig['modulos'];
+  readonly limites: ClientConfig['limites'];
+  readonly guardrails: ClientConfig['guardrails'];
+  readonly alcadas: {
+    readonly tetoAprovacaoCentavos: number;
+    readonly maxCobrancasDia: number;
+    readonly diasVencimento: number;
+    readonly descontoMaxBps: number;
+    readonly maxPropostasDia: number;
+  };
+  readonly canal: {
+    readonly gateway: 'meta' | 'log-only';
+    readonly metaConfigurada: boolean;
+    readonly simulador: boolean;
+  };
+  readonly psp: { readonly nome: string; readonly ambiente: string } | null;
+}
+
 export interface ConsoleRoutesOpts {
   readonly db: Db;
   readonly boss: PgBoss;
@@ -40,7 +69,22 @@ export interface ConsoleRoutesOpts {
   readonly limiteResposta: number;
   /** Preço por 1M de tokens para o custo estimado do /metricas (010). */
   readonly precos: { readonly inPor1M: number; readonly outPor1M: number };
+  readonly instalacao: InstalacaoInfo;
 }
+
+/** Motivos que o atendente pode marcar no 👎 (console › Aprendizado). */
+const MOTIVOS_FEEDBACK = [
+  'tom_inadequado',
+  'informacao_errada',
+  'devia_ter_escalado',
+  'nao_devia_ter_escalado',
+  'resposta_longa',
+] as const;
+const BodyFeedback = z.object({
+  avaliacao: z.enum(['bom', 'ruim']),
+  motivos: z.array(z.enum(MOTIVOS_FEEDBACK)).max(MOTIVOS_FEEDBACK.length).default([]),
+  sugestao: z.string().trim().max(2000).optional(),
+});
 
 /** Teto duro da Meta Cloud API para corpo de texto. */
 const TETO_META = 4096;
@@ -198,6 +242,45 @@ export const consoleRoutes: FastifyPluginCallback<ConsoleRoutesOpts> = (app, opt
 
   app.get('/api/console/me', async (req) => sessaoDe(req));
 
+  /** Cabeçalho + Configurações (só leitura): nome, módulos, limites e alçadas. */
+  app.get('/api/console/instalacao', async () => opts.instalacao);
+
+  /** Badges da barra: o que espera gente (fila, cobranças e propostas acima da alçada). */
+  app.get('/api/console/resumo', async () => {
+    const [r] = (
+      await db.execute(sql`
+        SELECT
+          (SELECT count(*)::int FROM ticket WHERE status = 'aguardando_humano') AS aguardando_humano,
+          (SELECT count(*)::int FROM cobranca WHERE status = 'aguardando_aprovacao') AS cobrancas_aprovacao,
+          (SELECT count(*)::int FROM proposta_sdr WHERE status = 'aguardando_aprovacao') AS leads_aprovacao
+      `)
+    ).rows as {
+      aguardando_humano: number;
+      cobrancas_aprovacao: number;
+      leads_aprovacao: number;
+    }[];
+    return {
+      aguardandoHumano: r?.aguardando_humano ?? 0,
+      cobrancasAguardandoAprovacao: r?.cobrancas_aprovacao ?? 0,
+      leadsAguardandoAprovacao: r?.leads_aprovacao ?? 0,
+    };
+  });
+
+  /** Configurações › Equipe: quem tem acesso ao console (Better Auth). */
+  app.get('/api/console/equipe', async () => {
+    const pessoas = await db
+      .select({
+        id: user.id,
+        nome: user.name,
+        email: user.email,
+        role: user.role,
+        criadoEm: user.createdAt,
+      })
+      .from(user)
+      .orderBy(asc(user.name));
+    return { pessoas };
+  });
+
   app.get('/api/console/inbox', async (req) => {
     const sessao = sessaoDe(req);
     // #31: era 1 + 3 queries POR ticket a cada poll de cada atendente — agora
@@ -264,7 +347,7 @@ export const consoleRoutes: FastifyPluginCallback<ConsoleRoutesOpts> = (app, opt
     const sessao = sessaoDe(req);
     const { filtro, q, limite, offset } = z
       .object({
-        filtro: z.enum(['todas', 'aguardando', 'minhas', 'resolvidas']).default('todas'),
+        filtro: z.enum(['todas', 'aguardando', 'minhas', 'agente', 'resolvidas']).default('todas'),
         q: z.string().trim().max(80).optional(),
         limite: z.coerce.number().int().min(1).max(200).default(50),
         offset: z.coerce.number().int().min(0).default(0),
@@ -275,6 +358,8 @@ export const consoleRoutes: FastifyPluginCallback<ConsoleRoutesOpts> = (app, opt
       todas: sql`true`,
       aguardando: sql`t.status = 'aguardando_humano'`,
       minhas: sql`t.status = 'humano_ativo' AND t.atendente_id = ${sessao.userId}`,
+      // conversa sem ticket ainda é do agente (o ticket nasce na 1ª escalada/abertura)
+      agente: sql`coalesce(t.status, 'bot_ativo') = 'bot_ativo'`,
       resolvidas: sql`t.status = 'resolvido'`,
     }[filtro];
     // busca por nome OU telefone (só os dígitos do termo casam contra o wa_id)
@@ -347,7 +432,25 @@ export const consoleRoutes: FastifyPluginCallback<ConsoleRoutesOpts> = (app, opt
         ? { texto: linha.ultima_texto, autor: linha.ultima_autor, em: linha.ultima_em }
         : null,
     }));
-    return { conversas, temMais: conversas.length === limite };
+
+    // contagem por filtro (chips da lista) — global, sem a busca `q`
+    const porStatus = (
+      await db.execute(sql`
+        SELECT coalesce(t.status, 'bot_ativo') AS status, count(*)::int AS n,
+               count(*) FILTER (WHERE t.atendente_id = ${sessao.userId})::int AS minhas
+        FROM conversa c LEFT JOIN ticket t ON t.conversa_id = c.id
+        GROUP BY 1
+      `)
+    ).rows as { status: string; n: number; minhas: number }[];
+    const n = (status: string) => porStatus.find((r) => r.status === status)?.n ?? 0;
+    const contagens = {
+      todas: porStatus.reduce((s, r) => s + r.n, 0),
+      aguardando: n('aguardando_humano'),
+      minhas: porStatus.find((r) => r.status === 'humano_ativo')?.minhas ?? 0,
+      agente: n('bot_ativo'),
+      resolvidas: n('resolvido'),
+    };
+    return { conversas, temMais: conversas.length === limite, contagens };
   });
 
   // #45: detalhe da conversa com thread paginada (rolagem infinita via antesDe)
@@ -393,22 +496,62 @@ export const consoleRoutes: FastifyPluginCallback<ConsoleRoutesOpts> = (app, opt
       ? await db.select({ name: user.name }).from(user).where(eq(user.id, t.atendenteId))
       : [undefined];
     let perfilErp: Record<string, unknown> | null = null;
+    // painel de contexto: resumo da inadimplência (vem no rodapé de cada linha
+    // de titulos_atraso; lista vazia = contrato em dia)
+    let financeiro: {
+      vencidas: number;
+      saldoVencidoCentavos: number;
+      maiorAtrasoDias: number;
+      vencimentoMaisAntigo: string | null;
+    } | null = null;
     if (vinculo?.clienteErpId) {
       try {
         const sessaoErp = { traceId: newTraceId(), clienteId: vinculo.clienteErpId };
-        const [produto, cota] = await Promise.all([
+        const [produto, cota, atraso] = await Promise.all([
           executor.run('contrato.meu_produto', {}, sessaoErp),
           executor.run('contrato.minha_cota', {}, sessaoErp),
+          opts.instalacao.modulos.financeiro
+            ? executor.run('financeiro.titulos_atraso', {}, sessaoErp)
+            : Promise.resolve(null),
         ]);
         const combinado = {
           ...(produto.rows[0] as Record<string, unknown> | undefined),
           ...(cota.rows[0] as Record<string, unknown> | undefined),
         };
         perfilErp = Object.keys(combinado).length > 0 ? combinado : null;
+        if (atraso) {
+          const r = atraso.rows[0] as Record<string, unknown> | undefined;
+          financeiro = {
+            vencidas: Number(r?.qtd_titulos_vencidos ?? 0),
+            saldoVencidoCentavos: Number(r?.saldo_vencido_centavos ?? 0),
+            maiorAtrasoDias: Number(r?.maior_atraso_dias ?? 0),
+            vencimentoMaisAntigo: r?.vencimento_mais_antigo
+              ? String(
+                  r.vencimento_mais_antigo instanceof Date
+                    ? r.vencimento_mais_antigo.toISOString()
+                    : r.vencimento_mais_antigo,
+                ).slice(0, 10)
+              : null,
+          };
+        }
       } catch (err) {
         req.log.warn({ err }, 'perfil ERP indisponível para o painel');
       }
     }
+    // aba Origem: a campanha (disparo) mais recente que alcançou este número
+    const [destinatario] = await db
+      .select({
+        disparoId: disparoDestinatario.disparoId,
+        statusDestinatario: disparoDestinatario.status,
+        modelo: modeloMensagem.nome,
+        enviadoEm: disparo.criadoEm,
+      })
+      .from(disparoDestinatario)
+      .innerJoin(disparo, eq(disparo.id, disparoDestinatario.disparoId))
+      .innerJoin(modeloMensagem, eq(modeloMensagem.id, disparo.modeloId))
+      .where(eq(disparoDestinatario.waId, conv.waId))
+      .orderBy(desc(disparo.criadoEm))
+      .limit(1);
     return {
       conversaId: conv.id,
       waId: conv.waId,
@@ -416,6 +559,8 @@ export const consoleRoutes: FastifyPluginCallback<ConsoleRoutesOpts> = (app, opt
       clienteErpId: vinculo?.clienteErpId ?? null,
       janelaExpiraEm: conv.janelaExpiraEm,
       limiteResposta: Math.min(TETO_META, opts.limiteResposta),
+      financeiro,
+      origem: destinatario ?? null,
       ticket: {
         id: t.id,
         status: t.status,
@@ -646,6 +791,7 @@ export const consoleRoutes: FastifyPluginCallback<ConsoleRoutesOpts> = (app, opt
 
   // trace viewer (010): reconstitui qualquer turno da conversa sem tocar no banco
   app.get('/api/console/ticket/:id/traces', async (req, reply) => {
+    const sessao = sessaoDe(req);
     const t = await carregarTicket(req, reply);
     if (!t) return;
     const { limite } = z
@@ -667,6 +813,19 @@ export const consoleRoutes: FastifyPluginCallback<ConsoleRoutesOpts> = (app, opt
         tokensSaida: traceTurno.tokensSaida,
         latenciaMs: traceTurno.latenciaMs,
         criadoEm: traceTurno.criadoEm,
+        // 👍/👎 que ESTE usuário já deu ao turno (console › Aprendizado)
+        feedback: sql<{ avaliacao: string; motivos: string[]; sugestao: string | null } | null>`(
+          SELECT jsonb_build_object(
+            'avaliacao', s.payload ->> 'avaliacao',
+            'motivos', coalesce(s.payload -> 'motivos', '[]'::jsonb),
+            'sugestao', s.payload ->> 'sugestao'
+          )
+          FROM sinal_aprendizado s
+          WHERE s.tipo = 'feedback_atendente'
+            AND s.payload ->> 'traceTurnoId' = ${traceTurno.id}::text
+            AND s.payload ->> 'atendenteId' = ${sessao.userId}
+          ORDER BY s.criado_em DESC LIMIT 1
+        )`,
       })
       .from(traceTurno)
       .leftJoin(turno, eq(turno.id, traceTurno.turnoId))
@@ -675,6 +834,76 @@ export const consoleRoutes: FastifyPluginCallback<ConsoleRoutesOpts> = (app, opt
       .limit(limite);
     traces.reverse(); // …em ordem cronológica p/ o viewer
     return { traces };
+  });
+
+  /**
+   * Feedback do atendente sobre um turno: vira sinal `feedback_atendente`
+   * (insumo do distiller da 009, no mesmo formato da correção HITL — texto do
+   * cotista, resposta do bot e a sugestão humana). Um por atendente×turno:
+   * repetir substitui e reabre o sinal para a próxima rodada.
+   */
+  app.post('/api/console/traces/:id/feedback', async (req, reply) => {
+    const sessao = sessaoDe(req);
+    const { id } = z.object({ id: z.uuid() }).parse(req.params);
+    const body = BodyFeedback.parse(req.body);
+    const [trace] = await db
+      .select({
+        id: traceTurno.id,
+        conversaId: traceTurno.conversaId,
+        resposta: traceTurno.resposta,
+        textoTurno: turno.textoAgregado,
+      })
+      .from(traceTurno)
+      .leftJoin(turno, eq(turno.id, traceTurno.turnoId))
+      .where(eq(traceTurno.id, id));
+    if (!trace) return reply.code(404).send({ erro: 'turno inexistente' });
+    const [tk] = await db
+      .select({ id: ticket.id })
+      .from(ticket)
+      .where(eq(ticket.conversaId, trace.conversaId));
+    const sugestao = body.sugestao && body.sugestao.length > 0 ? body.sugestao : null;
+    const payload = {
+      refId: trace.id,
+      traceTurnoId: trace.id,
+      avaliacao: body.avaliacao,
+      motivos: body.motivos,
+      // chave de cluster do distiller: 1º motivo marcado, ou a avaliação
+      motivo: body.motivos[0] ?? (body.avaliacao === 'bom' ? 'resposta_boa' : 'resposta_ruim'),
+      sugestao,
+      textoUsuario: trace.textoTurno,
+      respostaBot: trace.resposta,
+      respostaHumano: sugestao,
+      atendenteId: sessao.userId,
+    };
+    const [existente] = await db
+      .select({ id: sinalAprendizado.id })
+      .from(sinalAprendizado)
+      .where(
+        and(
+          eq(sinalAprendizado.tipo, 'feedback_atendente'),
+          sql`${sinalAprendizado.payload} ->> 'traceTurnoId' = ${trace.id}`,
+          sql`${sinalAprendizado.payload} ->> 'atendenteId' = ${sessao.userId}`,
+        ),
+      )
+      .limit(1);
+    if (existente) {
+      await db
+        .update(sinalAprendizado)
+        .set({ payload, processadoEm: null })
+        .where(eq(sinalAprendizado.id, existente.id));
+    } else {
+      await db.insert(sinalAprendizado).values({
+        id: newTraceId(),
+        tipo: 'feedback_atendente',
+        ticketId: tk?.id ?? null,
+        conversaId: trace.conversaId,
+        payload,
+      });
+    }
+    return {
+      ok: true,
+      feedback: { avaliacao: body.avaliacao, motivos: body.motivos, sugestao },
+    };
   });
 
   // métricas (010): agregados por janela de 7/30 dias

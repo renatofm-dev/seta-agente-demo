@@ -36,6 +36,13 @@ import {
 import type { PagamentosRepo } from '../pagamentos/repo.js';
 import { toolCobrancaEmAberto } from '../pagamentos/tool-cobranca-em-aberto.js';
 import { toolBuscarConhecimento } from '../rag/tool-buscar-conhecimento.js';
+import {
+  continuarFluxoSdr,
+  type EnvSdr,
+  iniciarFluxoSdr,
+  type SdrFluxoDeps,
+} from '../sdr/fluxo.js';
+import type { SdrRepo } from '../sdr/repo.js';
 import type { TurnoHandler, TurnoPronto } from './debounce.js';
 import { agendarDebounce } from './inbound.js';
 import { enqueueOutbound, enviarJobOutbound, inserirOutbound } from './outbox.js';
@@ -70,7 +77,24 @@ export interface AgentTurnoHandlerDeps {
   readonly pagamentos?: PagamentosTurnoDeps;
   /** 016: acumulador do decorator de anonimização — drenado para o trace do turno. */
   readonly anonimizacao?: { consumir(traceId: string): TraceEvento | null };
+  /** 015: agente SDR da raia sem vínculo; ausente ⇒ lead frio escala como antes. */
+  readonly sdr?: SdrTurnoDeps;
 }
+
+/** 015: o que o agente SDR precisa além do que o turno já tem. */
+export interface SdrTurnoDeps {
+  readonly repo: SdrRepo;
+  readonly env: EnvSdr;
+}
+
+/**
+ * 015: o fluxo SDR saiu da frente (2 respostas não entendidas) — o agente
+ * geral responde este turno sabendo disso.
+ */
+const NOTA_FLUXO_SDR_ABANDONADO =
+  '\n\nNOTA: o interessado estava num fluxo de qualificação/oferta de cota que ficou sem ' +
+  'resposta clara e foi encerrado. Responda à mensagem atual normalmente; se ele voltar a ' +
+  'falar em comprar, diga que pode retomar as opções.';
 
 /** 014: o que o agente de cobrança precisa além do que o turno já tem. */
 export interface PagamentosTurnoDeps {
@@ -276,7 +300,12 @@ async function processarComAgente(
   // vínculo verificado vem da tabela contato (seed grava — corte da 000)
   const [vinculo] = await deps.db.select().from(contato).where(eq(contato.waId, conv.waId));
   const clienteId = vinculo?.clienteErpId ?? '';
-  const session = { traceId, clienteId };
+  // 015: a alçada do SDR entra na sessão como política (bind desconto_max_bps)
+  const session = {
+    traceId,
+    clienteId,
+    ...(deps.sdr ? { descontoMaxBps: deps.sdr.env.SDR_DESCONTO_MAX_BPS } : {}),
+  };
 
   // #47: o turno precisa saber se a conversa JÁ está na fila de humano — o
   // bot segue atendendo outros assuntos, sem repetir promessa de escalada
@@ -329,7 +358,32 @@ async function processarComAgente(
     session,
     textoUsuario: t.textoAgregado,
   };
-  const resultadoDoFluxo = (r: ResultadoFluxo): ResultadoComFusao => ({
+  // 015: agente SDR — só na raia SEM vínculo, com o módulo ligado e deps presentes.
+  // As duas raias são disjuntas por construção: o SDR não toca o fluxo do cotista.
+  const sdrDeps: SdrFluxoDeps | null =
+    deps.clientConfig.modulos.sdr && deps.sdr && clienteId === ''
+      ? {
+          db: deps.db,
+          executor: deps.executor,
+          repo: deps.sdr.repo,
+          provider: deps.provider,
+          env: deps.sdr.env,
+          logger: deps.logger,
+        }
+      : null;
+  const ctxSdr = {
+    conversaId: t.conversaId,
+    turnoId: t.id,
+    waId: conv.waId,
+    session,
+    textoUsuario: t.textoAgregado,
+  };
+  const resultadoDoFluxo = (
+    r: Pick<
+      ResultadoFluxo,
+      'mensagens' | 'escalado' | 'escaladoTrigger' | 'eventos' | 'tokensEntrada' | 'tokensSaida'
+    >,
+  ): ResultadoComFusao => ({
     resposta: r.mensagens.join('\n\n'),
     escalado: r.escalado,
     escaladoTrigger: r.escaladoTrigger,
@@ -353,6 +407,18 @@ async function processarComAgente(
       }
       // saiu da frente: o agente geral responde este turno sabendo do contexto
       personaExtra = NOTA_FLUXO_ABANDONADO;
+    }
+  }
+  // 015: fluxo SDR ativo consome o turno do lead (mesma forma da cobrança)
+  if (sdrDeps) {
+    const ativo = await sdrDeps.repo.fluxoAtivo(t.conversaId);
+    if (ativo) {
+      const r = await continuarFluxoSdr(sdrDeps, ativo, ctxSdr);
+      if (!r.abandonado) {
+        await enviarVarias(r.mensagens);
+        return resultadoDoFluxo(r);
+      }
+      personaExtra = NOTA_FLUXO_SDR_ABANDONADO;
     }
   }
   const efeitos = {
@@ -405,6 +471,13 @@ async function processarComAgente(
   // 014: "quero pagar" inicia o agente de cobrança em vez de escalar
   if (intencao === 'pagar' && fluxoDeps) {
     const r = await iniciarFluxo(fluxoDeps, ctxFluxo);
+    await enviarVarias(r.mensagens);
+    return resultadoDoFluxo(r);
+  }
+  // 015: interesse de compra SEM vínculo inicia o SDR em vez de escalar; com
+  // vínculo (cotista querendo outra cota) segue escalando `interesse_compra`
+  if (intencao === 'comprar_cota' && sdrDeps) {
+    const r = await iniciarFluxoSdr(sdrDeps, ctxSdr);
     await enviarVarias(r.mensagens);
     return resultadoDoFluxo(r);
   }
@@ -520,14 +593,18 @@ async function processarComAgente(
 
   // #47: com a conversa na fila, o agente sabe que o humano já foi acionado —
   // atende outros assuntos e não promete (nem escala) de novo o mesmo tema
+  // 015: na raia do lead frio a persona é a comercial (personaSdr), se houver
+  const personaBase = sdrDeps
+    ? (deps.clientConfig.personaSdr ?? deps.clientConfig.persona)
+    : deps.clientConfig.persona;
   const persona =
     (filaHumano
-      ? `${deps.clientConfig.persona}\n\nATENÇÃO: um atendente humano JÁ FOI ACIONADO para esta ` +
+      ? `${personaBase}\n\nATENÇÃO: um atendente humano JÁ FOI ACIONADO para esta ` +
         `conversa (motivo: ${motivoEscalada}) e ela está na fila de atendimento. Sobre ESSE ` +
         'assunto, apenas informe que um atendente vai assumir em instantes — não responda o ' +
         'tema, não prometa acionar de novo e não use a tool escalar_para_humano para o mesmo ' +
         'motivo. Continue ajudando normalmente em qualquer outro assunto.'
-      : deps.clientConfig.persona) + personaExtra;
+      : personaBase) + personaExtra;
 
   const runtime = createAgentRuntime({
     provider: deps.provider,

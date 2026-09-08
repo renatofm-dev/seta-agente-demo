@@ -29,6 +29,19 @@ module.exports = {
       to: { path: ['^packages/erp-connector', '^@seta/erp-connector'] },
     },
     {
+      name: 'sdr-nao-importa-erp-connector',
+      comment:
+        'sdr (015) recebe o estoque já lido pelo catálogo; nunca fala com o ERP nem com o catálogo',
+      severity: 'error',
+      from: { path: '^packages/sdr' },
+      to: {
+        path: [
+          '^packages/(erp-connector|query-catalog|agent|guardrails|cobranca)',
+          '^@seta/(erp-connector|query-catalog|agent|guardrails|cobranca)',
+        ],
+      },
+    },
+    {
       name: 'anonimizacao-so-conhece-ai-provider',
       comment:
         'anonimizacao (016) é camada de texto sobre o port AIProvider; nunca vê catálogo, ERP, agent ou guardrails',
