@@ -1,6 +1,6 @@
 # Roadmap — Plataforma de Atendimento (seta-agente → seta-atendimento)
 
-**Data:** 6 de setembro de 2026
+**Data:** 6 de setembro de 2026 · **atualizado em 8 de setembro de 2026** (M0 integrado, M1 e M2 parciais, specs 016 e 017 entregues)
 **Para:** sócios da SETA (Parte 1) e time de desenvolvimento (Parte 2)
 **Preparado por:** Renato Martins
 **Substitui:** a seção "Próximos passos até produção" do `status-do-projeto.md` de 31/08
@@ -18,26 +18,27 @@
 
 ## Em uma tela
 
-O protótipo está **mais adiantado do que o relatório de 31/08 dizia** — e, ao mesmo
-tempo, **menos publicado**. As três melhorias do teste real, a troca para o domínio de
-multipropriedade, o disparo de mensagens de template e a cobrança pelo WhatsApp com
-link de pagamento **estão prontas e testadas** (272 testes automáticos, esteira verde).
-Mas nada disso chegou ao servidor: ele ainda roda a versão de agosto, e o histórico
-principal do código ficou parado por um erro de ordem na integração dos trabalhos —
-já identificado e com a correção pronta para aprovação.
+**Atualização de 08/09.** O histórico principal foi corrigido e integrado: tudo que
+estava pendurado desde 01/09 mais o que foi feito entre 06 e 08/09 está no `main`
+(PRs #59 a #64, esteira verde, 373 testes automáticos). Em dois dias entraram também
+três coisas que não estavam neste plano: o **núcleo do agente de vendas** (M1, parte a),
+a **blindagem** de código para exposição (M2, seis dos nove itens) e o **console
+redesenhado** a partir do design aprovado, com um **relatório analítico de campanhas**
+cruzando resultado com meta de conversão. O que continua faltando é o mesmo de antes:
+**publicar** — o servidor de demonstração ainda roda a versão de agosto.
 
 O que vem a seguir se organiza em **cinco marcos**. Os dois primeiros cabem em setembro;
 o piloto com um cliente real pode começar na **segunda quinzena de outubro**, desde que
 as decisões listadas na seção "Decisões" sejam tomadas até o fim de setembro.
 
-| Marco | Quando | Em uma frase |
-|---|---|---|
-| **M0 — Publicar o que está pronto** | até 13/09 | O servidor passa a rodar a versão atual; o repositório vai para a organização |
-| **M1 — Agente de vendas (SDR)** | até 20/09 | Quem chega perguntando preço é atendido, recebe oferta dentro de uma alçada e é agendado com o comercial |
-| **M2 — Blindagem** | até 27/09 | Fecha os buracos conhecidos antes de expor o sistema a tráfego real |
-| **M3 — Decisões e pré-requisitos** | até 04/10 | Cliente-piloto, WhatsApp comercial, acesso ao banco, LGPD, pagamentos — nada disso é código |
-| **M4 — Pronto para o piloto** | até 18/10 | Conectado ao banco real do cliente, com operação mínima e versão identificada |
-| **M5 — Depois do piloto** | sem data | Segunda vertical (Seven), copiloto de cobrança, configuração pela interface |
+| Marco | Quando | Em uma frase | Situação em 08/09 |
+|---|---|---|---|
+| **M0 — Publicar o que está pronto** | até 13/09 | O servidor passa a rodar a versão atual; o repositório vai para a organização | 🟡 código integrado e issues fechadas; falta o servidor, a transferência e a tag |
+| **M1 — Agente de vendas (SDR)** | até 20/09 | Quem chega perguntando preço é atendido, recebe oferta dentro de uma alçada e é agendado com o comercial | 🟡 núcleo pronto (015a); falta a aprovação da proposta pelo console (015b) e a trava do percentual por extenso (015c) |
+| **M2 — Blindagem** | até 27/09 | Fecha os buracos conhecidos antes de expor o sistema a tráfego real | 🟡 6 de 9 itens prontos; faltam backup com restore testado, monitor e gitleaks |
+| **M3 — Decisões e pré-requisitos** | até 04/10 | Cliente-piloto, WhatsApp comercial, acesso ao banco, LGPD, pagamentos — nada disso é código | ⏳ nenhuma decisão registrada ainda; D9 vence em 13/09 |
+| **M4 — Pronto para o piloto** | até 18/10 | Conectado ao banco real do cliente, com operação mínima e versão identificada | ⏳ não iniciado (gated por M3) |
+| **M5 — Depois do piloto** | sem data | Segunda vertical (Seven), copiloto de cobrança, configuração pela interface | — |
 
 **Uma mudança de rumo registrada aqui:** o relatório de 31/08 previa, como estágio 3,
 "uma plataforma que atende vários resorts ao mesmo tempo". O briefing da empresa de
@@ -48,24 +49,28 @@ multi-cliente na mesma instalação, é **versionar e instalar bem** (item P-18 
 
 ## Onde estamos, de verdade
 
-A revisão de 06/09 cruzou três fontes: as 16 especificações escritas, o código como
-ele está e o GitHub (issues, PRs, histórico). Resultado:
+A revisão de 06/09 cruzou três fontes: as especificações escritas, o código como ele
+está e o GitHub (issues, PRs, histórico). Tabela atualizada em 08/09:
 
 | O que | Situação | Observação |
 |---|---|---|
-| Módulos planejados (specs 000–014) | ✅ 15 de 15 construídos e testados | 272 testes automáticos, esteira verde |
-| Agente de vendas (spec 015) | 🟡 base de dados pronta; o agente em si, não | tabela de preço, estoque à venda e a regra da alçada de 3% já provada em teste |
-| Código integrado no histórico principal | 🔴 parado em 01/09 | quatro entregas ficaram "penduradas" por ordem errada de integração; a correção (PR #59) está pronta e com esteira verde |
-| Servidor de demonstração | 🔴 versão de agosto | nada de setembro foi publicado |
-| Versão identificada (release) | ❌ nenhuma | não existe numeração de versão ainda |
-| Segurança para exposição pública | ⚠️ três chaves com valor de desenvolvimento aceito em produção; senhas do banco escritas no arquivo de instalação | tudo corrigível em menos de um dia |
+| Módulos planejados (specs 000–014) | ✅ 15 de 15 construídos, testados e no `main` | 373 testes automáticos, esteira verde |
+| Agente de vendas (spec 015) | 🟡 núcleo pronto e no `main` (015a) | qualifica, apresenta, oferta na tabela ou no piso de 3% e agenda; acima da alçada abre pendência — a aprovação pelo console (015b) e a trava do percentual por extenso (015c) faltam |
+| Anonimização do que sai para a IA (spec 016) | ✅ pronta e no `main` | nome, telefone, e-mail e documento no texto livre viram token antes de sair; contrato e valores ainda saem (ver D6) |
+| Console redesenhado | ✅ pronto e no `main` | todas as telas no design aprovado: Atendimento, Campanhas, Cobranças, Leads, Aprendizado, Métricas, Configurações; o que não tem backend aparece como nota, não como botão morto |
+| Relatório de campanhas (spec 017) | ✅ pronto e no `main` | funil até "pagas", conversão contra meta, filtros por período, competência, modelo e janela de atribuição; insights; CSV e PDF |
+| Código integrado no histórico principal | ✅ integrado em 08/09 | PRs #59 a #64 mergeados em ordem e conferidos por conteúdo; `main` contém 012–017 |
+| Servidor de demonstração | 🔴 versão de agosto | nada de setembro foi publicado — é o próximo passo |
+| Versão identificada (release) | ❌ nenhuma | a imagem passa a sair só com esteira verde (P-30); numeração vem com P-22 |
+| Segurança para exposição pública | ✅ chaves de desenvolvimento recusadas em produção; senhas fora do arquivo de instalação | faltam backup automático com restauração testada e monitor de disponibilidade |
 | Busca na base de conhecimento | ⚠️ só por palavras, sem busca semântica | o fornecedor de IA atual não oferece o componente; escolher outro é decisão (D8) |
-| Dados de cotistas e o fornecedor de IA | ⚠️ nome e CPF nunca saem; mas contrato, valores e situação de pagamento **vão para o fornecedor de IA nos EUA** | precisa de contrato de tratamento de dados **ou** IA dentro da rede do cliente (D6) |
-| Backlog da empresa | ⚠️ lista como pendentes 5 itens que já estão prontos | corrigido pela reconciliação da Parte 2 |
+| Dados de cotistas e o fornecedor de IA | ⚠️ nome, CPF e dados pessoais do texto livre nunca saem (016); contrato, valores e situação de pagamento **ainda vão para o fornecedor de IA nos EUA** | precisa de contrato de tratamento de dados **ou** IA dentro da rede do cliente (D6) |
+| Backlog da empresa | ✅ issues #45–#48 e #54 fechadas em 08/09 | a triagem ainda precisa criar as issues de P-21+ e das specs 016/017 |
 
-Em números: o relatório de 31/08 falava em 11 módulos e ~200 testes. Hoje são **15
-especificações entregues, 33 tabelas, 41 rotas, 7 filas de trabalho, 272 testes**.
-O que faltava — publicar — continua faltando, e é o M0.
+Em números: o relatório de 31/08 falava em 11 módulos e ~200 testes; o de 06/09, em 15
+especificações e 272 testes. Hoje são **18 especificações entregues (000–017), 36 tabelas,
+47 rotas, 373 testes**, tudo no `main`. O que faltava — publicar — continua faltando, e é
+o M0.
 
 ## Os marcos
 
@@ -79,6 +84,10 @@ versão atual; o repositório sai da conta pessoal e entra na organização SETA
 Renato**, e o ensaio do roteiro com os sócios comerciais (já no backlog) pode acontecer.
 
 **Custo:** menos de um dia de trabalho. É quase todo aprovação e operação, não código.
+
+**Situação em 08/09:** a integração do histórico está feita (#59–#64) e as issues entregues
+foram fechadas. Faltam o servidor rodar a versão atual, a transferência do repositório para
+a organização e a primeira versão identificada.
 
 ### M1 — Agente de vendas para quem chega sem cadastro (até 20/09)
 
@@ -98,6 +107,11 @@ alterar a trava.
 **O que destrava:** um argumento comercial novo para a base TS Explorer — venda
 autônoma, não só atendimento.
 
+**Situação em 08/09:** o núcleo está pronto e no `main` (015a): o número sem cadastro
+entra no fluxo, recebe oferta na tabela ou no piso de 3% e o pedido acima disso vira
+pendência. Faltam a tela para o humano aprovar ou recusar essa pendência (015b — a tela de
+Leads já existe, só sem os botões) e a trava do percentual por extenso (015c).
+
 ### M2 — Blindagem para exposição (até 27/09)
 
 **O que fica de pé:** o sistema recusa subir em produção com chaves de desenvolvimento;
@@ -108,6 +122,11 @@ avisando no Slack se o agente ficar mudo.
 **O que destrava:** ficar exposto na internet com tráfego real sem os buracos que a
 revisão encontrou. São itens pequenos e bem definidos — bons para o dev pleno entrar
 no repositório.
+
+**Situação em 08/09:** seis dos nove itens estão prontos e no `main` (chaves de
+desenvolvimento recusadas em produção, senhas fora do arquivo de instalação, imagem só
+com esteira verde, `.env.example` completo, limpeza de stubs). Faltam backup automático
+com restauração testada, monitor de disponibilidade e varredura de segredos no commit.
 
 ### M3 — Decisões e pré-requisitos (em paralelo, até 04/10)
 
@@ -141,7 +160,7 @@ fotos, áudios e documentos.
 | **D3** | Qual é o cliente-piloto. **Premissa deste roadmap: Bali Park** — o espelho do banco já existe, há reunião semanal de validação, e o acesso já respeita LGPD | Sócios | 20/09 | O M4 não tem alvo |
 | **D4** | Conta comercial de WhatsApp (WABA) do piloto — **iniciar o processo na Meta já em 07/09**, porque o prazo é deles | Cliente + SETA | 11/10 | O piloto fica limitado a 5 números de teste |
 | **D5** | Acesso da plataforma ao espelho do banco do piloto (servidor, usuário só-leitura, rede) | CTO + cliente | 27/09 | A conexão ao banco real não começa |
-| **D6** | LGPD: política formal de uso, retenção e descarte; **contrato de tratamento de dados com o fornecedor de IA**; e a pergunta que define o piloto: **o dado do cotista, mesmo sem nome e CPF, pode sair para um fornecedor nos EUA?** | Sócios + jurídico | 27/09 | Se a resposta for "não", a IA precisa rodar dentro da rede do cliente — o piloto atrasa pelo menos duas semanas e exige servidor com placa de vídeo |
+| **D6** | LGPD: política formal de uso, retenção e descarte; **contrato de tratamento de dados com o fornecedor de IA**; e a pergunta que define o piloto: **o dado do cotista, mesmo sem nome e CPF, pode sair para um fornecedor nos EUA?** Desde 08/09 a anonimização (spec 016) tira também nome, telefone, e-mail e documento do texto livre antes de sair; contrato e valores continuam saindo | Sócios + jurídico | 27/09 | Se a resposta for "não", a IA precisa rodar dentro da rede do cliente — o piloto atrasa pelo menos duas semanas e exige servidor com placa de vídeo |
 | **D7** | A Meta passa a cobrar mensagens de serviço em **outubro de 2026**: quais modelos viram "utilidade", custo projetado por cliente (já no backlog como P-20, prazo 30/09) | CTO | 30/09 | Custo surpresa em outubro nas duas linhas de produto |
 | **D8** | Fornecedor de busca semântica (embeddings) — o atual não oferece | CTO | 20/09 | A base de conhecimento continua buscando só por palavras; piora conforme cresce |
 | **D9** | **Quem constrói a plataforma.** Premissa: as especificações continuam com o CTO usando Claude Code (foi assim que 15 saíram em ~8 dias); o dev pleno entra pelos itens de infraestrutura do M2 | CTO | 13/09 | O calendário dos marcos muda |
@@ -186,36 +205,48 @@ fotos, áudios e documentos.
   aceite e `pnpm lint && pnpm test && pnpm build` verdes.
 - **Aceite** em até 3 linhas, no padrão V2 §2.5: o que se observa quando acabou.
 
-## Diagnóstico técnico (o que a revisão de 06/09 encontrou)
+## Diagnóstico técnico (revisão de 06/09, atualizado em 08/09)
 
 | Área | Estado | Evidência |
 |---|---|---|
-| Specs 000–014 | ✅ 272 testes, lint/build verdes, CI verde no #59 | auditoria de código |
-| Spec 015 (SDR) | 🟡 `tabelapreco`, `v_cota_disponivel`, 11 testes de alçada; `packages/sdr` não existe | PR #60 |
-| `main` | 🔴 parado na 012 | `git cat-file -e origin/main:apps/server/src/disparos-routes.ts` → não |
-| PRs #51/#52/#53/#55 | 🔴 mergeados em branches base já absorvidas; conteúdo nunca chegou no `main` | `gh pr view N --json baseRefName,mergedAt` |
-| Homelab | 🔴 versão de agosto | status-do-projeto 31/08 |
-| Releases | ❌ nenhuma tag; `release.yml` publica imagem **sem `needs: ci`** | `.github/workflows/` |
-| Env em produção | ⚠️ `WA_VERIFY_TOKEN`, `WA_APP_SECRET`, `BETTER_AUTH_SECRET` com default de dev, sem validação por `NODE_ENV` | `apps/server/src/env.ts` |
-| `compose.prod.yml` | ⚠️ `DATABASE_URL`/`ERP_DATABASE_URL` hardcodam `app_owner_dev`/`erp_ro_dev` | `infra/compose.prod.yml` |
-| `.env.example` | ⚠️ faltam `CATALOG_DIR`, `CONTATOS_PATH`, `SKILLS_SEED_DIR`, `AGENT_TURNOS_CONCORRENTES`, `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL` | diff × `env.ts` |
+| Specs 000–017 | ✅ 373 testes, lint/build verdes, CI verde no `main` | `main` = `aa477c4` |
+| Spec 015 (SDR) | 🟡 015a no `main`: `packages/sdr`, migração 0015, catálogo `comercial/`, trigger `desconto_acima_alcada`; faltam 015b e 015c | #64 |
+| Spec 016 (anonimização) | ✅ decorator do `AIProvider` + NER local (`@huggingface/transformers`); PII do texto livre vira token antes de sair | #61 |
+| Spec 017 (relatório de campanhas) | ✅ `GET /api/console/relatorios/campanhas`, meta em `client.yaml` + por campanha, migração 0016 | #63 |
+| `main` | ✅ integrado em 08/09: #59 → #60 → #61 → #62 → #64 → #63, conferidos por ancestralidade e conteúdo | `git merge-base --is-ancestor` |
+| PRs #51/#52/#53/#55 | ✅ conteúdo recuperado pelo #59 | — |
+| Homelab | 🔴 versão de agosto | próximo passo (P-21) |
+| Releases | ❌ nenhuma tag; `release.yml` já exige CI verde (P-30) | `.github/workflows/` |
+| Env em produção | ✅ boot em `production` recusa os defaults de dev (P-28) | `apps/server/src/env.ts` |
+| `compose.prod.yml` | ✅ senhas vêm do `.env.prod` (P-29); rotacionar no homelab junto com o deploy | `infra/compose.prod.yml` |
+| `.env.example` | ✅ completo e verificado (P-31) | CI |
 | Embeddings | ⚠️ `EMBEDDING_MODEL` vazio (Anthropic sem `/embeddings`); `AIProvider` usa uma base URL para chat e embed | `openai-compatible.ts:107` |
-| Guardrail de preço | ⚠️ `RE_PERCENTUAL` exige dígito — "três por cento" passa em qualquer contexto; travado em teste | `guardrails.test.ts` "LACUNA" |
-| LGPD / saída de dado | ⚠️ `v_cotista` pseudonimiza; contrato, valores e inadimplência vão para a Anthropic | spec 012, briefing §9 |
+| Guardrail de preço | ⚠️ `RE_PERCENTUAL` exige dígito — "três por cento" passa; travado em teste; fecha com 015c | `guardrails.test.ts` "LACUNA" |
+| LGPD / saída de dado | ⚠️ `v_cotista` pseudonimiza e a 016 anonimiza o texto livre; contrato, valores e inadimplência ainda vão para a Anthropic | spec 012/016, briefing §9 |
 | Debounce | ⚠️ serialização por conversa em `Map` em memória → processo único | `debounce.ts:77` (#33) |
-| Índice HNSW | ⚠️ criado em runtime por `ensureIndex()`, não em migração | `pgvector-store.ts` |
-| `kb:ingest` | ⚠️ não remove documento cujo arquivo sumiu (3 docs de e-commerce sobraram até 03/09) | `kb-ingest.ts` |
-| Console | ⚠️ 10 testes para ~2.800 linhas de UI; `/` é placeholder da 007 | `apps/console/app/page.tsx` |
+| Índice HNSW | ✅ em migração (P-33) | `apps/server/drizzle/` |
+| `kb:ingest` | ✅ remove documento cujo arquivo sumiu (P-32) | `kb-ingest.ts` |
+| Console | ✅ redesenhado a partir do design (Console SETA.dc.html), raiz tipográfica corrigida, `/` → `/inbox`; cobertura de UI ainda baixa (helpers puros testados) | `apps/console/` |
 | Backup | ⚠️ manual; nunca automatizado nem restaurado | `docs/deploy-homelab.md` |
-| Comentários desatualizados | `outbox.ts:170` "POC sem template" (013 reverteu); `types.ts:61` "stub [] até lá"; `turnoHandlerLog` exportado sem uso | grep "POC\|stub" |
-| Issues | #45, #46, #47, #54 abertas com código pronto; #48 fecha via #59 | `gh issue list` |
+| Comentários desatualizados | ✅ removidos (P-33) | — |
+| Issues | ✅ #45, #46, #47, #48 e #54 fechadas em 08/09 | `gh issue list` |
+
+## Entregue entre 06/09 e 08/09 (fora do plano de 06/09)
+
+| Entrega | PR | O que muda |
+|---|---|---|
+| **Spec 016 — anonimização** | #61 | O que sai para a LLM passa por um decorator do `AIProvider`: nome, telefone, e-mail e documento do texto livre viram token (NER local, sem Python). Reduz o risco de D6, não o elimina. |
+| **Spec 015a — SDR núcleo** | #64 | `packages/sdr` com a máquina de estados, parser determinístico e LLM só como fallback; ofertas em pontos discretos (tabela ou piso); pedido acima da alçada abre pendência. |
+| **M2 — P-28 a P-33** | #64 | Blindagem de código: prod recusa segredos de dev, senhas fora do compose, imagem só com CI verde, `.env.example`, `kb:ingest`, HNSW em migração, `/` → `/inbox`. |
+| **Console redesenhado** | #64 | Todas as telas no design aprovado no Claude Design; wizard de campanha, drawers de cobrança e lead, explorador de turnos com feedback; correção da raiz tipográfica (o `html` em 14px encolhia toda a escala em 12,5%). |
+| **Spec 017 — relatório de campanhas** | #63 | Aba em Métricas: funil enviadas → pagas, conversão × meta (global + por campanha), competência, janela de atribuição, insights, CSV e PDF. |
 
 ## M0 — Publicar o que está pronto (S4)
 
 | ID | Item | Tam | Dono | Depende | Aceite |
 |---|---|---|---|---|---|
-| — | Mergear **#59** (`spec/014 → main`); depois **#60** (re-aponta para `main` sozinho) | P | Gestão | CI verde (já) | `main` contém `apps/server/src/disparos-routes.ts` e `packages/cobranca/` |
-| — | Fechar #45, #46, #47, #54 com comentário "entregue no #59"; #48 fecha pelo `Closes` | P | Gestão | merge #59 | Project 6: os 5 em Concluído |
+| — | ✅ **08/09** Mergear #59 → #60 → #61 → #62 → #64 → #63 (o #60 não reaponta sozinho: apagar a base fecha o filho — reapontar antes de apagar) | P | Gestão | — | `main` = `aa477c4` contém 012–017 |
+| — | ✅ **08/09** #45, #46, #47, #54 fechadas; #48 pelo `Closes` | P | Gestão | — | falta mover para Concluído no Project 6 |
 | **P-12** (#56) | Transferir para `SETA-IA/seta-atendimento`: `gitleaks git` no histórico **antes**; "Transfer ownership" (não re-push); CODEOWNERS + team `devs` no mesmo dia (backlog V2 §8) | P | Gestão | — | repo na org, CI verde, issues e PRs preservados, remote redirecionado |
 | **P-21** | Deploy no homelab: `release.yml` gera imagens do `main` novo → `infra/deploy.sh` → `demo-seed.sh` | P | Dev | merge #59; P-12 (GHCR da org) | `/healthz` responde com a versão nova; Ato 5 (cobrança) roda do celular |
 | **P-22** | Tag `v0.1.0` = "POC completa (000–014)" como baseline; esquema definitivo vem de D2 | P | Dev | P-21 | tag no repo; imagem `:v0.1.0` no GHCR |
@@ -230,8 +261,8 @@ contra o `guardrailPreco` **sem alterá-lo**).
 
 | ID | Item | Tam | Dono | Depende | Aceite |
 |---|---|---|---|---|---|
-| **P-24** (015a) | **Núcleo.** `packages/sdr`: máquina `qualificacao → apresentacao → oferta → agendamento → encerrado`, parser determinístico, `interpretarResposta` (LLM só como fallback), piso em bps com aritmética inteira. Migração 0015: `lead`, `fluxo_sdr`, `proposta_sdr` (gravada **antes** do envio). `catalog/comercial/estoque_disponivel.yaml` + `condicoes_cota.yaml` com `price_source: true` (campo já existe em `CatalogEntrySchema:55`, nunca usado) devolvendo `valor_tabela_centavos` **e** `valor_minimo_centavos`; piso via param `source: session` (conferir `KNOWN_SESSION_PARAMS`). `buildToolSpecs` filtra por escopo da tool, não por vínculo (`tools.ts:38`). `comprar_cota` **sem vínculo** inicia o fluxo (`turno-handler.ts:405`, mesma forma de `pagar → fluxo` em `:400`); com vínculo, mantém escalada. Trigger `desconto_acima_alcada` + ticket com a proposta. `modulos.sdr`, `personaSdr`, env `SDR_DESCONTO_MAX_BPS=300`, `SDR_FLUXO_EXPIRA_MIN`, `SDR_MAX_PROPOSTAS_DIA` | G → fatiar se passar de 1 sprint | CTO | #60 mergeado | Número sem vínculo entra no fluxo e o trace sai com `tools_expostas` não-nulo; número com vínculo continua escalando `interesse_compra`; oferta na tabela e no piso passam o guardrail; abaixo do piso escala; testes no molde de `cobranca.integration.test.ts` |
-| **P-25** (015b) | **Console Leads:** lista, perfil, propostas; aprovar/recusar `desconto_acima_alcada` (molde: `cobrancas/page.tsx` + `cobrancas-routes.ts`) | M | CTO | 015a | Humano aprova/recusa proposta acima da alçada pelo console e o lead recebe a resposta |
+| **P-24** (015a) | ✅ **no `main` (#64)** — **Núcleo.** `packages/sdr`: máquina `qualificacao → apresentacao → oferta → agendamento → encerrado`, parser determinístico, `interpretarResposta` (LLM só como fallback), piso em bps com aritmética inteira. Migração 0015: `lead`, `fluxo_sdr`, `proposta_sdr` (gravada **antes** do envio). `catalog/comercial/estoque_disponivel.yaml` + `condicoes_cota.yaml` com `price_source: true` (campo já existe em `CatalogEntrySchema:55`, nunca usado) devolvendo `valor_tabela_centavos` **e** `valor_minimo_centavos`; piso via param `source: session` (conferir `KNOWN_SESSION_PARAMS`). `buildToolSpecs` filtra por escopo da tool, não por vínculo (`tools.ts:38`). `comprar_cota` **sem vínculo** inicia o fluxo (`turno-handler.ts:405`, mesma forma de `pagar → fluxo` em `:400`); com vínculo, mantém escalada. Trigger `desconto_acima_alcada` + ticket com a proposta. `modulos.sdr`, `personaSdr`, env `SDR_DESCONTO_MAX_BPS=300`, `SDR_FLUXO_EXPIRA_MIN`, `SDR_MAX_PROPOSTAS_DIA` | G → fatiar se passar de 1 sprint | CTO | #60 mergeado | Número sem vínculo entra no fluxo e o trace sai com `tools_expostas` não-nulo; número com vínculo continua escalando `interesse_compra`; oferta na tabela e no piso passam o guardrail; abaixo do piso escala; testes no molde de `cobranca.integration.test.ts` |
+| **P-25** (015b) | **Aprovar/recusar no console:** a tela de Leads com drawer já existe (console redesenhado, `leads-routes.ts` de leitura); faltam os endpoints de aprovar/recusar `desconto_acima_alcada` (molde: `cobrancas-routes.ts`), ligar os botões que hoje são a nota "chega com a 015b" e o lead receber a resposta | P–M | CTO | ✅ 015a | Humano aprova/recusa proposta acima da alçada pelo console e o lead recebe a resposta |
 | **P-26** (015c) | **Guardrail da raia SDR:** fecha a lacuna do percentual por extenso **sem tocar `preco.ts`** — hook próprio registrado só com `modulos.sdr`; inverte o teste "LACUNA" na raia SDR. Vocabulário proibido nos templates: `desconto`, `abatimento`, `cortesia`, `preço especial`, `condição especial`, `baixar o preço`, **`faço por`** | P | CTO | 015a | "aplico três por cento" escala na raia SDR; raia do cotista inalterada (teste) |
 | **V-03** (gateway#34) | Templates do agente de vendas aprovados na Meta | P | Externo | — | Template aprovado; habilita prospecção ativa (M5) |
 | **P-27** | `docs/roteiro-demo.md` ganha o **Ato 6 — SDR** | P | CTO | 015a | Roteiro com as mensagens exatas e o plano B pelo simulador |
@@ -243,13 +274,13 @@ no repositório (premissa D9).
 
 | ID | Item | Tam | Dono | Aceite |
 |---|---|---|---|---|
-| **P-28** | `env.ts`: com `NODE_ENV=production` o boot **recusa** `WA_VERIFY_TOKEN`, `WA_APP_SECRET`, `BETTER_AUTH_SECRET` nos valores de dev | P | Dev | Teste: boot em prod com default lança com mensagem clara |
-| **P-29** | `compose.prod.yml` lê as senhas do Postgres do `.env.prod`; rotacionar `app_owner`/`erp_ro` no homelab | P | Dev | Compose sem senha literal; homelab com senha nova; `deploy.sh` documenta |
-| **P-30** | `release.yml` só publica com CI verde (`needs: ci` ou workflow único) | P | Dev | Push com teste quebrado não gera imagem |
-| **P-31** | `.env.example` completo (6 variáveis faltando) | P | Dev | Script/diff `env.ts` × exemplo vazio; CI falha se divergir |
+| **P-28** | ✅ **08/09 (#64)** `env.ts`: com `NODE_ENV=production` o boot **recusa** `WA_VERIFY_TOKEN`, `WA_APP_SECRET`, `BETTER_AUTH_SECRET` nos valores de dev | P | Dev | Teste: boot em prod com default lança com mensagem clara |
+| **P-29** | ✅ **08/09 (#64)** `compose.prod.yml` lê as senhas do `.env.prod`; **falta rotacionar** `app_owner`/`erp_ro` no homelab junto com o P-21 | P | Dev | Compose sem senha literal; homelab com senha nova; `deploy.sh` documenta |
+| **P-30** | ✅ **08/09 (#64)** `release.yml` só publica com CI verde (`needs: ci` ou workflow único) | P | Dev | Push com teste quebrado não gera imagem |
+| **P-31** | ✅ **08/09 (#64)** `.env.example` completo (6 variáveis faltando) | P | Dev | Script/diff `env.ts` × exemplo vazio; CI falha se divergir |
 | **I-12** (seta-gestao#17) | gitleaks em pre-commit + CI igual ao do gateway (gitleaks, audit) — backlog V2 §8 passo 5 | M | Dev | Hook ativo e documentado; CI com gitleaks/audit |
-| **P-32** | `kb:ingest` remove documento cujo arquivo sumiu | P | Dev | Ingest com arquivo removido apaga `documento` + `chunk` |
-| **P-33** | Índice HNSW em migração (`0016`); `/` redireciona para `/inbox`; remover `turnoHandlerLog` e comentários "stub até lá"/"POC sem template" | P | Dev | Migração criada; `/` não é placeholder; grep limpo |
+| **P-32** | ✅ **08/09 (#64)** `kb:ingest` remove documento cujo arquivo sumiu | P | Dev | Ingest com arquivo removido apaga `documento` + `chunk` |
+| **P-33** | ✅ **08/09 (#64)** Índice HNSW em migração (`0016`); `/` redireciona para `/inbox`; remover `turnoHandlerLog` e comentários "stub até lá"/"POC sem template" | P | Dev | Migração criada; `/` não é placeholder; grep limpo |
 | **P-34** | Backup automático do volume Postgres no homelab (cron + `pg_dumpall` + retenção) com **restore testado** | M | Dev | Restore em banco limpo reproduz KB, contatos e cobranças |
 | **I-04** (seta-gestao#10) | Monitor de disponibilidade cobre a plataforma: probe em `/healthz` + mensagem de teste periódica pelo simulador | M | Dev | Silêncio de 5 min alerta no `#dev-alertas` |
 
@@ -269,16 +300,19 @@ no repositório (premissa D9).
 
 ## M4 — Pronto para o piloto (S6–S9) — gated por M3
 
+Numeração das specs corrigida em 08/09: **016 = anonimização** e **017 = relatório de
+campanhas** já foram entregues, então os itens abaixo começam na 018.
+
 | ID | Item | Tam | Dono | Depende | Aceite |
 |---|---|---|---|---|---|
-| **P-36** (spec 016) | **Conexão ao espelho real:** `ERP_DATABASE_URL` → `bali_tse`; validar as 7 views canônicas contra o espelho (012: "a integração é outra sessão"); `DbConnector` não muda; política de masking completa (003: "sem política completa" — hoje só `cnpj`, sem uso) | M–G | CTO | D5 | `titulos_atraso` de um contrato real bate com o TSE; nenhuma coluna de PII passa; `erp_ro` equivalente sem SELECT em tabela física |
-| **P-37** (spec 017) | **Embeddings reais:** `EMBEDDING_BASE_URL`/`EMBEDDING_API_KEY` separados no `AIProvider`; re-ingest KB + skills; `EMBEDDING_DIM` casado | M | CTO | D8 | `hybrid` com vetor; teste "híbrida supera lexical" da 008 volta a valer |
-| **P-38** (spec 018) | **KB de produtos e cotas + glossário na persona:** OURO/DIAMANTE × PREMIUM/MASTER/SPECIAL, modelos de uso (anual 1–3 períodos, bienal), UH, pontos por tier — a partir do espelho; validada na terça com o Bali | M | CTO + Externo | D5, P-37 | "o que é DIAMANTE PREMIUM?" responde com fonte; agente decodifica o retorno de `meu_produto`; sem PII no repo |
-| **P-39** (spec 019) | **Release por cliente** conforme D2: tags `vX.Y.Z`, imagem por versão, `configs/<cliente>/client.yaml` + `contatos.yaml` fora da imagem, staging (decisão M-03 do gateway) | M | Dev | D2 | `TAG=vX.Y.Z CLIENTE=bali ./deploy.sh` sobe o piloto; `/healthz` expõe a versão |
-| **P-40** (spec 020) | **Operação mínima:** rate limit em `/webhook` e `/webhooks/asaas`; rota de inspeção de dead-letter (hoje só log); segredos fora do `.env` (cofre — junto com D2); retenção de logs | M–G | Dev | P-28–P-30 | Fase C "preparar a operação" do status-do-projeto coberta item a item |
-| **P-41** (spec 021) | **WABA do cliente:** trocar o número de teste; submeter templates 013/014 como utility (D7) | P + espera | Externo + Dev | D4, D7 | Template aprovado; `WA_TEMPLATE_PAGAMENTO_CONFIRMADO` real |
-| **P-42** (spec 022) | **LGPD técnico:** retenção/descarte de `mensagem`, `trace_turno`, `evento_*` por política; `contato.documento` só com base legal (014: "em produção viria do cadastro") | M | Dev | D6 | Job de expurgo; documento não vem de YAML |
-| **P-35** (spec 023) | **Só se D6 negar:** vLLM on-prem — port já existe; validar tool calling do modelo; infra do cliente | G | CTO + Externo | D6 | `LLM_BASE_URL` interno; suíte do agente verde |
+| **P-36** (spec 018) | **Conexão ao espelho real:** `ERP_DATABASE_URL` → `bali_tse`; validar as 7 views canônicas contra o espelho (012: "a integração é outra sessão"); `DbConnector` não muda; política de masking completa (003: "sem política completa" — hoje só `cnpj`, sem uso) | M–G | CTO | D5 | `titulos_atraso` de um contrato real bate com o TSE; nenhuma coluna de PII passa; `erp_ro` equivalente sem SELECT em tabela física |
+| **P-37** (spec 019) | **Embeddings reais:** `EMBEDDING_BASE_URL`/`EMBEDDING_API_KEY` separados no `AIProvider`; re-ingest KB + skills; `EMBEDDING_DIM` casado | M | CTO | D8 | `hybrid` com vetor; teste "híbrida supera lexical" da 008 volta a valer |
+| **P-38** (spec 020) | **KB de produtos e cotas + glossário na persona:** OURO/DIAMANTE × PREMIUM/MASTER/SPECIAL, modelos de uso (anual 1–3 períodos, bienal), UH, pontos por tier — a partir do espelho; validada na terça com o Bali | M | CTO + Externo | D5, P-37 | "o que é DIAMANTE PREMIUM?" responde com fonte; agente decodifica o retorno de `meu_produto`; sem PII no repo |
+| **P-39** (spec 021) | **Release por cliente** conforme D2: tags `vX.Y.Z`, imagem por versão, `configs/<cliente>/client.yaml` + `contatos.yaml` fora da imagem, staging (decisão M-03 do gateway) | M | Dev | D2 | `TAG=vX.Y.Z CLIENTE=bali ./deploy.sh` sobe o piloto; `/healthz` expõe a versão |
+| **P-40** (spec 022) | **Operação mínima:** rate limit em `/webhook` e `/webhooks/asaas`; rota de inspeção de dead-letter (hoje só log); segredos fora do `.env` (cofre — junto com D2); retenção de logs | M–G | Dev | P-28–P-30 | Fase C "preparar a operação" do status-do-projeto coberta item a item |
+| **P-41** (spec 023) | **WABA do cliente:** trocar o número de teste; submeter templates 013/014 como utility (D7) | P + espera | Externo + Dev | D4, D7 | Template aprovado; `WA_TEMPLATE_PAGAMENTO_CONFIRMADO` real |
+| **P-42** (spec 024) | **LGPD técnico:** retenção/descarte de `mensagem`, `trace_turno`, `evento_*` por política; `contato.documento` só com base legal (014: "em produção viria do cadastro") | M | Dev | D6 | Job de expurgo; documento não vem de YAML |
+| **P-35** (spec 025) | **Só se D6 negar:** vLLM on-prem — port já existe; validar tool calling do modelo; infra do cliente | G | CTO + Externo | D6 | `LLM_BASE_URL` interno; suíte do agente verde |
 | **P-43** | **Só se D1 sim:** Asaas produção — chave, webhook público, `documento` com base legal | M | Dev | D1, P-42 | Cobrança real paga no piloto |
 
 ## M5 — Depois do piloto (sem sprint)
@@ -292,17 +326,18 @@ no repositório (premissa D9).
 | **SDR fase 2** | Prospecção ativa (013 + V-03); raia do cotista (upgrade/cross-sell); parcelamento | spec 015 "fora de escopo" |
 | **Fase D** | Config/KB/catálogo pela interface; gestão de usuários; mídia; multi-instância (`debounce.ts:77`, #33); papel `marketing` (013) | status-do-projeto |
 | — | `RE_PERCENTUAL` na raia do cotista, se 015c não bastar | PR #60 |
+| **Relatórios fase 2** | Envio automático (Slack/e-mail), opt-outs no funil, competência financeira por vencimento da parcela, relatórios de cobrança e de atendimento | spec 017 "fora de escopo" |
 
 ## Reconciliação com o backlog V2 (Project 6 "SETA — Backlog")
 
 | ID V2 | Issue | No Project | Estado real | Ação |
 |---|---|---|---|---|
 | P-12 | #56 | Backlog, S4 | pendente | mantém (M0) |
-| P-13 (E-04) | #54 | Backlog, P1 | **feito** 01/09 20:16 — fatias a, b, d; c (opt-out) fora da 013 | fechar após #59; abrir P-13c em M5 |
-| P-14 | #45 | Backlog | **feito** 01/09 | fechar após #59 |
-| P-15 | #46 | Backlog | **feito** 01/09 | fechar após #59 |
-| P-16 | #47 | Backlog | **feito** 01/09 | fechar após #59 |
-| P-17 | #48 | Backlog | **feito** 02/09 21:08 | fecha pelo `Closes #48` do #59 |
+| P-13 (E-04) | #54 | Backlog, P1 | **feito** 01/09 20:16 — fatias a, b, d; c (opt-out) fora da 013 | ✅ fechada 08/09; abrir P-13c em M5 |
+| P-14 | #45 | Backlog | **feito** 01/09 | ✅ fechada |
+| P-15 | #46 | Backlog | **feito** 01/09 | ✅ fechada |
+| P-16 | #47 | Backlog | **feito** 01/09 | ✅ fechada |
+| P-17 | #48 | Backlog | **feito** 02/09 21:08 | ✅ fechada pelo `Closes #48` do #59 |
 | P-18 | #57 | Backlog | pendente | D2 (M3) |
 | P-19 | #58 | Backlog, P3 | pendente | M5 |
 | V-03 | gateway#34 | Backlog | pendente (Externo) | M1 |
@@ -311,6 +346,7 @@ no repositório (premissa D9).
 | I-04 | seta-gestao#10 | Backlog | pendente | M2 (estende à plataforma) |
 | I-12 | seta-gestao#17 | Backlog | pendente | M2 |
 | — | — | — | **spec 015 não existe no V2** | entra como P-24 a P-27 |
+| — | — | — | **specs 016 e 017 e o console redesenhado não existem no V2** | entregues em 06–08/09; criar as issues na triagem só para registro (Concluído) |
 
 **Por que o V2 ficou desatualizado:** foi escrito em 02/09 às 16:06; a 013 ficou pronta em
 01/09 às 20:16 e a 014 em 02/09 às 21:08. Os PRs #51–#55 constavam como MERGED no GitHub,
@@ -323,32 +359,32 @@ onde indicado.
 
 | ID | Título (resultado, não tarefa) | Tipo | Prio | Tam | Dono | Marco |
 |---|---|---|---|---|---|---|
-| P-21 | Servidor de demonstração roda a versão atual do `main` | Infra | P1 | P | Dev | M0 |
+| P-21 | Servidor de demonstração roda a versão atual do `main` — **próximo passo** | Infra | P1 | P | Dev | M0 |
 | P-22 | Primeira versão identificada (`v0.1.0`) publicada no GHCR | Infra | P2 | P | Dev | M0 |
 | P-23 | Status do projeto de 31/08 versionado no repo e apontando para o roadmap | Produto | P3 | P | Gestão | M0 |
-| P-24 | Lead sem cadastro é qualificado e recebe oferta dentro da alçada de 3% (015a) | Produto | P1 | G | CTO | M1 |
-| P-25 | Atendente aprova ou recusa proposta acima da alçada pelo console (015b) | Produto | P1 | M | CTO | M1 |
+| P-24 | ✅ Lead sem cadastro é qualificado e recebe oferta dentro da alçada de 3% (015a) | Produto | P1 | G | CTO | M1 |
+| P-25 | Atendente aprova ou recusa proposta acima da alçada pelo console (015b) — tela já existe | Produto | P1 | P–M | CTO | M1 |
 | P-26 | Percentual por extenso não passa na raia do SDR (015c) | Produto | P2 | P | CTO | M1 |
 | P-27 | Roteiro de demo tem o Ato 6 — SDR | Pré-venda | P2 | P | CTO | M1 |
-| P-28 | Boot em produção recusa chaves de desenvolvimento | Infra | P1 | P | Dev | M2 |
-| P-29 | Senhas do Postgres fora do compose e rotacionadas no homelab | Infra | P1 | P | Dev | M2 |
-| P-30 | Imagem só é publicada com CI verde | Infra | P1 | P | Dev | M2 |
-| P-31 | `.env.example` completo e verificado no CI | Infra | P2 | P | Dev | M2 |
-| P-32 | Ingestão da KB remove documento cujo arquivo sumiu | Produto | P2 | P | Dev | M2 |
-| P-33 | Índice HNSW em migração; `/` vai para `/inbox`; stubs removidos | Produto | P3 | P | Dev | M2 |
+| P-28 | ✅ Boot em produção recusa chaves de desenvolvimento | Infra | P1 | P | Dev | M2 |
+| P-29 | ✅ Senhas do Postgres fora do compose e rotacionadas no homelab | Infra | P1 | P | Dev | M2 |
+| P-30 | ✅ Imagem só é publicada com CI verde | Infra | P1 | P | Dev | M2 |
+| P-31 | ✅ `.env.example` completo e verificado no CI | Infra | P2 | P | Dev | M2 |
+| P-32 | ✅ Ingestão da KB remove documento cujo arquivo sumiu | Produto | P2 | P | Dev | M2 |
+| P-33 | ✅ Índice HNSW em migração; `/` vai para `/inbox`; stubs removidos | Produto | P3 | P | Dev | M2 |
 | P-34 | Backup automático do Postgres com restore testado | Infra | P1 | M | Dev | M2 |
 | P-35 | LLM dentro da rede do cliente (só se D6 negar) | Produto | — | G | CTO + Externo | M4 |
-| P-36 | Plataforma lê o espelho real do cliente-piloto (016) | Produto | P1 | M–G | CTO | M4 |
-| P-37 | Busca semântica com embeddings reais (017) | Produto | P1 | M | CTO | M4 |
-| P-38 | Agente conhece produtos, tiers e cotas do cliente (018) | Produto | P1 | M | CTO + Externo | M4 |
-| P-39 | Instalação por cliente com versão identificada e config fora da imagem (019) | Infra | P1 | M | Dev | M4 |
-| P-40 | Operação mínima: rate limit, dead-letter, cofre, retenção de logs (020) | Infra | P1 | M–G | Dev | M4 |
-| P-41 | WhatsApp comercial do cliente com templates de utilidade aprovados (021) | Produto | P1 | P | Externo + Dev | M4 |
-| P-42 | Retenção e descarte de dados por política LGPD (022) | Produto | P1 | M | Dev | M4 |
+| P-36 | Plataforma lê o espelho real do cliente-piloto (018) | Produto | P1 | M–G | CTO | M4 |
+| P-37 | Busca semântica com embeddings reais (019) | Produto | P1 | M | CTO | M4 |
+| P-38 | Agente conhece produtos, tiers e cotas do cliente (020) | Produto | P1 | M | CTO + Externo | M4 |
+| P-39 | Instalação por cliente com versão identificada e config fora da imagem (021) | Infra | P1 | M | Dev | M4 |
+| P-40 | Operação mínima: rate limit, dead-letter, cofre, retenção de logs (022) | Infra | P1 | M–G | Dev | M4 |
+| P-41 | WhatsApp comercial do cliente com templates de utilidade aprovados (023) | Produto | P1 | P | Externo + Dev | M4 |
+| P-42 | Retenção e descarte de dados por política LGPD (024) | Produto | P1 | M | Dev | M4 |
 | P-43 | Cobrança real via Asaas produção (só se D1 sim) | Produto | — | M | Dev | M4 |
 
-Capacidade indicativa: M0 ≈ 1 dev-dia + CTO · M1 ≈ 3 sessões de spec (CTO) · M2 ≈ 3–4
-dev-dias · M4 ≈ 6–8 dev-dias + 3 sessões de spec. Com 6 dev-dias planejados por sprint e 2
+Capacidade indicativa (restante em 08/09): M0 ≈ ½ dev-dia + gestão · M1 ≈ 1–2 sessões de
+spec (CTO) · M2 ≈ 2 dev-dias · M4 ≈ 6–8 dev-dias + 3 sessões de spec. Com 6 dev-dias planejados por sprint e 2
 deles reservados à Migração (regra fixa do V2), **M2 + M4 cabem entre S5 e S9 se D9
 mantiver as specs com o CTO**.
 
@@ -360,4 +396,8 @@ mantiver as specs com o CTO**.
   atualizado com o número e o link.
 - Regra que nasceu da revisão de 06/09: **"MERGED" não prova que o conteúdo chegou no
   `main`**. Em PR empilhado, conferir `baseRefName` e a ordem dos merges, e verificar por
-  conteúdo (`git cat-file -e origin/main:<arquivo marcante>`).
+  conteúdo (`git cat-file -e origin/main:<arquivo marcante>`) e por ancestralidade
+  (`git merge-base --is-ancestor <head> origin/main`).
+- Regra que nasceu do merge de 08/09: **apagar a branch base de um PR aberto fecha o PR
+  filho** em vez de reapontá-lo. Ordem segura: merge do pai → `gh pr edit <filho> --base main`
+  → apagar a branch do pai.
