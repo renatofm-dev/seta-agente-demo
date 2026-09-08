@@ -2,15 +2,25 @@ import { describe, expect, it } from 'vitest';
 import type { MensagemThread } from '../lib/console-api';
 import {
   dataCurta,
+  dataHoraCurta,
+  duracao,
+  ehCodigoPagamento,
   estadoJanela,
   horarioLista,
   iniciais,
   mesclarMensagens,
+  nomeExibicao,
+  porcentagem,
+  prefixoAutor,
   prefixoSeAplica,
   reaisDeCentavos,
+  semPrefixoAtendente,
   separadorDia,
   telefoneBonito,
+  telefoneMascarado,
+  tempoRelativo,
 } from '../lib/formatos';
+import { estadoLead, motivoLabel } from '../lib/rotulos';
 
 const AGORA = new Date('2026-09-01T15:00:00');
 
@@ -107,5 +117,87 @@ describe('014 — formatos da página Cobranças', () => {
     expect(dataCurta('2026-09-05')).toBe('05/09/2026');
     expect(dataCurta('2026-09-05T00:00:00.000Z')).toBe('05/09/2026');
     expect(dataCurta(null)).toBe('—');
+  });
+});
+
+describe('console redesenhado (2026-09) — formatos novos', () => {
+  it('telefoneMascarado: 1º dígito + últimos 4 (pseudonimização das listas)', () => {
+    expect(telefoneMascarado('5511999990002')).toBe('9…-0002');
+    expect(telefoneMascarado('551130004000')).toBe('3…-4000');
+    expect(telefoneMascarado('123')).toBe('—');
+  });
+
+  it('nomeExibicao: nome do cadastro, senão telefone', () => {
+    expect(nomeExibicao('Maria S.', '5511999990117')).toBe('Maria S.');
+    expect(nomeExibicao('  ', '5511999990117')).toBe('+55 11 99999-0117');
+    expect(nomeExibicao(null, '5511999990117')).toBe('+55 11 99999-0117');
+  });
+
+  it('duracao: s, min, h+min, d', () => {
+    expect(duracao(45)).toBe('45 s');
+    expect(duracao(12 * 60)).toBe('12 min');
+    expect(duracao(80 * 60)).toBe('1h20min');
+    expect(duracao(3 * 3600)).toBe('3h');
+    expect(duracao(2 * 86_400)).toBe('2 d');
+    expect(duracao(null)).toBe('—');
+  });
+
+  it('tempoRelativo: agora, há N min, há N h, ontem, há N dias', () => {
+    expect(tempoRelativo('2026-09-01T14:59:40', AGORA)).toBe('agora');
+    expect(tempoRelativo('2026-09-01T14:52:00', AGORA)).toBe('há 8 min');
+    expect(tempoRelativo('2026-09-01T12:30:00', AGORA)).toBe('há 2 h');
+    expect(tempoRelativo('2026-08-31T18:40:00', AGORA)).toBe('ontem');
+    expect(tempoRelativo('2026-08-29T10:12:00', AGORA)).toBe('há 3 dias');
+    expect(tempoRelativo(null, AGORA)).toBe('—');
+  });
+
+  it('dataHoraCurta e porcentagem', () => {
+    expect(dataHoraCurta('2026-09-12T09:00:00')).toBe('12/09 09:00');
+    expect(dataHoraCurta(null)).toBe('—');
+    expect(porcentagem(41, 318)).toBe('13%');
+    expect(porcentagem(0, 0)).toBe('—');
+  });
+
+  it('prefixoAutor: quem falou por último no preview', () => {
+    expect(prefixoAutor('contato')).toBe('');
+    expect(prefixoAutor('bot')).toBe('Agente: ');
+    expect(prefixoAutor('atendente', 'Ana Atendente')).toBe('Ana: ');
+    expect(prefixoAutor('atendente', null)).toBe('Atendente: ');
+    expect(prefixoAutor('campanha')).toBe('Campanha: ');
+  });
+
+  it('ehCodigoPagamento: PIX copia-e-cola e linha digitável vão em mono', () => {
+    expect(
+      ehCodigoPagamento(
+        '00020126580014br.gov.bcb.pix0136a7f3c2e1-9b4d-4c8e-8f21-3d5e6a7b8c9d5204000053039865406125.005802BR',
+      ),
+    ).toBe(true);
+    expect(ehCodigoPagamento('34191.79001 01043.510047 91020.150008 8 99870000062500')).toBe(true);
+    expect(ehCodigoPagamento('Seu boleto está pronto! Valor: R$ 625,00')).toBe(false);
+    expect(ehCodigoPagamento('sim')).toBe(false);
+  });
+
+  it('semPrefixoAtendente tira o *Nome* que o servidor prefixa', () => {
+    expect(semPrefixoAtendente('*Ana Atendente*\n\nOi! Aqui é a Ana.')).toBe('Oi! Aqui é a Ana.');
+    expect(semPrefixoAtendente('Sem prefixo')).toBe('Sem prefixo');
+  });
+
+  it('motivoLabel: códigos conhecidos em pt-BR, desconhecidos humanizados', () => {
+    expect(motivoLabel('negociacao_preco')).toBe('Pedido de desconto / negociação');
+    expect(motivoLabel('algo_novo_aqui')).toBe('Algo novo aqui');
+    expect(motivoLabel(null)).toBe('Sem motivo registrado');
+  });
+
+  it('estadoLead: proposta aguardando aprovação sobrepõe o status do lead', () => {
+    expect(estadoLead('proposta', { status: 'aguardando_aprovacao' })).toMatchObject({
+      rotulo: 'Aguardando aprovação',
+      papel: 'warn',
+      codigo: 'aguardando_aprovacao',
+    });
+    expect(estadoLead('agendado', { status: 'aceita' })).toMatchObject({
+      rotulo: 'Agendado',
+      papel: 'ok',
+    });
+    expect(estadoLead('qualificando', null)).toMatchObject({ rotulo: 'Qualificando' });
   });
 });

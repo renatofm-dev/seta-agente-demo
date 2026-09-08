@@ -1,44 +1,39 @@
 'use client';
 
+import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
+import { Button, buttonVariants } from '@/components/ui/button';
+import { Chip, Ponto } from '@/components/ui/chip';
+import { Textarea } from '@/components/ui/input';
+import type { ConversaDetalhe, MensagemThread, Sessao } from '@/lib/console-api';
 import {
-  type ConversaDetalhe,
-  type MensagemThread,
-  type Sessao,
-  STATUS_LABEL,
-} from '@/lib/console-api';
-import { estadoJanela, prefixoSeAplica, separadorDia, telefoneBonito } from '@/lib/formatos';
+  duracao,
+  ehCodigoPagamento,
+  estadoJanela,
+  hora,
+  nomeExibicao,
+  prefixoSeAplica,
+  semPrefixoAtendente,
+  separadorDia,
+  telefoneBonito,
+} from '@/lib/formatos';
+import { BALAO, motivoLabel, STATUS_TICKET } from '@/lib/rotulos';
 import { cn } from '@/lib/utils';
-import { TraceViewer } from './trace-viewer';
 
-/** Coluna direita (#45): thread da conversa, ações HITL e caixa de resposta. */
-
-const BALAO_AUTOR: Record<MensagemThread['autor'], string> = {
-  contato: 'bg-muted',
-  bot: 'bg-sky-600/15 dark:bg-sky-400/15',
-  atendente: 'bg-emerald-600/90 text-white',
-  campanha: 'bg-violet-600/15 dark:bg-violet-400/15',
-};
-
-const ROTULO_AUTOR: Record<MensagemThread['autor'], string> = {
-  contato: 'cliente',
-  bot: 'bot',
-  atendente: 'atendente',
-  campanha: 'disparo',
-};
+/** Coluna central: cabeçalho com ações HITL, avisos, thread e caixa de resposta. */
 
 function Checks({ status }: { status: MensagemThread['status'] }) {
   if (status === 'recebida') return null;
   if (status === 'pendente') return <span title="pendente">🕓</span>;
   if (status === 'falha')
     return (
-      <span className="text-red-300" title="falha no envio">
+      <span className="text-brand" title="falha no envio">
         ⚠
       </span>
     );
   const dois = status === 'entregue' || status === 'lida';
   return (
-    <span className={cn(status === 'lida' && 'text-sky-300')} title={status}>
+    <span className={cn(status === 'lida' && 'text-info-2')} title={status}>
       {dois ? '✓✓' : '✓'}
     </span>
   );
@@ -46,21 +41,37 @@ function Checks({ status }: { status: MensagemThread['status'] }) {
 
 function Balao({ m }: { m: MensagemThread }) {
   const doContato = m.autor === 'contato';
+  const b = BALAO[m.autor];
+  const texto = m.autor === 'atendente' ? semPrefixoAtendente(m.texto) : m.texto;
+  const mono = !doContato && ehCodigoPagamento(texto);
+  const etiqueta = m.autor === 'atendente' ? (m.atendenteNome ?? b.etiqueta) : b.etiqueta;
   return (
-    <div className={cn('flex', doContato ? 'justify-start' : 'justify-end')}>
-      <div className={cn('max-w-[75%] rounded-lg px-3 py-2 text-sm', BALAO_AUTOR[m.autor])}>
-        {m.autor === 'atendente' && m.atendenteNome && (
-          <p className="text-[10px] font-semibold opacity-90">{m.atendenteNome}</p>
+    <div
+      className={cn(
+        'flex max-w-[min(560px,88%)] flex-col gap-[3px]',
+        doContato ? 'self-start' : 'self-end',
+      )}
+    >
+      {etiqueta && (
+        <span
+          className={cn('pl-1 font-mono text-[10px] uppercase tracking-[.08em]', b.etiquetaCor)}
+        >
+          {etiqueta}
+        </span>
+      )}
+      <div
+        className={cn(
+          'whitespace-pre-wrap break-words border px-3 py-2 text-[13.5px] text-ink',
+          b.classe,
+          doContato ? 'rounded-[4px_14px_14px_14px]' : 'rounded-[14px_4px_14px_14px]',
+          mono && 'break-all font-mono text-xs',
         )}
-        <p className="whitespace-pre-wrap">{m.texto}</p>
-        <p className="mt-1 flex items-center justify-end gap-1 text-[10px] opacity-70">
-          {ROTULO_AUTOR[m.autor]} ·{' '}
-          {new Date(m.criadoEm).toLocaleTimeString('pt-BR', {
-            hour: '2-digit',
-            minute: '2-digit',
-          })}{' '}
-          <Checks status={m.status} />
-        </p>
+      >
+        {texto}
+      </div>
+      <div className="flex justify-end gap-1.5 pr-1 font-mono text-[10px] text-text-3">
+        {hora(m.criadoEm)}
+        <Checks status={m.status} />
       </div>
     </div>
   );
@@ -110,9 +121,13 @@ function Thread({
 
   let diaAnterior: string | null = null;
   return (
-    <div ref={areaRef} onScroll={aoRolar} className="flex-1 space-y-2 overflow-y-auto p-4">
+    <div
+      ref={areaRef}
+      onScroll={aoRolar}
+      className="flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto px-5 py-4"
+    >
       {temMais && (
-        <p className="text-center text-[11px] text-muted-foreground">
+        <p className="m-0 self-center font-mono text-[10.5px] text-text-3">
           {carregandoMais ? 'Carregando…' : 'Role para cima para ver mensagens anteriores'}
         </p>
       )}
@@ -121,19 +136,44 @@ function Thread({
         const mostraDia = dia !== diaAnterior;
         diaAnterior = dia;
         return (
-          <div key={m.id} className="space-y-2">
+          <div key={m.id} className="contents">
             {mostraDia && (
-              <div className="flex justify-center">
-                <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] text-muted-foreground">
-                  {dia}
-                </span>
-              </div>
+              <span className="my-1.5 self-center rounded-full border border-line bg-surface px-2.5 py-[3px] font-mono text-[10.5px] text-text-3">
+                {dia}
+              </span>
             )}
             <Balao m={m} />
           </div>
         );
       })}
+      {mensagens.length === 0 && (
+        <p className="m-0 self-center py-8 text-[13px] text-text-3">Sem mensagens ainda.</p>
+      )}
       <div ref={fimRef} />
+    </div>
+  );
+}
+
+function Aviso({
+  tom,
+  pulsa,
+  children,
+}: {
+  tom: 'warn' | 'risk';
+  pulsa?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <div
+      className={cn(
+        'flex items-start gap-2 border-b px-[18px] py-2 text-[12.5px]',
+        tom === 'warn'
+          ? 'border-warn-2/35 bg-warn-2/14 text-warn'
+          : 'border-brand/20 bg-brand/7 text-brand',
+      )}
+    >
+      <Ponto tom={tom} pulsa={pulsa} className="mt-[5px]" />
+      <span className="min-w-0 flex-1">{children}</span>
     </div>
   );
 }
@@ -147,6 +187,7 @@ export function PainelConversa({
   aoCarregarMais,
   aoAgir,
   aoResponder,
+  aoAbrirContexto,
 }: {
   detalhe: ConversaDetalhe;
   mensagens: MensagemThread[];
@@ -156,15 +197,19 @@ export function PainelConversa({
   aoCarregarMais: () => void;
   aoAgir: (acao: 'assumir' | 'devolver' | 'resolver') => Promise<void>;
   aoResponder: (texto: string) => Promise<void>;
+  aoAbrirContexto: () => void;
 }) {
-  const [aba, setAba] = useState<'conversa' | 'trace'>('conversa');
   const [texto, setTexto] = useState('');
   const [erro, setErro] = useState<string | null>(null);
+  const [enviando, setEnviando] = useState(false);
 
   const t = detalhe.ticket;
   const minhaPosse = t.status === 'humano_ativo' && t.atendenteId === sessao?.userId;
   const janela = estadoJanela(detalhe.janelaExpiraEm);
   const janelaFechada = janela.estado === 'fechada';
+  const st = STATUS_TICKET[t.status];
+  const nome = nomeExibicao(detalhe.contatoNome, detalhe.waId);
+  const primeiroNome = sessao?.nome.split(' ')[0] ?? 'você';
 
   // orçamento: o prefixo *Nome* conta quando esta resposta vai abrir a fala
   const comPrefixo = prefixoSeAplica(mensagens, sessao?.userId);
@@ -173,14 +218,14 @@ export function PainelConversa({
 
   const podeEnviar = minhaPosse && !janelaFechada;
   const motivoBloqueio = janelaFechada
-    ? 'Janela de 24h fechada — a Meta só aceita template de reengajamento.'
+    ? 'Janela de 24h fechada · a Meta só aceita template de reengajamento'
     : t.status === 'aguardando_humano'
-      ? 'Assuma a conversa para responder.'
+      ? 'Assuma a conversa para responder'
       : t.status === 'humano_ativo'
-        ? `Em atendimento por ${t.atendenteNome ?? 'outro atendente'}.`
+        ? `Em atendimento por ${t.atendenteNome ?? 'outro atendente'}`
         : t.status === 'resolvido'
-          ? 'Conversa resolvida — reabre quando o contato mandar mensagem.'
-          : 'O bot está atendendo — responda só depois que a conversa for escalada e assumida.';
+          ? 'Conversa resolvida · reabre quando o cotista escrever'
+          : 'O agente está atendendo · responda depois que a conversa escalar';
 
   async function agir(acao: 'assumir' | 'devolver' | 'resolver') {
     setErro(null);
@@ -191,175 +236,143 @@ export function PainelConversa({
     }
   }
 
-  async function enviar(e: React.FormEvent) {
-    e.preventDefault();
+  async function enviar(e?: React.FormEvent) {
+    e?.preventDefault();
     const corpo = texto.trim();
-    if (!corpo || restantes < 0) return;
-    setTexto('');
+    if (!corpo || restantes < 0 || enviando) return;
+    setEnviando(true);
     setErro(null);
     try {
       await aoResponder(corpo);
+      setTexto('');
     } catch (err) {
       setErro(err instanceof Error ? err.message : String(err));
+    } finally {
+      setEnviando(false);
     }
   }
 
-  const perfil = detalhe.perfilErp as {
-    tier?: string;
-    status?: string;
-    periodos?: number;
-    pontos?: number;
-    cota_codigo?: string;
-    bloco?: string;
-    uh?: string;
-  } | null;
+  const rotuloStatus =
+    t.status === 'humano_ativo'
+      ? minhaPosse
+        ? `${primeiroNome} (você)`
+        : `Em atendimento · ${t.atendenteNome ?? 'atendente'}`
+      : st.rotulo;
 
   return (
-    <section className="grid h-full grid-cols-1 gap-0 overflow-hidden xl:grid-cols-[1fr_260px]">
-      <div className="flex h-full flex-col overflow-hidden">
-        <header className="flex flex-wrap items-center gap-2 border-b px-4 py-2 text-sm">
-          <div className="min-w-0">
-            <p className="truncate font-medium">
-              {detalhe.contatoNome ?? telefoneBonito(detalhe.waId)}
-            </p>
-            <p className="text-[11px] text-muted-foreground">{telefoneBonito(detalhe.waId)}</p>
+    <section className="flex h-full min-h-0 min-w-0 flex-col bg-surface-3">
+      <header className="flex min-h-[60px] flex-wrap items-center gap-3 border-b border-line bg-surface px-[18px] py-2">
+        <div className="min-w-[180px] flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-[15px] font-semibold">{nome}</span>
+            <Chip papel={st.papel}>{rotuloStatus}</Chip>
           </div>
-          <span className="rounded-full bg-muted px-2 py-0.5 text-xs">
-            {STATUS_LABEL[t.status]}
-            {t.status === 'humano_ativo' && t.atendenteNome ? ` · ${t.atendenteNome}` : ''}
-          </span>
-          {janela.estado === 'fechando' && (
-            <span className="rounded-full bg-orange-500/15 px-2 py-0.5 text-xs text-orange-600">
-              janela {janela.rotulo}
-            </span>
+          <div className="font-mono text-[11px] text-text-3">{telefoneBonito(detalhe.waId)}</div>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {t.status === 'aguardando_humano' && (
+            <Button onClick={() => agir('assumir')}>Assumir</Button>
           )}
-          {janelaFechada && (
-            <span className="rounded-full bg-red-500/15 px-2 py-0.5 text-xs text-red-600">
-              janela 24h fechada
-            </span>
+          {minhaPosse && (
+            <>
+              <Button variant="outline" onClick={() => agir('devolver')}>
+                Devolver ao agente
+              </Button>
+              <Button variant="outline" onClick={() => agir('resolver')}>
+                Resolver
+              </Button>
+            </>
           )}
-          <div className="flex rounded-md border text-xs">
-            {(['conversa', 'trace'] as const).map((nome) => (
-              <button
-                key={nome}
-                type="button"
-                onClick={() => setAba(nome)}
-                className={cn('px-2 py-1 capitalize', aba === nome && 'bg-muted font-medium')}
+          <Link
+            href={`/aprendizado?c=${detalhe.conversaId}`}
+            className={cn(buttonVariants({ variant: 'outline' }), 'no-underline')}
+          >
+            Ver histórico do agente
+          </Link>
+          <Button variant="outline" onClick={aoAbrirContexto} className="xl:hidden">
+            Contexto
+          </Button>
+        </div>
+      </header>
+
+      {t.status === 'aguardando_humano' && (
+        <Aviso tom="warn" pulsa>
+          <b>Escalado por:</b> {motivoLabel(t.motivoEscalonamento)}
+          {t.esperaSegundos !== null && <> · aguardando há {duracao(t.esperaSegundos)}</>}
+        </Aviso>
+      )}
+      {janela.estado === 'fechando' && (
+        <Aviso tom="warn">
+          <b>Janela de 24h</b> · {janela.rotulo}
+        </Aviso>
+      )}
+      {janelaFechada && (
+        <Aviso tom="risk">
+          <b>Janela de 24h</b> · fechada — só um template de reengajamento reabre a conversa
+        </Aviso>
+      )}
+      {erro && <Aviso tom="risk">{erro}</Aviso>}
+
+      <Thread
+        mensagens={mensagens}
+        temMais={temMais}
+        carregandoMais={carregandoMais}
+        aoCarregarMais={aoCarregarMais}
+      />
+
+      <div className="border-t border-line bg-surface px-[18px] py-3">
+        {podeEnviar ? (
+          <form onSubmit={enviar} className="flex flex-col gap-1">
+            <div className="flex items-end gap-2.5">
+              <Textarea
+                rows={2}
+                value={texto}
+                onChange={(e) => setTexto(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    enviar();
+                  }
+                }}
+                placeholder={`Escreva como ${primeiroNome} · sua mensagem sai com o prefixo *${primeiroNome}*`}
+                aria-label="Resposta ao cotista"
+                className="flex-1"
+              />
+              <Button
+                type="submit"
+                size="md"
+                disabled={enviando || !texto.trim() || restantes < 0}
+                className="h-10"
               >
-                {nome}
-              </button>
-            ))}
-          </div>
-          <div className="ml-auto flex gap-2">
+                Enviar
+              </Button>
+            </div>
+            <div className="flex justify-between text-[11px] text-text-3">
+              <span>
+                {comPrefixo
+                  ? 'seu nome abre a mensagem · Enter envia, Shift+Enter quebra linha'
+                  : 'Enter envia, Shift+Enter quebra linha'}
+              </span>
+              <span className={cn(restantes < 0 && 'text-brand')}>
+                {restantes} caracteres restantes
+              </span>
+            </div>
+          </form>
+        ) : (
+          <div className="flex h-10 items-center justify-center gap-2 rounded-[10px] border border-dashed border-line-strong text-[13px] text-text-3">
+            {motivoBloqueio}
             {t.status === 'aguardando_humano' && (
               <button
                 type="button"
                 onClick={() => agir('assumir')}
-                className="rounded-md bg-primary px-3 py-1 text-xs font-medium text-primary-foreground"
+                className="font-semibold text-brand"
               >
-                Assumir
+                Assumir agora
               </button>
             )}
-            {minhaPosse && (
-              <>
-                <button
-                  type="button"
-                  onClick={() => agir('devolver')}
-                  className="rounded-md border px-3 py-1 text-xs"
-                >
-                  Devolver ao bot
-                </button>
-                <button
-                  type="button"
-                  onClick={() => agir('resolver')}
-                  className="rounded-md border px-3 py-1 text-xs"
-                >
-                  Resolver
-                </button>
-              </>
-            )}
           </div>
-        </header>
-
-        {aba === 'trace' ? (
-          <div className="flex-1 overflow-y-auto">
-            <TraceViewer ticketId={t.id} />
-          </div>
-        ) : (
-          <Thread
-            mensagens={mensagens}
-            temMais={temMais}
-            carregandoMais={carregandoMais}
-            aoCarregarMais={aoCarregarMais}
-          />
         )}
-
-        <form onSubmit={enviar} className={cn('border-t p-3', aba !== 'conversa' && 'hidden')}>
-          {!podeEnviar && <p className="mb-2 text-xs text-muted-foreground">{motivoBloqueio}</p>}
-          <div className="flex gap-2">
-            <input
-              className="flex-1 rounded-md border bg-transparent px-3 py-2 text-sm disabled:opacity-50"
-              placeholder={podeEnviar ? 'Responder como atendente…' : ''}
-              disabled={!podeEnviar}
-              value={texto}
-              onChange={(e) => setTexto(e.target.value)}
-            />
-            <button
-              type="submit"
-              disabled={!podeEnviar || !texto.trim() || restantes < 0}
-              className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50"
-            >
-              Enviar
-            </button>
-          </div>
-          {podeEnviar && (
-            <p
-              className={cn(
-                'mt-1 text-right text-[11px]',
-                restantes < 0 ? 'text-red-600' : 'text-muted-foreground',
-              )}
-            >
-              {comPrefixo && 'seu nome abre a mensagem · '}
-              {restantes} caracteres restantes
-            </p>
-          )}
-          {erro && <p className="mt-1 text-xs text-red-600">{erro}</p>}
-        </form>
       </div>
-
-      <aside className="hidden border-l p-4 text-sm xl:block">
-        <h3 className="font-semibold">Contrato (ERP)</h3>
-        {perfil ? (
-          <dl className="mt-2 space-y-1 text-xs">
-            <div>
-              <dt className="text-muted-foreground">Produto</dt>
-              <dd>{perfil.tier}</dd>
-            </div>
-            <div>
-              <dt className="text-muted-foreground">Cota / UH</dt>
-              <dd>
-                {perfil.cota_codigo} — {perfil.bloco}, UH {perfil.uh}
-              </dd>
-            </div>
-            <div>
-              <dt className="text-muted-foreground">Status</dt>
-              <dd className="capitalize">{perfil.status}</dd>
-            </div>
-            <div>
-              <dt className="text-muted-foreground">Períodos / pontos</dt>
-              <dd>
-                {perfil.periodos ?? '—'} período(s) · {perfil.pontos ?? '—'} pontos
-              </dd>
-            </div>
-          </dl>
-        ) : (
-          <p className="mt-2 text-xs text-muted-foreground">Sem vínculo ou ERP indisponível.</p>
-        )}
-        <h3 className="mt-6 font-semibold">Escalonamento</h3>
-        <p className="mt-2 text-xs text-muted-foreground">
-          {t.motivoEscalonamento ?? 'Sem escalonamento registrado.'}
-        </p>
-      </aside>
     </section>
   );
 }

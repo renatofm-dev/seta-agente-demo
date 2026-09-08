@@ -39,7 +39,11 @@ export interface CobrancasRoutesOpts {
 
 const sessoes = new WeakMap<FastifyRequest, SessaoConsole>();
 const ParamsId = z.object({ id: z.uuid() });
-const QueryLista = z.object({ status: z.enum(STATUS_COBRANCA).optional() });
+const QueryLista = z.object({
+  status: z.enum(STATUS_COBRANCA).optional(),
+  /** Aba Cobranças do painel de contexto: só as desta conversa. */
+  conversaId: z.uuid().optional(),
+});
 const BodyRecusa = z.object({ motivo: z.string().min(3).max(300) });
 
 export const cobrancasRoutes: FastifyPluginCallback<CobrancasRoutesOpts> = (app, opts, done) => {
@@ -97,7 +101,12 @@ export const cobrancasRoutes: FastifyPluginCallback<CobrancasRoutesOpts> = (app,
       .innerJoin(conversa, eq(conversa.id, cobranca.conversaId))
       .leftJoin(contato, eq(contato.waId, conversa.waId))
       .leftJoin(ticket, eq(ticket.conversaId, cobranca.conversaId))
-      .where(q.status ? eq(cobranca.status, q.status) : undefined)
+      .where(
+        and(
+          q.status ? eq(cobranca.status, q.status) : undefined,
+          q.conversaId ? eq(cobranca.conversaId, q.conversaId) : undefined,
+        ),
+      )
       .orderBy(desc(cobranca.criadoEm))
       .limit(200);
     const contagens = await db

@@ -4,21 +4,26 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import {
   api,
+  type CobrancaView,
+  type ContagensConversas,
   type ConversaDetalhe,
   type ConversaResumo,
   type FiltroConversas,
   type MensagemThread,
 } from '@/lib/console-api';
 import { mesclarMensagens } from '@/lib/formatos';
+import { cn } from '@/lib/utils';
 import { useSessao } from '../layout';
 import { ListaConversas } from './lista-conversas';
+import { PainelContexto } from './painel-contexto';
 import { PainelConversa } from './painel-conversa';
 
 /**
- * Tela única de atendimento (#45), estilo WhatsApp Web: lista de conversas à
- * esquerda, thread à direita, sem navegação de página. A conversa aberta vai
- * na query (?c=) para deep-link; SSE alimenta lista e thread (polling é só
- * fallback), leitura é marcada ao abrir e a cada mensagem nova em tela.
+ * Atendimento (#45 + design 2026-09): três colunas — lista, thread e painel de
+ * contexto (contrato, financeiro, cobranças da conversa, origem em campanha).
+ * A conversa aberta vai na query (?c=) para deep-link; SSE alimenta lista e
+ * thread (polling é só fallback), leitura é marcada ao abrir e a cada mensagem.
+ * Abaixo de 1280px o painel de contexto vira um sobreposto aberto pelo botão.
  */
 
 function InboxAtendimento() {
@@ -27,13 +32,15 @@ function InboxAtendimento() {
   const sessao = useSessao();
 
   const [conversas, setConversas] = useState<ConversaResumo[]>([]);
+  const [contagens, setContagens] = useState<ContagensConversas | null>(null);
   const [filtro, setFiltro] = useState<FiltroConversas>('todas');
   const [busca, setBusca] = useState('');
-  const [aoVivo, setAoVivo] = useState(false);
   const [detalhe, setDetalhe] = useState<ConversaDetalhe | null>(null);
   const [mensagens, setMensagens] = useState<MensagemThread[]>([]);
   const [temMais, setTemMais] = useState(false);
   const [carregandoMais, setCarregandoMais] = useState(false);
+  const [cobrancas, setCobrancas] = useState<CobrancaView[] | null | undefined>(undefined);
+  const [contextoAberto, setContextoAberto] = useState(false);
 
   const selecionada = params.get('c');
   const selecionadaRef = useRef<string | null>(null);
@@ -43,7 +50,10 @@ function InboxAtendimento() {
   const recarregarLista = useCallback(() => {
     api
       .conversas(filtro, busca)
-      .then((r) => setConversas(r.conversas))
+      .then((r) => {
+        setConversas(r.conversas);
+        setContagens(r.contagens);
+      })
       .catch(() => {});
   }, [filtro, busca]);
   recarregarListaRef.current = recarregarLista;
@@ -53,6 +63,16 @@ function InboxAtendimento() {
       .marcarLida(conversaId)
       .then(() => recarregarListaRef.current())
       .catch(() => {});
+  }, []);
+
+  // aba Cobranças do painel: só as desta conversa; 404 = módulo de pagamentos desligado
+  const carregarCobrancas = useCallback((conversaId: string) => {
+    api
+      .cobrancas({ conversaId })
+      .then((r) => {
+        if (selecionadaRef.current === conversaId) setCobrancas(r.cobrancas);
+      })
+      .catch(() => setCobrancas(null));
   }, []);
 
   const abrirConversa = useCallback(
@@ -69,10 +89,11 @@ function InboxAtendimento() {
           );
           setTemMais(d.temMais);
           marcarLida(conversaId);
+          carregarCobrancas(conversaId);
         })
         .catch(() => {});
     },
-    [marcarLida],
+    [marcarLida, carregarCobrancas],
   );
 
   // seleção via URL (?c=) — deep-link e histórico do browser sem trocar de página
@@ -81,6 +102,8 @@ function InboxAtendimento() {
     if (selecionada) {
       setMensagens([]);
       setDetalhe(null);
+      setCobrancas(undefined);
+      setContextoAberto(false);
       abrirConversa(selecionada);
     }
   }, [selecionada]);
@@ -103,12 +126,10 @@ function InboxAtendimento() {
       }
     };
     es.onopen = () => {
-      setAoVivo(true);
       pararPolling();
       recarregarListaRef.current();
     };
     es.onerror = () => {
-      setAoVivo(false);
       if (!pollTimer) {
         pollTimer = setInterval(() => {
           recarregarListaRef.current();
@@ -175,13 +196,13 @@ function InboxAtendimento() {
   );
 
   return (
-    <main className="grid h-full grid-cols-[320px_1fr] overflow-hidden">
+    <main className="grid h-full grid-cols-[minmax(220px,300px)_minmax(0,1fr)] overflow-hidden bg-background xl:grid-cols-[minmax(220px,300px)_minmax(0,1fr)_minmax(240px,320px)]">
       <ListaConversas
         conversas={conversas}
+        contagens={contagens}
         selecionada={selecionada}
         filtro={filtro}
         busca={busca}
-        aoVivo={aoVivo}
         aoSelecionar={(c) => router.replace(`/inbox?c=${c.conversaId}`)}
         aoMudarFiltro={setFiltro}
         aoBuscar={setBusca}
@@ -196,11 +217,30 @@ function InboxAtendimento() {
           aoCarregarMais={carregarMais}
           aoAgir={agir}
           aoResponder={responder}
+          aoAbrirContexto={() => setContextoAberto(true)}
         />
       ) : (
-        <section className="flex h-full items-center justify-center text-sm text-muted-foreground">
+        <section className="flex h-full items-center justify-center bg-surface-3 text-[13px] text-text-3">
           {selecionada ? 'Carregando conversa…' : 'Selecione uma conversa para atender.'}
         </section>
+      )}
+      {detalhe ? (
+        <div
+          className={cn(
+            'min-h-0',
+            contextoAberto
+              ? 'fixed top-14 bottom-0 right-0 z-30 w-[320px] shadow-[-12px_0_32px_rgba(20,20,26,.12)] xl:static xl:z-auto xl:w-auto xl:shadow-none'
+              : 'hidden xl:block',
+          )}
+        >
+          <PainelContexto
+            detalhe={detalhe}
+            cobrancas={cobrancas}
+            aoFechar={() => setContextoAberto(false)}
+          />
+        </div>
+      ) : (
+        <aside className="hidden border-l border-line bg-surface xl:block" />
       )}
     </main>
   );
@@ -209,7 +249,7 @@ function InboxAtendimento() {
 export default function InboxPage() {
   // useSearchParams exige Suspense no App Router
   return (
-    <Suspense fallback={<main className="p-4 text-sm">Carregando…</main>}>
+    <Suspense fallback={<main className="p-4 text-sm text-text-3">Carregando…</main>}>
       <InboxAtendimento />
     </Suspense>
   );

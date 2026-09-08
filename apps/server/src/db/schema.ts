@@ -513,7 +513,8 @@ export const sinalAprendizado = pgTable('sinal_aprendizado', {
   id: uuid('id').primaryKey(),
   tipo: text('tipo', {
     // verdict_guardrail: nome da spec 009 (#36); rejeicao_proposta: feedback do
-    // curador — auditável, mas FORA do clustering do distiller
+    // curador — auditável, mas FORA do clustering do distiller;
+    // feedback_atendente: 👍/👎 do atendente sobre um turno (console › Aprendizado)
     enum: [
       'correcao_hitl',
       'verdict_guardrail',
@@ -521,6 +522,7 @@ export const sinalAprendizado = pgTable('sinal_aprendizado', {
       'resolucao_limpa',
       're_pergunta',
       'rejeicao_proposta',
+      'feedback_atendente',
     ],
   }).notNull(),
   ticketId: uuid('ticket_id').references(() => ticket.id),
