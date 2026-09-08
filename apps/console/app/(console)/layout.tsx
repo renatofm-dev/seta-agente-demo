@@ -185,7 +185,7 @@ export default function ConsoleLayout({ children }: { children: React.ReactNode 
       <InstalacaoContext.Provider value={instalacao}>
         <ResumoContext.Provider value={{ resumo, recarregar: recarregarResumo }}>
           <div className="flex h-dvh flex-col">
-            <header className="sticky top-0 z-20 flex h-14 shrink-0 items-center gap-3.5 border-b border-line bg-surface px-4">
+            <header className="sticky top-0 z-20 flex h-14 shrink-0 items-center gap-3.5 border-b border-line bg-surface px-4 print:hidden">
               <Link href="/inbox" className="flex flex-none items-center gap-2.5 no-underline">
                 <span className="size-6 rounded-[7px] bg-linear-to-br from-brand to-laranja" />
                 <span className="font-heading text-base font-bold tracking-[-.02em] text-ink">
@@ -244,7 +244,7 @@ export default function ConsoleLayout({ children }: { children: React.ReactNode 
               </div>
             </header>
             {avisos.length > 0 && (
-              <div className="flex shrink-0 flex-wrap gap-x-6 gap-y-1 border-b border-warn-2/35 bg-warn-2/14 px-4 py-1.5 text-xs text-warn">
+              <div className="flex shrink-0 flex-wrap gap-x-6 gap-y-1 border-b border-warn-2/35 bg-warn-2/14 px-4 py-1.5 text-xs text-warn print:hidden">
                 {avisos.map((a) => (
                   <span key={a}>{a}</span>
                 ))}

@@ -1,6 +1,8 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
+import { Suspense, useCallback, useEffect, useState } from 'react';
 import {
   Bar,
   BarChart,
@@ -20,11 +22,14 @@ import { porcentagem, reaisDeCentavos } from '@/lib/formatos';
 import { motivoLabel } from '@/lib/rotulos';
 import { cn } from '@/lib/utils';
 import { useInstalacao } from '../layout';
+import { RelatorioCampanhasView } from './relatorio-campanhas';
 
 /**
  * Métricas (010 + design 5.7): KPIs do período, conversas por dia, motivos de
  * escalada, funil de cobrança (014), atendimento humano e saúde do canal (013).
  * Valor recuperado e funil vêm das cobranças; entrega vem das campanhas.
+ * A aba "Relatório de campanhas" (017, `?v=campanhas`) cruza campanhas com
+ * resultado e meta de conversão.
  */
 
 const CORES = ['bg-brand', 'bg-laranja', 'bg-info-2', 'bg-roxo', 'bg-text-3'];
@@ -56,7 +61,7 @@ const fmtMs = (v: number | null) => (v === null ? '—' : `${Math.round(v)} ms`)
 const fmtPct = (v: number | null) => (v === null ? '—' : `${(v * 100).toFixed(0)}%`);
 const diaCurto = (dia: string) => `${dia.slice(8, 10)}/${dia.slice(5, 7)}`;
 
-export default function MetricasPage() {
+function VisaoGeral() {
   const instalacao = useInstalacao();
   const [dias, setDias] = useState<7 | 30>(7);
   const [m, setM] = useState<Metricas | null>(null);
@@ -376,5 +381,47 @@ export default function MetricasPage() {
         </>
       )}
     </Pagina>
+  );
+}
+
+const ABAS = [
+  { id: 'geral', rotulo: 'Visão geral', href: '/metricas' },
+  { id: 'campanhas', rotulo: 'Relatório de campanhas', href: '/metricas?v=campanhas' },
+] as const;
+
+function MetricasConteudo() {
+  const params = useSearchParams();
+  const emCampanhas = params.get('v') === 'campanhas';
+  return (
+    <div className="flex h-full flex-col">
+      <div className="flex shrink-0 gap-1 border-b border-line bg-surface px-4 print:hidden">
+        {ABAS.map((aba) => {
+          const on = aba.id === 'campanhas' ? emCampanhas : !emCampanhas;
+          return (
+            <Link
+              key={aba.id}
+              href={aba.href}
+              className={cn(
+                'flex h-10 items-center border-b-2 px-2 text-xs font-semibold no-underline',
+                on ? 'border-brand text-ink' : 'border-transparent text-text-3 hover:text-ink',
+              )}
+            >
+              {aba.rotulo}
+            </Link>
+          );
+        })}
+      </div>
+      <div className="min-h-0 flex-1">
+        {emCampanhas ? <RelatorioCampanhasView /> : <VisaoGeral />}
+      </div>
+    </div>
+  );
+}
+
+export default function MetricasPage() {
+  return (
+    <Suspense fallback={<main className="p-6 text-sm text-text-3">Carregando…</main>}>
+      <MetricasConteudo />
+    </Suspense>
   );
 }

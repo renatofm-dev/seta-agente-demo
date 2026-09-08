@@ -1,13 +1,20 @@
 import { cn } from '@/lib/utils';
 
-/** Superfície branca com borda e raio grande — o "cartão" padrão do design. */
+/**
+ * Superfície branca com borda e raio grande — o "cartão" padrão do design.
+ * `shrink-0`: dentro da coluna flex da página, um cartão com `overflow` teria
+ * min-height 0 e encolheria para caber na viewport (a tabela sumia).
+ */
 export function Card({
   className,
   children,
   ...props
 }: React.HTMLAttributes<HTMLDivElement> & { children: React.ReactNode }) {
   return (
-    <div className={cn('rounded-[14px] border border-line bg-surface', className)} {...props}>
+    <div
+      className={cn('shrink-0 rounded-[14px] border border-line bg-surface', className)}
+      {...props}
+    >
       {children}
     </div>
   );

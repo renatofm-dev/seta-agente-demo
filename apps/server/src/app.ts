@@ -19,6 +19,7 @@ import type { Env } from './env.js';
 import { cobrancasRoutes } from './pagamentos/cobrancas-routes.js';
 import type { PagamentosRepo } from './pagamentos/repo.js';
 import { webhookPspRoutes } from './pagamentos/webhook-routes.js';
+import { relatoriosRoutes } from './relatorios-routes.js';
 import { leadsRoutes } from './sdr/leads-routes.js';
 import { devRoutes } from './wa/dev-routes.js';
 import { waRoutes } from './wa/routes.js';
@@ -121,6 +122,7 @@ export function buildApp({
             simulador: env.DEV_SIMULATOR,
           },
           psp: pagamentos ? { nome: pagamentos.psp.nome, ambiente: pagamentos.psp.ambiente } : null,
+          campanhas: { metaConversaoBps: clientConfig.campanhas.metaConversaoBps },
         },
       });
       // Leads (015): leitura das tabelas do SDR; ações ficam com a 015b
@@ -130,6 +132,12 @@ export function buildApp({
         boss: wa.boss,
         auth: consoleDeps.auth,
         templateApi: consoleDeps.templateApi ?? null,
+      });
+      // Relatórios (017): campanhas × resultado × meta de conversão
+      app.register(relatoriosRoutes, {
+        db: wa.db,
+        auth: consoleDeps.auth,
+        metaConversaoBps: clientConfig.campanhas.metaConversaoBps,
       });
       if (pagamentos) {
         app.register(cobrancasRoutes, {

@@ -13,6 +13,7 @@ import { api, type ContatoCarteira, type Modelo } from '@/lib/console-api';
 import { nomeExibicao, telefoneBonito } from '@/lib/formatos';
 import { STATUS_MODELO } from '@/lib/rotulos';
 import { cn } from '@/lib/utils';
+import { useInstalacao } from '../../layout';
 
 /**
  * Nova campanha (design 5.3.2) em 3 passos sobre o que a 013 entrega: público
@@ -25,7 +26,11 @@ const PASSOS = ['Público', 'Mensagem', 'Revisão e envio'] as const;
 
 export default function NovaCampanhaPage() {
   const router = useRouter();
+  const instalacao = useInstalacao();
   const [passo, setPasso] = useState(1);
+  const [nome, setNome] = useState('');
+  /** '' ⇒ usa a meta global da instalação (017). */
+  const [metaPct, setMetaPct] = useState('');
   const [carteira, setCarteira] = useState<ContatoCarteira[]>([]);
   const [modelos, setModelos] = useState<Modelo[]>([]);
   const [busca, setBusca] = useState('');
@@ -71,8 +76,15 @@ export default function NovaCampanhaPage() {
   const podeContinuar =
     passo === 1 ? selecionados.size > 0 : passo === 2 ? !!modelo && valoresOk : true;
 
+  // meta de conversão (017): vazio = global; senão, percentual válido em bps
+  const metaGlobalBps = instalacao?.campanhas.metaConversaoBps ?? null;
+  const metaBps =
+    metaPct.trim() === '' ? null : Math.round(Number(metaPct.replace(',', '.')) * 100);
+  const metaInvalida =
+    metaBps !== null && (!Number.isFinite(metaBps) || metaBps < 0 || metaBps > 10_000);
+
   async function disparar() {
-    if (!modelo) return;
+    if (!modelo || metaInvalida) return;
     setEnviando(true);
     setErro(null);
     try {
@@ -80,6 +92,8 @@ export default function NovaCampanhaPage() {
         modeloId: modelo.id,
         variaveis: valores.slice(0, nVars).map((v) => v.trim()),
         waIds: [...selecionados],
+        nome: nome.trim() || undefined,
+        metaConversaoBps: metaBps !== null && metaBps !== metaGlobalBps ? metaBps : undefined,
       });
       router.push(`/campanhas/${r.disparoId}`);
     } catch (e) {
@@ -147,6 +161,18 @@ export default function NovaCampanhaPage() {
 
         {passo === 1 && (
           <Card className="flex flex-col gap-4 p-5">
+            <Campo
+              rotulo="Nome da campanha"
+              dica="opcional · aparece na lista e no relatório; sem nome, vale o nome do modelo"
+              className="max-w-md"
+            >
+              <Input
+                value={nome}
+                onChange={(e) => setNome(e.target.value)}
+                placeholder="ex.: Lembrete 31–90 set/26"
+                maxLength={80}
+              />
+            </Campo>
             <div className="flex flex-wrap items-center gap-3">
               <Input
                 compacto
@@ -291,6 +317,13 @@ export default function NovaCampanhaPage() {
         {passo === 3 && modelo && (
           <Card className="flex flex-col gap-3.5 p-5">
             <div className="grid grid-cols-[auto_1fr] gap-x-5 gap-y-2.5 text-[13.5px]">
+              <span className="text-text-3">Campanha</span>
+              <span>
+                <b>{nome.trim() || modelo.nome}</b>
+                {!nome.trim() && (
+                  <span className="text-text-3"> · sem nome próprio, vale o do modelo</span>
+                )}
+              </span>
               <span className="text-text-3">Público</span>
               <span>
                 <b>{selecionados.size} destinatários</b> · carteira com vínculo verificado
@@ -306,12 +339,37 @@ export default function NovaCampanhaPage() {
               <span className="text-text-3">Envio</span>
               <span>agora, ao confirmar · a fila envia e atualiza o funil em tempo real</span>
             </div>
+            <Campo
+              rotulo="Meta de conversão (%)"
+              dica={`pagas ÷ entregues, comparada no relatório de campanhas · padrão da instalação: ${
+                metaGlobalBps !== null ? `${metaGlobalBps / 100}%` : '…'
+              }`}
+              className="max-w-[260px]"
+            >
+              <Input
+                compacto
+                type="number"
+                min={0}
+                max={100}
+                step={0.5}
+                value={
+                  metaPct === '' && metaGlobalBps !== null ? String(metaGlobalBps / 100) : metaPct
+                }
+                onChange={(e) => setMetaPct(e.target.value)}
+              />
+            </Campo>
+            {metaInvalida && <p className="m-0 text-xs text-brand">A meta vai de 0 a 100%.</p>}
             <div className="rounded-[10px] border border-info-2/25 bg-info-2/8 px-3 py-2.5 text-[12.5px] text-info">
               Quem responder cai na fila de atendimento com a campanha como origem; o agente segue a
               conversa e escala o que precisar de gente.
             </div>
             {erro && <p className="m-0 text-xs text-brand">{erro}</p>}
-            <Button size="lg" onClick={disparar} disabled={enviando} className="self-start">
+            <Button
+              size="lg"
+              onClick={disparar}
+              disabled={enviando || metaInvalida}
+              className="self-start"
+            >
               {enviando ? 'Enfileirando…' : `Disparar para ${selecionados.size} contato(s)`}
             </Button>
           </Card>

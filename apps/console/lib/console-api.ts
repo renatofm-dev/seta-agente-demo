@@ -35,6 +35,8 @@ export interface Instalacao {
   };
   canal: { gateway: 'meta' | 'log-only'; metaConfigurada: boolean; simulador: boolean };
   psp: { nome: string; ambiente: string } | null;
+  /** 017: meta global de conversão das campanhas (pagas ÷ entregues), em bps. */
+  campanhas: { metaConversaoBps: number };
 }
 
 /** Badges da barra superior. */
@@ -185,6 +187,10 @@ export interface DisparoResumo {
   status: 'enviando' | 'concluido';
   variaveis: string[];
   criado_em: string;
+  /** 017: rótulo da campanha; null ⇒ usar `modelo_nome`. */
+  nome: string | null;
+  /** 017: meta própria em bps; null ⇒ global da instalação. */
+  meta_conversao_bps: number | null;
   modelo_nome: string;
   total: number;
   enviados: number;
@@ -208,6 +214,8 @@ export interface DisparoDetalhe {
     id: string;
     modeloId: string;
     variaveis: string[];
+    nome: string | null;
+    metaConversaoBps: number | null;
     status: 'enviando' | 'concluido';
     criadoPor: string;
     criadoEm: string;
@@ -215,6 +223,68 @@ export interface DisparoDetalhe {
   };
   modelo: Modelo;
   destinatarios: DisparoDestinatarioView[];
+}
+
+// --- Relatórios (017) → Métricas › Campanhas --------------------------------
+
+export type JanelaAtribuicao = 7 | 15 | 30 | 60;
+export const JANELAS_ATRIBUICAO: readonly JanelaAtribuicao[] = [7, 15, 30, 60];
+
+export interface ContagensCampanha {
+  destinatarios: number;
+  enviadas: number;
+  entregues: number;
+  lidas: number;
+  falhas: number;
+  responderam: number;
+  cobrancas: number;
+  pagas: number;
+  valorRecuperadoCentavos: number;
+  escaladas: number;
+  /** Mediana de horas entre o envio e o primeiro pagamento; null sem pagamento. */
+  medianaHorasPagamento: number | null;
+  /** pagas ÷ entregues em bps; null sem entrega. */
+  conversaoBps: number | null;
+}
+
+export interface LinhaRelatorioCampanha extends ContagensCampanha {
+  id: string;
+  nome: string;
+  modelo: string;
+  status: 'enviando' | 'concluido';
+  criadoEm: string;
+  /** YYYY-MM (mês de envio no fuso do cliente). */
+  competencia: string;
+  metaBps: number;
+}
+
+export interface TotaisRelatorio extends ContagensCampanha {
+  campanhas: number;
+  /** Meta ponderada pelas entregas; sem entrega, a global. */
+  metaBps: number;
+}
+
+export interface FiltrosRelatorio {
+  de?: string;
+  ate?: string;
+  competencia?: string;
+  modelo?: string;
+  janelaDias?: JanelaAtribuicao;
+}
+
+export interface RelatorioCampanhas {
+  filtros: {
+    de: string;
+    ate: string;
+    competencia: string | null;
+    modelo: string | null;
+    janelaDias: JanelaAtribuicao;
+    metaGlobalBps: number;
+  };
+  campanhas: LinhaRelatorioCampanha[];
+  totais: TotaisRelatorio;
+  anterior: { de: string; ate: string; totais: TotaisRelatorio };
+  opcoes: { competencias: string[]; modelos: string[] };
 }
 
 // --- Observabilidade (010) -------------------------------------------------
@@ -522,10 +592,28 @@ export const api = {
     fetch('/api/console/carteira').then((r) => json<{ contatos: ContatoCarteira[] }>(r)),
   disparos: () =>
     fetch('/api/console/disparos').then((r) => json<{ disparos: DisparoResumo[] }>(r)),
-  criarDisparo: (corpo: { modeloId: string; variaveis: string[]; waIds: string[] }) =>
+  criarDisparo: (corpo: {
+    modeloId: string;
+    variaveis: string[];
+    waIds: string[];
+    nome?: string;
+    metaConversaoBps?: number;
+  }) =>
     post('/api/console/disparos', corpo).then((r) =>
       json<{ disparoId: string; destinatarios: number }>(r),
     ),
+  relatorioCampanhas: (f: FiltrosRelatorio) => {
+    const params = new URLSearchParams();
+    if (f.de) params.set('de', f.de);
+    if (f.ate) params.set('ate', f.ate);
+    if (f.competencia) params.set('competencia', f.competencia);
+    if (f.modelo) params.set('modelo', f.modelo);
+    if (f.janelaDias) params.set('janelaDias', String(f.janelaDias));
+    const qs = params.toString();
+    return fetch(`/api/console/relatorios/campanhas${qs ? `?${qs}` : ''}`).then((r) =>
+      json<RelatorioCampanhas>(r),
+    );
+  },
   disparo: (id: string) =>
     fetch(`/api/console/disparos/${id}`).then((r) => json<DisparoDetalhe>(r)),
   metricas: (dias: 7 | 30) =>

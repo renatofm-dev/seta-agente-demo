@@ -23,6 +23,7 @@ import {
   turno,
   user,
 } from './db/schema.js';
+import { TZ_CLIENTE } from './tz.js';
 import { agendarDebounce } from './wa/inbound.js';
 import { enqueueOutbound } from './wa/outbox.js';
 import { aplicarTransicao, garantirTicket } from './wa/tickets.js';
@@ -57,6 +58,8 @@ export interface InstalacaoInfo {
     readonly simulador: boolean;
   };
   readonly psp: { readonly nome: string; readonly ambiente: string } | null;
+  /** 017: meta global de conversão das campanhas (client.yaml). */
+  readonly campanhas: { readonly metaConversaoBps: number };
 }
 
 export interface ConsoleRoutesOpts {
@@ -95,9 +98,6 @@ export function prefixarAtendente(nome: string, texto: string): string {
 }
 
 const sessoes = new WeakMap<FastifyRequest, SessaoConsole>();
-
-// #37: dia "de negócio" do cliente demo (POC 1 cliente; multi-TZ fica p/ produto)
-const TZ_METRICAS = 'America/Sao_Paulo';
 
 /** Último draft descartado por block/escalate nos eventos do trace (#34). */
 function draftDescartadoDe(eventos: unknown): string | null {
@@ -921,7 +921,7 @@ export const consoleRoutes: FastifyPluginCallback<ConsoleRoutesOpts> = (app, opt
     // #37: bucket de "dia" no fuso do cliente, não em UTC (virava às 21h)
     const conversasPorDia = (
       await db.execute(sql`
-        SELECT to_char(date_trunc('day', criado_em AT TIME ZONE ${TZ_METRICAS}), 'YYYY-MM-DD') AS dia,
+        SELECT to_char(date_trunc('day', criado_em AT TIME ZONE ${TZ_CLIENTE}), 'YYYY-MM-DD') AS dia,
                count(DISTINCT conversa_id)::int AS conversas
         FROM trace_turno WHERE criado_em >= ${desde} GROUP BY 1 ORDER BY 1
       `)
@@ -930,7 +930,7 @@ export const consoleRoutes: FastifyPluginCallback<ConsoleRoutesOpts> = (app, opt
     const tokensPorDia = (
       (
         await db.execute(sql`
-          SELECT to_char(date_trunc('day', criado_em AT TIME ZONE ${TZ_METRICAS}), 'YYYY-MM-DD') AS dia,
+          SELECT to_char(date_trunc('day', criado_em AT TIME ZONE ${TZ_CLIENTE}), 'YYYY-MM-DD') AS dia,
                  sum(tokens_entrada)::int AS entrada, sum(tokens_saida)::int AS saida
           FROM evento_llm WHERE criado_em >= ${desde} GROUP BY 1 ORDER BY 1
         `)

@@ -175,6 +175,11 @@ function ConfigConteudo() {
                   valor={i?.alcadas.maxPropostasDia ?? '…'}
                 />
                 <Valor
+                  rotulo="Meta de conversão das campanhas"
+                  valor={i ? `${i.campanhas.metaConversaoBps / 100}%` : '…'}
+                  dica="pagas ÷ entregues · o wizard pode definir uma meta por campanha"
+                />
+                <Valor
                   rotulo="Resposta máxima"
                   valor={i ? `${i.limites.maxCaracteresResposta} caracteres` : '…'}
                 />

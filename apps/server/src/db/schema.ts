@@ -160,6 +160,10 @@ export const disparo = pgTable('disparo', {
     .references(() => modeloMensagem.id),
   /** Valores das variáveis {{1}}..{{N}}, globais ao disparo (013). */
   variaveis: jsonb('variaveis').notNull().default([]),
+  /** 017: rótulo humano da campanha; ausente ⇒ nome do modelo. */
+  nome: text('nome'),
+  /** 017: meta de conversão (pagas ÷ entregues) em bps; ausente ⇒ global do client.yaml. */
+  metaConversaoBps: integer('meta_conversao_bps'),
   status: text('status', { enum: ['enviando', 'concluido'] })
     .notNull()
     .default('enviando'),
