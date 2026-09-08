@@ -5,7 +5,8 @@
 -- rodam sempre depois.
 
 DROP VIEW IF EXISTS
-  v_cotista, v_contrato_cota, v_titulo, v_inadimplencia, v_cancelamento, v_chamado
+  v_cotista, v_contrato_cota, v_titulo, v_inadimplencia, v_cancelamento, v_chamado,
+  v_cota_disponivel
   CASCADE;
 
 -- Titular SEMPRE pseudonimizado: o papel de leitura do produto teve SELECT
@@ -48,6 +49,31 @@ JOIN unidadehoteleira u  ON u.idunidadehoteleira = q.idunidadehoteleira
 JOIN edificiohotel e     ON e.idedificiohotel = u.idedificiohotel
 JOIN grupocota g         ON g.idgrupocota = q.idgrupocota
 JOIN modelocota m        ON m.idmodelocota = q.idmodelocota;
+
+-- Estoque à venda (015): a ÚNICA view que não é grão-contrato — não recebe
+-- contrato_id e por isso é a primeira legível por uma sessão SEM vínculo (lead
+-- frio). `valor_tabela_centavos` é o preço cheio; a alçada de desconto é
+-- política NOSSA e não mora no ERP — o piso é calculado na borda do produto.
+CREATE VIEW v_cota_disponivel AS
+SELECT
+  q.idcotauh::text  AS cota_id,
+  q.codigocota      AS cota_codigo,
+  e.nome            AS bloco,
+  u.andar           AS andar,
+  u.numero          AS uh,
+  u.capacidade      AS capacidade,
+  g.nome            AS tier,
+  m.nome            AS modelo,
+  m.qtdperiodos     AS periodos,
+  p.valorcentavos   AS valor_tabela_centavos
+FROM cotauh q
+JOIN unidadehoteleira u  ON u.idunidadehoteleira = q.idunidadehoteleira
+JOIN edificiohotel e     ON e.idedificiohotel = u.idedificiohotel
+JOIN grupocota g         ON g.idgrupocota = q.idgrupocota
+JOIN modelocota m        ON m.idmodelocota = q.idmodelocota
+JOIN tabelapreco p       ON p.idgrupocota = q.idgrupocota
+                        AND p.idmodelocota = q.idmodelocota
+WHERE q.statuscota = 'DISPONIVEL';
 
 -- Grão parcela; só tipohistorico ATIVO. O vencimento de referência é
 -- datavencimentorecorrencia (a origem reescreve datavencimento quando a

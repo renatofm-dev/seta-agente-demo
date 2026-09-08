@@ -75,6 +75,29 @@ const MODELOS_COTA: readonly (readonly [string, number])[] = [
   ['USO BIENAL 1 PERIODO', 1],
 ];
 
+/**
+ * Preço de tabela (015) = base do tier × fator do modelo, em CENTAVOS e com
+ * aritmética inteira (nada de float em dinheiro). PREMIUM > MASTER > SPECIAL;
+ * DIAMANTE acima de OURO — a mesma ordem que a regra de pontos do seed usa.
+ * Índice do array = idgrupocota/idmodelocota - 1.
+ */
+const BASE_TIER_CENTAVOS: readonly number[] = [
+  6_200_000, // 1 OURO PREMIUM
+  4_900_000, // 2 OURO MASTER
+  3_900_000, // 3 OURO SPECIAL
+  11_900_000, // 4 DIAMANTE PREMIUM
+  9_600_000, // 5 DIAMANTE MASTER
+  7_800_000, // 6 DIAMANTE SPECIAL
+];
+
+/** Percentual sobre a base: mais períodos de uso, mais caro; bienal vale menos. */
+const FATOR_MODELO: readonly number[] = [
+  100, // 1 USO ANUAL 1 PERIODO
+  175, // 2 USO ANUAL 2 PERIODOS
+  240, // 3 USO ANUAL 3 PERIODOS
+  60, // 4 USO BIENAL 1 PERIODO
+];
+
 const MOTIVOS_CANCELAMENTO = [
   'DIFICULDADE FINANCEIRA',
   'INSATISFACAO COM O PRODUTO',
@@ -184,6 +207,7 @@ export async function applySchema(pool: pg.Pool): Promise<void> {
 
 export interface SeedResumo {
   readonly cotas: number;
+  readonly precos: number;
   readonly pessoas: number;
   readonly contratos: number;
   readonly titulos: number;
@@ -228,6 +252,19 @@ export async function seedData(pool: pg.Pool): Promise<SeedResumo> {
     nome,
     qtdperiodos: qtd,
   }));
+
+  // --- tabela de preço: 6 tiers × 4 modelos = 24 combinações (015)
+  const precos: Row[] = [];
+  for (let g = 1; g <= GRUPOS_COTA.length; g++) {
+    for (let m = 1; m <= MODELOS_COTA.length; m++) {
+      precos.push({
+        idgrupocota: g,
+        idmodelocota: m,
+        valorcentavos:
+          ((BASE_TIER_CENTAVOS[g - 1] as number) * (FATOR_MODELO[m - 1] as number)) / 100,
+      });
+    }
+  }
 
   // --- 400 cotas nas proporções do espelho; as 3 primeiras são das demos
   const N_COTAS = 400;
@@ -580,7 +617,7 @@ export async function seedData(pool: pg.Pool): Promise<SeedResumo> {
     await client.query('BEGIN');
     await client.query(
       'TRUNCATE contafinanceira, cancelamento, ocorrenciaatendimentots, contrato, cotauh, ' +
-        'pessoa, unidadehoteleira, edificiohotel, grupocota, modelocota, ' +
+        'tabelapreco, pessoa, unidadehoteleira, edificiohotel, grupocota, modelocota, ' +
         'tipoorigemcontafinanceira, meiopagamento, motivocancelamentocontrato, motivocontato',
     );
     await inserirLote(client, 'edificiohotel', ['idedificiohotel', 'nome'], edificios);
@@ -592,6 +629,12 @@ export async function seedData(pool: pg.Pool): Promise<SeedResumo> {
     );
     await inserirLote(client, 'grupocota', ['idgrupocota', 'nome'], grupos);
     await inserirLote(client, 'modelocota', ['idmodelocota', 'nome', 'qtdperiodos'], modelos);
+    await inserirLote(
+      client,
+      'tabelapreco',
+      ['idgrupocota', 'idmodelocota', 'valorcentavos'],
+      precos,
+    );
     await inserirLote(
       client,
       'cotauh',
@@ -686,6 +729,7 @@ export async function seedData(pool: pg.Pool): Promise<SeedResumo> {
 
   return {
     cotas: cotas.length,
+    precos: precos.length,
     pessoas: pessoas.length,
     contratos: contratos.length,
     titulos: titulos.length,

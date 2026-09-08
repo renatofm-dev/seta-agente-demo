@@ -9,5 +9,6 @@ REVOKE ALL ON ALL TABLES IN SCHEMA public FROM erp_ro;
 REVOKE CREATE ON SCHEMA public FROM erp_ro;
 
 GRANT SELECT ON
-  v_cotista, v_contrato_cota, v_titulo, v_inadimplencia, v_cancelamento, v_chamado
+  v_cotista, v_contrato_cota, v_titulo, v_inadimplencia, v_cancelamento, v_chamado,
+  v_cota_disponivel
 TO erp_ro;

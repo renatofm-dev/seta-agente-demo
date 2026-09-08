@@ -210,3 +210,130 @@ describe('#34: valores sem o símbolo R$', () => {
     expect(extrairValoresMonetarios('custa 12,50 reais')).toContain(1250);
   });
 });
+
+/**
+ * 015: a alçada de desconto do SDR não é código novo — ela EMERGE da invariante
+ * do guardrail (todo R$ do draft rastreável a um resultado de tool do turno).
+ * Estes testes travam o contrato do qual `packages/sdr` vai depender: se alguém
+ * afrouxar o guardrail, a alçada cai junto e isto aqui quebra primeiro.
+ */
+describe('015: alçada de desconto do SDR', () => {
+  const g = guardrailPreco();
+
+  // C501-133 do seed do erp_mock: DIAMANTE PREMIUM, 2 períodos.
+  const TABELA = 20_825_000; // R$ 208.250,00
+  const DESCONTO_MAX_BPS = 300; // 3% — alçada do SDR
+  /** Mesma fórmula da spec 015, aritmética inteira: nada de float em dinheiro. */
+  const piso = (tabela: number, bps: number) => Math.floor((tabela * (10_000 - bps)) / 10_000);
+  const PISO = piso(TABELA, DESCONTO_MAX_BPS); // 20_200_250 → R$ 202.002,50
+
+  /** O que a tool `condicoes_cota` (price_source) devolve para o turno. */
+  const ctxOferta = (): GuardrailCtx => ({
+    ...CTX_VAZIO,
+    textoUsuario: 'consegue melhorar esse valor?',
+    toolResults: [
+      {
+        nome: 'condicoes_cota',
+        priceSource: true,
+        rows: [{ valor_tabela_centavos: TABELA, valor_minimo_centavos: PISO }],
+      },
+    ],
+  });
+
+  it('o piso é inteiro e corresponde a 3% exatos da tabela', () => {
+    expect(PISO).toBe(20_200_250);
+    expect(Number.isInteger(PISO)).toBe(true);
+    expect(TABELA - PISO).toBe(624_750); // 3,00% de R$ 208.250,00
+  });
+
+  it('oferta na tabela cheia passa', async () => {
+    const v = await g.beforeReply?.('A C501-133 está R$ 208.250,00.', ctxOferta());
+    expect(v).toEqual(ALLOW);
+  });
+
+  it('oferta no piso da alçada (-3%) passa', async () => {
+    const v = await g.beforeReply?.('Fecho em R$ 202.002,50 à vista.', ctxOferta());
+    expect(v).toEqual(ALLOW);
+  });
+
+  it('valor ABAIXO do piso escala — é isto que faz cumprir a alçada', async () => {
+    // -4%: dentro do que um LLM tentaria, fora do que o comercial autorizou
+    const v = await g.beforeReply?.('Fecho em R$ 199.920,00 à vista.', ctxOferta());
+    expect(v).toMatchObject({ tipo: 'escalate', trigger: 'negociacao_preco' });
+  });
+
+  it('valor DENTRO da faixa mas não autorizado também escala (conjunto exato, não intervalo)', async () => {
+    // -1,5%: entre a tabela e o piso, e ainda assim escala — o guardrail casa
+    // por igualdade. Por isso a spec 015 manda ofertar pontos DISCRETOS
+    // (tabela ou piso) em vez de fatiar desconto.
+    const v = await g.beforeReply?.('Fecho em R$ 205.126,00 à vista.', ctxOferta());
+    expect(v).toMatchObject({ tipo: 'escalate' });
+  });
+
+  it('dizer o percentual em DÍGITO escala, mesmo com a oferta autorizada no contexto', async () => {
+    for (const draft of ['Consigo 3% de desconto pra você.', 'Aplico 3 por cento e fecho.']) {
+      expect(await g.beforeReply?.(draft, ctxOferta())).toMatchObject({ tipo: 'escalate' });
+    }
+  });
+
+  // LACUNA CONHECIDA, travada aqui de propósito: RE_PERCENTUAL exige dígito
+  // (/\d+(?:[.,]\d+)?\s?(?:%|por\s?cento)/), então percentual POR EXTENSO passa —
+  // em qualquer contexto, inclusive sem tool nenhuma no turno. "aplicar" também
+  // não está no RE_CONDICAO_ESPECIAL, então não há segunda rede.
+  // O comentário do preco.ts documenta o extenso para VALORES; para PERCENTUAIS
+  // não estava documentado. Na raia do cotista o classificador de intenção
+  // (negociar_preco) pega antes; na raia do SDR, que negocia, isto é exposição
+  // real. Se o RE_PERCENTUAL for corrigido, estes casos passam a escalar e este
+  // teste deve ser invertido.
+  it('LACUNA: percentual por extenso NÃO é barrado', async () => {
+    expect(
+      await g.beforeReply?.('Aplico três por cento e fecho em R$ 202.002,50.', ctxOferta()),
+    ).toEqual(ALLOW);
+    expect(
+      await g.beforeReply?.('Consigo aplicar dez por cento pra fechar hoje.', CTX_VAZIO),
+    ).toEqual(ALLOW);
+  });
+
+  it('"faço por" escala mesmo com valor autorizado — a armadilha do fraseado comercial', async () => {
+    // Parece neutro, mas está no RE_CONDICAO_ESPECIAL. Os templates do SDR
+    // precisam usar "fecho em R$ X" / "está R$ X".
+    const v = await g.beforeReply?.('Faço por R$ 202.002,50.', ctxOferta());
+    expect(v).toMatchObject({ tipo: 'escalate', trigger: 'negociacao_preco' });
+  });
+
+  it('sem a tool de condições no turno, NENHUM valor de oferta passa', async () => {
+    // Blinda contra o LLM "lembrar" o preço do histórico e ofertar sem consultar.
+    for (const draft of ['A C501-133 está R$ 208.250,00.', 'Fecho em R$ 202.002,50 à vista.']) {
+      expect(await g.beforeReply?.(draft, CTX_VAZIO)).toMatchObject({ tipo: 'escalate' });
+    }
+  });
+
+  it('a rastreabilidade vem do NOME monetário da coluna, não só do price_source', async () => {
+    // `valor_*_centavos` casa a coluna monetária, então a oferta valida mesmo
+    // com priceSource: false. O flag continua sendo a declaração de intenção —
+    // e a rede de segurança se alguém renomear as colunas.
+    const ctx: GuardrailCtx = {
+      ...CTX_VAZIO,
+      toolResults: [
+        {
+          nome: 'condicoes_cota',
+          priceSource: false,
+          rows: [{ valor_tabela_centavos: TABELA, valor_minimo_centavos: PISO }],
+        },
+      ],
+    };
+    expect(await g.beforeReply?.('Fecho em R$ 202.002,50 à vista.', ctx)).toEqual(ALLOW);
+  });
+
+  it('coluna não monetária não autoriza oferta (id de cota com o mesmo número)', async () => {
+    const ctx: GuardrailCtx = {
+      ...CTX_VAZIO,
+      toolResults: [
+        { nome: 'estoque_disponivel', priceSource: false, rows: [{ cota_id: 20_200_250 }] },
+      ],
+    };
+    expect(await g.beforeReply?.('Fecho em R$ 202.002,50 à vista.', ctx)).toMatchObject({
+      tipo: 'escalate',
+    });
+  });
+});
