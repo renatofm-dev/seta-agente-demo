@@ -236,7 +236,9 @@ export async function continuarFluxo(
   let tokens = { tokensEntrada: 0, tokensSaida: 0 };
   if (!acao) {
     if (deps.provider) {
-      const i = await interpretarResposta(deps.provider, estado, ctx.textoUsuario);
+      const i = await interpretarResposta(deps.provider, estado, ctx.textoUsuario, {
+        traceId: ctx.session.traceId, // 016
+      });
       acao = i.acao;
       tokens = { tokensEntrada: i.tokensEntrada, tokensSaida: i.tokensSaida };
     } else {

@@ -20,6 +20,10 @@ COPY --from=build /app/packages ./packages
 COPY --from=build /app/apps/server ./apps/server
 RUN pnpm install --frozen-lockfile --prod --filter @seta/server...
 
+# 016: modelo NER embarcado na imagem — o container sobe sem rede ao Hugging Face
+ENV ANONIMIZACAO_MODELOS_DIR=/app/.modelos
+RUN pnpm --filter @seta/anonimizacao modelo:baixar
+
 # assets de runtime (env paths apontam para cá — absolutos no compose)
 COPY catalog ./catalog
 COPY configs ./configs

@@ -39,7 +39,15 @@ export type TraceEvento =
   /** #46: turno superado — resposta descartada; o próximo turno agrega tudo. */
   | { tipo: 'descartado'; motivo: string }
   /** 014: passo do fluxo de cobrança que atendeu (ou iniciou) o turno. */
-  | { tipo: 'cobranca'; etapa: string; acao: string; cobrancaId?: string };
+  | { tipo: 'cobranca'; etapa: string; acao: string; cobrancaId?: string }
+  /** 016: o que foi anonimizado antes de sair para a LLM — contagens, nunca valores. */
+  | {
+      tipo: 'anonimizacao';
+      chamadas: number;
+      substituicoes: Record<string, number>;
+      tokensDesconhecidos: number;
+      latenciaMs: number;
+    };
 
 /** Efeitos do nó responder — implementados pelo server (outbox, resumo). */
 export interface ResponderEfeitos {

@@ -45,10 +45,12 @@ export async function classificarIntencao(
   provider: AIProvider,
   textoUsuario: string,
   temasSensiveis: readonly string[],
+  opts?: { readonly traceId?: string },
 ): Promise<ClassificacaoIntencao> {
   const res = await provider.chat({
     // chamada curta merece timeout curto — pendurada não segura o turno (#27)
     signal: AbortSignal.timeout(TIMEOUT_CLASSIFICADOR_MS),
+    traceId: opts?.traceId, // 016
     messages: [
       {
         role: 'system',

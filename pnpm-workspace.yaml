@@ -4,3 +4,7 @@ packages:
 
 onlyBuiltDependencies:
   - esbuild
+  # 016: NER local (@huggingface/transformers) — binários nativos do ONNX Runtime
+  - onnxruntime-node
+  - protobufjs
+  - sharp

@@ -45,6 +45,13 @@ export interface ChatRequest {
   readonly maxOutputTokens?: number;
   /** Cancela a chamada em voo (deadline do turno — #27). */
   readonly signal?: AbortSignal;
+  /** 016: atribuição no trace/observabilidade (o decorator de anonimização usa). */
+  readonly traceId?: string;
+  /** 016: hints para o decorator de anonimização; ignorado por providers reais. */
+  readonly anonimizacao?: {
+    /** false ⇒ resposta volta tokenizada (`[NOME_1]`) — o distiller quer skills genéricas. */
+    readonly destokenizar?: boolean;
+  };
 }
 
 export interface ToolCall {
