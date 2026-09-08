@@ -99,6 +99,9 @@ importers:
       '@seta/client-config':
         specifier: workspace:*
         version: link:../../packages/client-config
+      '@seta/cobranca':
+        specifier: workspace:*
+        version: link:../../packages/cobranca
       '@seta/crm':
         specifier: workspace:*
         version: link:../../packages/crm
@@ -111,6 +114,9 @@ importers:
       '@seta/observability':
         specifier: workspace:*
         version: link:../../packages/observability
+      '@seta/payment-provider':
+        specifier: workspace:*
+        version: link:../../packages/payment-provider
       '@seta/query-catalog':
         specifier: workspace:*
         version: link:../../packages/query-catalog
@@ -191,6 +197,18 @@ importers:
         specifier: ^4.4.3
         version: 4.4.3
 
+  packages/cobranca:
+    dependencies:
+      '@seta/ai-provider':
+        specifier: workspace:*
+        version: link:../ai-provider
+      '@seta/payment-provider':
+        specifier: workspace:*
+        version: link:../payment-provider
+      zod:
+        specifier: ^4.4.3
+        version: 4.4.3
+
   packages/crm:
     dependencies:
       zod:
@@ -232,6 +250,12 @@ importers:
       uuid:
         specifier: ^14.0.2
         version: 14.0.2
+      zod:
+        specifier: ^4.4.3
+        version: 4.4.3
+
+  packages/payment-provider:
+    dependencies:
       zod:
         specifier: ^4.4.3
         version: 4.4.3

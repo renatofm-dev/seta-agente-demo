@@ -1,11 +1,11 @@
 import { z } from 'zod';
+import { WaPhoneSchema } from './template.js';
 
 /**
  * Esqueleto do gateway WhatsApp (Meta Cloud API). Webhook e envio chegam na spec 004.
  */
 
-/** Telefone em E.164 sem o `+` (formato usado pela Cloud API no campo `to`). */
-export const WaPhoneSchema = z.string().regex(/^[1-9]\d{7,14}$/, 'telefone deve ser E.164 sem +');
+export { WaPhoneSchema };
 
 export const OutboundTextSchema = z.object({
   to: WaPhoneSchema,
@@ -31,3 +31,19 @@ export {
   WebhookPayloadSchema,
 } from './payload.js';
 export { signBody, verifySignature } from './signature.js';
+export {
+  createMetaTemplateApi,
+  type MetaTemplateApiConfig,
+  type OutboundTemplate,
+  OutboundTemplateSchema,
+  payloadDeTemplate,
+  TEMPLATE_CATEGORIAS,
+  TEMPLATE_STATUS,
+  type TemplateApi,
+  type TemplateCategoria,
+  type TemplateDef,
+  TemplateDefSchema,
+  type TemplateRemoto,
+  type TemplateStatus,
+  variaveisDoCorpo,
+} from './template.js';

@@ -1,0 +1,17 @@
+{
+  "name": "@seta/cobranca",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "dependencies": {
+    "@seta/ai-provider": "workspace:*",
+    "@seta/payment-provider": "workspace:*",
+    "zod": "^4.4.3"
+  }
+}

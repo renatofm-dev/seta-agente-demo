@@ -21,6 +21,13 @@ module.exports = {
       from: { path: '^packages/agent' },
       to: { path: ['^packages/erp-connector', '^@seta/erp-connector'] },
     },
+    {
+      name: 'cobranca-nao-importa-erp-connector',
+      comment: 'cobranca (014) recebe os títulos já lidos pelo catálogo; nunca fala com o ERP',
+      severity: 'error',
+      from: { path: '^packages/cobranca' },
+      to: { path: ['^packages/erp-connector', '^@seta/erp-connector'] },
+    },
   ],
   options: {
     doNotFollow: { path: ['node_modules', '/dist/'] },

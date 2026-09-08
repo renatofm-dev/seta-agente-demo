@@ -1,13 +1,17 @@
+import { sql } from 'drizzle-orm';
 import {
   boolean,
   customType,
+  date,
   index,
   integer,
   jsonb,
   pgTable,
+  primaryKey,
   text,
   timestamp,
   unique,
+  uniqueIndex,
   uuid,
 } from 'drizzle-orm/pg-core';
 
@@ -25,6 +29,11 @@ export const conversa = pgTable('conversa', {
   /** Resumo rolante do histórico (atualizado a cada K turnos pelo runtime). */
   resumo: text('resumo'),
   turnosDesdeResumo: integer('turnos_desde_resumo').notNull().default(0),
+  /**
+   * #46: turnos seguidos descartados por mensagem nova em voo. No teto, o
+   * agente responde mesmo com pendência (anti-inanição); zera a cada envio.
+   */
+  descartesConsecutivos: integer('descartes_consecutivos').notNull().default(0),
   criadoEm: timestamp('criado_em', { withTimezone: true }).notNull().defaultNow(),
 });
 
@@ -45,10 +54,12 @@ export const mensagem = pgTable('mensagem', {
     .notNull()
     .references(() => conversa.id),
   direcao: text('direcao', { enum: ['in', 'out'] }).notNull(),
-  /** Quem produziu a mensagem (007): contato (in), bot ou atendente (out). */
-  autor: text('autor', { enum: ['contato', 'bot', 'atendente'] })
+  /** Quem produziu a mensagem: contato (in); bot, atendente ou campanha/013 (out). */
+  autor: text('autor', { enum: ['contato', 'bot', 'atendente', 'campanha'] })
     .notNull()
     .default('contato'),
+  /** #45: qual atendente falou (user.id) — atribuição por mensagem na thread. */
+  atendenteId: text('atendente_id'),
   waMessageId: text('wa_message_id').unique(),
   texto: text('texto').notNull(),
   status: text('status', {
@@ -71,6 +82,8 @@ export const outbox = pgTable('outbox', {
   autor: text('autor', { enum: ['bot', 'atendente'] })
     .notNull()
     .default('bot'),
+  /** #45: atendente autor da resposta manual (propagado à mensagem no envio). */
+  atendenteId: text('atendente_id'),
   texto: text('texto').notNull(),
   status: text('status', {
     enum: ['pendente', 'enviada', 'falha', 'janela_fechada'],
@@ -83,15 +96,268 @@ export const outbox = pgTable('outbox', {
   atualizadoEm: timestamp('atualizado_em', { withTimezone: true }).notNull().defaultNow(),
 });
 
+/**
+ * #45: marca de leitura POR ATENDENTE — não-lidas = mensagens `in` da conversa
+ * com criado_em > lida_ate do usuário (sem linha ⇒ tudo conta como não lido).
+ */
+export const conversaLeitura = pgTable(
+  'conversa_leitura',
+  {
+    conversaId: uuid('conversa_id')
+      .notNull()
+      .references(() => conversa.id),
+    userId: text('user_id').notNull(),
+    lidaAte: timestamp('lida_ate', { withTimezone: true }).notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.conversaId, t.userId] })],
+);
+
 /** Contato WhatsApp com vínculo verificado ao cliente do ERP (seed na POC — corte da 000). */
 export const contato = pgTable('contato', {
   id: uuid('id').primaryKey(),
   waId: text('wa_id').notNull().unique(),
   nome: text('nome'),
   clienteErpId: text('cliente_erp_id').notNull(),
+  /**
+   * 014: CPF/CNPJ do titular (só dígitos) — o PSP exige documento e o ERP não
+   * o expõe ao papel de leitura (LGPD). Vem do vínculo verificado; sem ele o
+   * fluxo de pagamento bloqueia e escala.
+   */
+  documento: text('documento'),
   verificadoEm: timestamp('verificado_em', { withTimezone: true }).notNull(),
   criadoEm: timestamp('criado_em', { withTimezone: true }).notNull().defaultNow(),
 });
+
+// --- Disparos de template para a carteira (013) ----------------------------
+
+/** Espelho local do template do WABA; o status de aprovação vem da Meta (sync). */
+export const modeloMensagem = pgTable('modelo_mensagem', {
+  id: uuid('id').primaryKey(),
+  nome: text('nome').notNull().unique(), // ^[a-z0-9_]+$ (regra da Meta)
+  idioma: text('idioma').notNull().default('pt_BR'),
+  categoria: text('categoria', { enum: ['utility', 'marketing'] })
+    .notNull()
+    .default('utility'),
+  corpo: text('corpo').notNull(), // variáveis posicionais {{1}}..{{N}}
+  rodape: text('rodape'),
+  metaId: text('meta_id'),
+  statusMeta: text('status_meta', {
+    enum: ['pendente', 'aprovado', 'rejeitado', 'desconhecido'],
+  })
+    .notNull()
+    .default('pendente'),
+  motivoRejeicao: text('motivo_rejeicao'),
+  criadoPor: text('criado_por').notNull(),
+  criadoEm: timestamp('criado_em', { withTimezone: true }).notNull().defaultNow(),
+  atualizadoEm: timestamp('atualizado_em', { withTimezone: true }).notNull().defaultNow(),
+});
+
+/** Um disparo = 1 modelo aprovado + valores de variáveis + N destinatários. */
+export const disparo = pgTable('disparo', {
+  id: uuid('id').primaryKey(),
+  modeloId: uuid('modelo_id')
+    .notNull()
+    .references(() => modeloMensagem.id),
+  /** Valores das variáveis {{1}}..{{N}}, globais ao disparo (013). */
+  variaveis: jsonb('variaveis').notNull().default([]),
+  status: text('status', { enum: ['enviando', 'concluido'] })
+    .notNull()
+    .default('enviando'),
+  criadoPor: text('criado_por').notNull(),
+  criadoEm: timestamp('criado_em', { withTimezone: true }).notNull().defaultNow(),
+  atualizadoEm: timestamp('atualizado_em', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const disparoDestinatario = pgTable(
+  'disparo_destinatario',
+  {
+    id: uuid('id').primaryKey(),
+    disparoId: uuid('disparo_id')
+      .notNull()
+      .references(() => disparo.id),
+    waId: text('wa_id').notNull(),
+    /** Snapshot do nome do contato no momento do disparo (exibição). */
+    contatoNome: text('contato_nome'),
+    status: text('status', { enum: ['pendente', 'enviado', 'entregue', 'lido', 'falha'] })
+      .notNull()
+      .default('pendente'),
+    waMessageId: text('wa_message_id').unique(),
+    erro: text('erro'),
+    atualizadoEm: timestamp('atualizado_em', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('disparo_destinatario_disparo_idx').on(t.disparoId)],
+);
+
+// --- Cobrança e pagamento pelo WhatsApp (014) --------------------------------
+
+export const METODOS_COBRANCA = ['boleto', 'pix', 'cartao'] as const;
+export const STATUS_COBRANCA = [
+  'aguardando_aprovacao',
+  'emitindo',
+  'emitida',
+  'paga',
+  'expirada',
+  'cancelada',
+  'recusada',
+  'falha',
+  'estornada',
+] as const;
+export type StatusCobranca = (typeof STATUS_COBRANCA)[number];
+/** Cobrança "aberta": pode virar paga e bloqueia uma segunda com a mesma referência. */
+export const STATUS_COBRANCA_ABERTA: readonly StatusCobranca[] = [
+  'aguardando_aprovacao',
+  'emitindo',
+  'emitida',
+];
+
+/**
+ * Estado do fluxo de cobrança por conversa (máquina de estados do
+ * @seta/cobranca). `candidatos` é o snapshot dos títulos listados — as
+ * escolhas do cliente referem-se a ele, não a uma releitura do ERP.
+ */
+export const fluxoCobranca = pgTable(
+  'fluxo_cobranca',
+  {
+    id: uuid('id').primaryKey(),
+    conversaId: uuid('conversa_id')
+      .notNull()
+      .references(() => conversa.id),
+    contratoId: text('contrato_id').notNull(),
+    etapa: text('etapa', { enum: ['selecao', 'metodo', 'confirmacao', 'encerrado'] }).notNull(),
+    encerramento: text('encerramento'),
+    candidatos: jsonb('candidatos').notNull(),
+    selecao: jsonb('selecao').notNull().default([]),
+    metodo: text('metodo', { enum: METODOS_COBRANCA }),
+    naoEntendi: integer('nao_entendi').notNull().default(0),
+    cobrancaId: uuid('cobranca_id'),
+    expiraEm: timestamp('expira_em', { withTimezone: true }).notNull(),
+    criadoEm: timestamp('criado_em', { withTimezone: true }).notNull().defaultNow(),
+    atualizadoEm: timestamp('atualizado_em', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    // 1 fluxo ativo por conversa
+    uniqueIndex('fluxo_cobranca_ativo_uq').on(t.conversaId).where(sql`etapa <> 'encerrado'`),
+  ],
+);
+
+/** A cobrança no PSP (1 por conjunto de parcelas); o dinheiro é sempre em centavos. */
+export const cobranca = pgTable(
+  'cobranca',
+  {
+    id: uuid('id').primaryKey(),
+    conversaId: uuid('conversa_id')
+      .notNull()
+      .references(() => conversa.id),
+    contratoId: text('contrato_id').notNull(),
+    /** `contrato:{id}:titulos:{ids}` — chave de idempotência no PSP. */
+    referenciaExterna: text('referencia_externa').notNull(),
+    status: text('status', { enum: STATUS_COBRANCA }).notNull(),
+    metodo: text('metodo', { enum: METODOS_COBRANCA }).notNull(),
+    valorCentavos: integer('valor_centavos').notNull(),
+    /** Vencimento da cobrança no PSP (hoje + N dias), não o da parcela. */
+    vencimentoPsp: date('vencimento_psp', { mode: 'string' }).notNull(),
+    psp: text('psp').notNull(), // asaas | simulado
+    pspClienteId: text('psp_cliente_id'),
+    pspCobrancaId: text('psp_cobranca_id'),
+    urlFatura: text('url_fatura'),
+    urlBoleto: text('url_boleto'),
+    linhaDigitavel: text('linha_digitavel'),
+    pixCopiaCola: text('pix_copia_cola'),
+    pixExpiraEm: text('pix_expira_em'),
+    /** Motivo de bloqueio, falha ou recusa (humano-legível). */
+    motivo: text('motivo'),
+    aprovadoPor: text('aprovado_por'),
+    aprovadoEm: timestamp('aprovado_em', { withTimezone: true }),
+    pagoEm: timestamp('pago_em', { withTimezone: true }),
+    tentativas: integer('tentativas').notNull().default(0),
+    criadoEm: timestamp('criado_em', { withTimezone: true }).notNull().defaultNow(),
+    atualizadoEm: timestamp('atualizado_em', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    // pedir duas vezes as mesmas parcelas não cria duas cobranças abertas
+    uniqueIndex('cobranca_referencia_aberta_uq')
+      .on(t.referenciaExterna)
+      .where(sql`status IN ('aguardando_aprovacao', 'emitindo', 'emitida')`),
+    index('cobranca_psp_idx').on(t.pspCobrancaId),
+    index('cobranca_contrato_idx').on(t.contratoId, t.criadoEm),
+    index('cobranca_conversa_idx').on(t.conversaId, t.criadoEm),
+  ],
+);
+
+/** Parcelas (títulos do ERP) cobertas pela cobrança — a baixa é por título. */
+export const cobrancaTitulo = pgTable(
+  'cobranca_titulo',
+  {
+    cobrancaId: uuid('cobranca_id')
+      .notNull()
+      .references(() => cobranca.id),
+    tituloId: text('titulo_id').notNull(),
+    origem: text('origem', { enum: ['entrada', 'saldo'] }).notNull(),
+    parcela: integer('parcela').notNull(),
+    totalParcelas: integer('total_parcelas'),
+    valorCentavos: integer('valor_centavos').notNull(),
+    /** Vencimento original da parcela no ERP. */
+    vencimento: date('vencimento', { mode: 'string' }).notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.cobrancaId, t.tituloId] })],
+);
+
+/**
+ * Espelho da baixa que o ERP faria (o ERP é read-only por desenho): 1 linha por
+ * título recebido. A camada de conciliação (pagamentos/conciliacao.ts) faz as
+ * leituras `financeiro.*` refletirem estas linhas.
+ */
+export const pagamento = pgTable(
+  'pagamento',
+  {
+    id: uuid('id').primaryKey(),
+    contratoId: text('contrato_id').notNull(),
+    tituloId: text('titulo_id').notNull(),
+    cobrancaId: uuid('cobranca_id')
+      .notNull()
+      .references(() => cobranca.id),
+    valorCentavos: integer('valor_centavos').notNull(),
+    metodo: text('metodo', { enum: METODOS_COBRANCA }).notNull(),
+    recebidoEm: timestamp('recebido_em', { withTimezone: true }).notNull(),
+    status: text('status', { enum: ['confirmado', 'estornado'] })
+      .notNull()
+      .default('confirmado'),
+    eventoPspId: text('evento_psp_id'),
+    criadoEm: timestamp('criado_em', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique('pagamento_cobranca_titulo_uq').on(t.cobrancaId, t.tituloId),
+    index('pagamento_contrato_idx').on(t.contratoId, t.status),
+  ],
+);
+
+/** Eventos do webhook do PSP — id do evento como PK = idempotência da reentrega. */
+export const eventoPsp = pgTable(
+  'evento_psp',
+  {
+    id: text('id').primaryKey(),
+    psp: text('psp').notNull(),
+    tipo: text('tipo').notNull(),
+    pspCobrancaId: text('psp_cobranca_id'),
+    payload: jsonb('payload').notNull(),
+    recebidoEm: timestamp('recebido_em', { withTimezone: true }).notNull().defaultNow(),
+    processadoEm: timestamp('processado_em', { withTimezone: true }),
+    erro: text('erro'),
+  },
+  (t) => [index('evento_psp_cobranca_idx').on(t.pspCobrancaId)],
+);
+
+/** Cliente do contrato no PSP (criado uma vez, reaproveitado). */
+export const pspCliente = pgTable(
+  'psp_cliente',
+  {
+    psp: text('psp').notNull(),
+    contratoId: text('contrato_id').notNull(),
+    pspClienteId: text('psp_cliente_id').notNull(),
+    criadoEm: timestamp('criado_em', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.psp, t.contratoId] })],
+);
 
 /** Ticket 1:1 com a conversa; a história vive em evento_ticket. */
 export const ticket = pgTable('ticket', {

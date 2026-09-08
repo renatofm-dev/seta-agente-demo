@@ -40,6 +40,12 @@
     },
     {
       "path": "../../packages/rag"
+    },
+    {
+      "path": "../../packages/payment-provider"
+    },
+    {
+      "path": "../../packages/cobranca"
     }
   ]
 }

@@ -19,6 +19,26 @@ export interface TurnoPronto {
   readonly textoAgregado: string;
 }
 
+// #46: heurística barata da janela adaptativa — quem "termina a frase" espera
+// menos; quem claramente vai continuar digitando ganha mais silêncio.
+const RE_FECHO = /[?!.…]$/;
+const RE_CONTINUACAO =
+  /(?:\b(?:e|mas|ou|aí|ai|então|entao|que|também|tambem|porque|pra|para|com|de|do|da|no|na|meu|minha)|[,:;-])$/i;
+const CURTA_MENOS_DE = 15;
+
+/**
+ * Janela de silêncio efetiva para a ÚLTIMA mensagem pendente:
+ * - termina com pontuação de fecho (?!.…) → 0.6× (latência menor p/ quem fechou)
+ * - termina em conectivo/vírgula ou é muito curta → 1.5× (frase vem aí)
+ * - caso contrário → a base.
+ */
+export function janelaAdaptativa(texto: string, baseMs: number): number {
+  const t = texto.trim();
+  if (RE_FECHO.test(t)) return Math.round(baseMs * 0.6);
+  if (t.length < CURTA_MENOS_DE || RE_CONTINUACAO.test(t)) return Math.round(baseMs * 1.5);
+  return baseMs;
+}
+
 export interface TurnoHandler {
   processar(turno: TurnoPronto): Promise<void>;
 }
@@ -94,8 +114,10 @@ async function processarDisparo(deps: DebounceDeps, conversaId: string): Promise
 
   const ultima = pendentes[pendentes.length - 1] as (typeof pendentes)[number];
   const silencioMs = Date.now() - ultima.criadoEm.getTime();
-  if (silencioMs < deps.debounceMs) {
-    await agendarDebounce(deps.boss, conversaId, deps.debounceMs - silencioMs);
+  // #46: a janela se adapta à última mensagem (fecho encurta, continuação alonga)
+  const janelaMs = janelaAdaptativa(ultima.texto, deps.debounceMs);
+  if (silencioMs < janelaMs) {
+    await agendarDebounce(deps.boss, conversaId, janelaMs - silencioMs);
     return;
   }
 

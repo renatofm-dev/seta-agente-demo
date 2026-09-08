@@ -6,15 +6,31 @@ import { z } from 'zod';
  * estruturada. Intenções != outro escalam ANTES de o agente responder.
  */
 
-export const INTENCOES = ['negociar_preco', 'tema_sensivel', 'pedir_humano', 'outro'] as const;
+export const INTENCOES = [
+  'negociar_preco',
+  'tema_sensivel',
+  'pedir_humano',
+  'pagar',
+  'comprar_cota',
+  'outro',
+] as const;
 export type Intencao = (typeof INTENCOES)[number];
 const IntencaoSchema = z.enum(INTENCOES);
 
-export const TRIGGER_POR_INTENCAO: Readonly<Record<Exclude<Intencao, 'outro'>, string>> = {
+/** Intenções que NÃO escalam: `outro` segue para o agente; `pagar` inicia o fluxo de cobrança (014). */
+export type IntencaoQueEscala = Exclude<Intencao, 'outro' | 'pagar'>;
+
+export const TRIGGER_POR_INTENCAO: Readonly<Record<IntencaoQueEscala, string>> = {
   negociar_preco: 'negociacao_preco',
   tema_sensivel: 'tema_sensivel',
   pedir_humano: 'pedido_explicito',
+  /** 014: venda de cota nova fica com o comercial — escalada com texto próprio. */
+  comprar_cota: 'interesse_compra',
 };
+
+export function intencaoEscala(i: Intencao): i is IntencaoQueEscala {
+  return i !== 'outro' && i !== 'pagar';
+}
 
 export interface ClassificacaoIntencao {
   readonly intencao: Intencao;
@@ -41,7 +57,9 @@ export async function classificarIntencao(
           '- negociar_preco: pede desconto, abatimento, condição especial ou negociação de valores\n' +
           `- tema_sensivel: menciona algum destes temas: ${temasSensiveis.join(', ') || '(nenhum configurado)'}\n` +
           '- pedir_humano: pede explicitamente para falar com uma pessoa/atendente\n' +
-          '- outro: qualquer outra coisa (dúvidas, pedidos de informação, saudações)',
+          '- pagar: quer pagar, quitar ou regularizar parcelas do contrato; pede boleto, PIX ou link de pagamento PARA PAGAR; diz que quer fazer/fechar o pagamento ou a compra\n' +
+          '- comprar_cota: quer adquirir OUTRA cota, fazer upgrade ou comprar um produto novo\n' +
+          '- outro: qualquer outra coisa (dúvidas, pedidos de informação, saudações, perguntar o que está vencido sem pedir para pagar)',
       },
       { role: 'user', content: textoUsuario },
     ],

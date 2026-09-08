@@ -9,7 +9,7 @@ import {
 import type { ToolSpec } from '@seta/query-catalog';
 import { z } from 'zod';
 import { renderPromptBase } from './prompt.js';
-import { NOME_ESCALAR } from './tools-internas.js';
+import { NOME_ESCALAR, NOME_INICIAR_PAGAMENTO } from './tools-internas.js';
 import type {
   AgentRuntime,
   AgentRuntimeDeps,
@@ -50,6 +50,11 @@ const StateAnnotation = Annotation.Root({
   tokensEntrada: Annotation<number>({ reducer: (a, b) => a + b, default: () => 0 }),
   tokensSaida: Annotation<number>({ reducer: (a, b) => a + b, default: () => 0 }),
   respostaFinal: Annotation<string | null>({ reducer: (_a, b) => b, default: () => null }),
+  /** 014: tool `iniciar_pagamento` chamada neste turno. */
+  fluxoPagamentoSolicitado: Annotation<boolean>({
+    reducer: (a, b) => a || b,
+    default: () => false,
+  }),
 });
 type State = typeof StateAnnotation.State;
 
@@ -188,6 +193,7 @@ export function createAgentRuntime(deps: AgentRuntimeDeps): AgentRuntime {
         let escaladoTrigger: string | null = null;
         let fallbackMotivo: string | null = null;
         let falhas = 0;
+        let fluxoPagamentoSolicitado = false;
 
         for (const call of state.pendingToolCalls) {
           const t0 = Date.now();
@@ -233,6 +239,7 @@ export function createAgentRuntime(deps: AgentRuntimeDeps): AgentRuntime {
                 escalado = true;
                 escaladoTrigger = escaladoTrigger ?? 'pedido_do_agente';
               }
+              if (call.name === NOME_INICIAR_PAGAMENTO) fluxoPagamentoSolicitado = true;
               const r = await executarTool(spec, params);
               erro = r.erro;
               if (erro) falhas += 1;
@@ -298,6 +305,7 @@ export function createAgentRuntime(deps: AgentRuntimeDeps): AgentRuntime {
           toolResults: novosResults,
           toolCallsFeitas: state.toolCallsFeitas + state.pendingToolCalls.length,
           pendingToolCalls: [],
+          fluxoPagamentoSolicitado,
           ...(fallbackMotivo ? { fallbackMotivo } : {}),
         };
       };
@@ -387,6 +395,7 @@ export function createAgentRuntime(deps: AgentRuntimeDeps): AgentRuntime {
         tokensEntrada: final.tokensEntrada,
         tokensSaida: final.tokensSaida,
         latenciaMs: Date.now() - inicio,
+        fluxoPagamentoSolicitado: final.fluxoPagamentoSolicitado,
       };
     },
   };

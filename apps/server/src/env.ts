@@ -19,8 +19,14 @@ export const EnvSchema = z.object({
   /** Credenciais da Cloud API. Ausentes ⇒ gateway de saída vira log-only (dev). */
   WA_ACCESS_TOKEN: z.string().optional(),
   WA_PHONE_NUMBER_ID: z.string().optional(),
-  /** Silêncio (ms) que fecha um turno no debouncer. */
-  WA_DEBOUNCE_MS: z.coerce.number().int().min(100).default(4_000),
+  /** 013: WhatsApp Business Account id — habilita a gestão de modelos na Meta. */
+  WA_WABA_ID: z.string().optional(),
+  /**
+   * Silêncio (ms) que fecha um turno no debouncer. #46: 10s de base — quem
+   * digita a 2ª frase no celular leva 10–20s; a janela ainda se adapta à
+   * última mensagem (fecho 0.6×, continuação 1.5×).
+   */
+  WA_DEBOUNCE_MS: z.coerce.number().int().min(100).default(10_000),
   /** Provedor LLM OpenAI-compatible. Ausente ⇒ agente responde fallback honesto. */
   LLM_BASE_URL: z.url().optional(),
   LLM_API_KEY: z.string().min(1).optional(),
@@ -48,6 +54,27 @@ export const EnvSchema = z.object({
   /** Better Auth (console HITL). Trocar o secret fora de dev. */
   BETTER_AUTH_SECRET: z.string().min(8).default('dev-secret-trocar-em-prod'),
   BETTER_AUTH_URL: z.url().default('http://localhost:3001'),
+  /**
+   * 014: PSP Asaas (ADR 0001). Sem ASAAS_API_KEY o boot usa o PSP simulado.
+   * A base URL decide o ambiente (sandbox|producao) — o boot loga qual está ativo.
+   */
+  ASAAS_BASE_URL: z.url().default('https://api-sandbox.asaas.com/v3'),
+  ASAAS_API_KEY: z.string().min(1).optional(),
+  /** Token que o Asaas manda no header `asaas-access-token`; ausente ⇒ webhook 503. */
+  ASAAS_WEBHOOK_TOKEN: z.string().min(32).max(255).optional(),
+  /** Acima disto a cobrança espera aprovação humana (R$ 5.000 default). */
+  PAGAMENTO_TETO_SEM_HITL_CENTAVOS: z.coerce.number().int().min(0).default(500_000),
+  /** Cobranças emitidas por conversa por dia; além disso, humano. */
+  PAGAMENTO_MAX_COBRANCAS_DIA: z.coerce.number().int().min(1).default(3),
+  /** Vencimento da cobrança no PSP = hoje + N dias (parcela vencida precisa de boleto pagável). */
+  PAGAMENTO_DIAS_VENCIMENTO: z.coerce.number().int().min(0).max(60).default(3),
+  /** Fluxo de cobrança sem resposta expira (minutos). */
+  PAGAMENTO_FLUXO_EXPIRA_MIN: z.coerce.number().int().min(1).default(60),
+  /** Modelo aprovado (013) para avisar "pagamento confirmado" fora da janela de 24h. */
+  WA_TEMPLATE_PAGAMENTO_CONFIRMADO: z
+    .string()
+    .regex(/^[a-z0-9_]+$/)
+    .optional(),
 });
 export type Env = z.infer<typeof EnvSchema>;
 

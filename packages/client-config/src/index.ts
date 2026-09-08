@@ -14,6 +14,8 @@ export const ClientConfigSchema = z.object({
     financeiro: z.boolean(),
     contrato: z.boolean(),
     atendimento: z.boolean(),
+    /** 014: fluxo de cobrança/pagamento pelo WhatsApp (exige `financeiro`). */
+    pagamentos: z.boolean().default(false),
   }),
   limites: z.object({
     maxToolCallsPorTurno: z.number().int().min(1).max(20),

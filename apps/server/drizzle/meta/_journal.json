@@ -78,6 +78,34 @@
       "when": 1788018261787,
       "tag": "0010_taxonomia-e-indice-gin",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1788275783480,
+      "tag": "0011_console-atendimento",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1788286243397,
+      "tag": "0012_fusao-de-turno",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1788303962770,
+      "tag": "0013_disparos-carteira",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1788387550089,
+      "tag": "0014_cobranca-pagamento",
+      "breakpoints": true
     }
   ]
 }

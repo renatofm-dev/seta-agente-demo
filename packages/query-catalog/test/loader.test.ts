@@ -6,7 +6,7 @@ const CATALOG_REAL = join(import.meta.dirname, '../../../catalog');
 const FIXTURES_INVALIDAS = join(import.meta.dirname, 'fixtures-invalidas');
 
 describe('loader do catálogo', () => {
-  it('carrega o catálogo real do repo com as 8 entradas da spec 012', () => {
+  it('carrega o catálogo real do repo: 8 entradas da spec 012 + 1 interna da 014', () => {
     const catalog = loadCatalog(CATALOG_REAL);
     const ids = catalog
       .list()
@@ -18,6 +18,7 @@ describe('loader do catálogo', () => {
       'contrato.minha_cota',
       'contrato.status_cancelamento',
       'financeiro.proxima_parcela',
+      'financeiro.proximas_parcelas',
       'financeiro.saldo_contrato',
       'financeiro.titulos_atraso',
       'financeiro.total_pago',
@@ -25,7 +26,8 @@ describe('loader do catálogo', () => {
     // toda entrada amarra no contrato da sessão — nunca em param do modelo
     for (const entry of catalog.list()) {
       expect(entry.params.contrato_id?.source).toBe('session');
-      expect(entry.tool.expose).toBe(true);
+      // 014: proximas_parcelas é uso interno (fluxo/conciliação), não vira tool do modelo
+      expect(entry.tool.expose).toBe(entry.id !== 'financeiro.proximas_parcelas');
       expect(entry.price_source).toBe(false); // não há price_source neste domínio
     }
   });

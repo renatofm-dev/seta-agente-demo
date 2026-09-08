@@ -24,12 +24,16 @@ verificados — suficiente para a demo (000). WABA real fica para depois da POC.
 ## 4. Webhook
 
 - URL de produção (011): `https://seta.outerlab.com.br/webhook`
-- Dev: túnel Cloudflare apontando para o server local:
+- Dev (1 comando): sobe o `pnpm dev` se preciso, abre um túnel Cloudflare e
+  aplica o override de webhook **só no número de teste** (produção intacta;
+  Ctrl+C remove o override e derruba tudo):
 
   ```sh
-  cloudflared tunnel --url http://localhost:3001
-  # use a URL https gerada: <aleatorio>.trycloudflare.com/webhook
+  pnpm dev-whatsapp        # = tools/dev-whatsapp.sh
   ```
+
+  Na mão, se preferir: `cloudflared tunnel --url http://localhost:3001` e use a
+  URL https gerada (`<aleatorio>.trycloudflare.com/webhook`) nos passos abaixo.
 
 1. **WhatsApp → Configuration → Webhook** → **Edit**:
    - Callback URL: `https://<host>/webhook`
@@ -39,7 +43,7 @@ verificados — suficiente para a demo (000). WABA real fica para depois da POC.
 
 ## 5. Ida e volta de teste
 
-1. `pnpm dev` (com `.env` preenchido) + túnel ativo.
+1. `pnpm dev-whatsapp` (com `.env` preenchido) — ou `pnpm dev` + túnel na mão.
 2. Envie "oi" do seu celular verificado para o número de teste.
 3. Confira no log: mensagem persistida → turno agregado (4 s) → resposta via outbox
    (o conteúdo da resposta chega com o runtime da spec 005).
@@ -50,6 +54,7 @@ verificados — suficiente para a demo (000). WABA real fica para depois da POC.
 | Sintoma | Causa provável |
 | --- | --- |
 | Webhook não verifica | `WA_VERIFY_TOKEN` diferente do digitado na Meta |
+| `curl` na URL do túnel dá `Could not resolve host` (handshake público falha em série) | nome `*.trycloudflare.com` consultado antes da Cloudflare publicar o DNS; o resolver (operadora/macOS) cacheia NXDOMAIN por 30 min (SOA min = 1800 s). O `pnpm dev-whatsapp` espera o `Registered tunnel connection` e valida com `--resolve` no IP da Cloudflare; na mão, espere ~10 s antes do 1º teste ou use `dig @1.1.1.1`. A Meta não é afetada (usa o DNS dela). |
 | POST /webhook → 401 | `WA_APP_SECRET` errado (HMAC não bate) |
 | Mensagem não chega | campo **messages** não assinado no webhook |
 | Envio falha 401/190 | token expirado (usar System User token) |

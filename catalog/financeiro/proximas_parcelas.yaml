@@ -1,0 +1,29 @@
+id: financeiro.proximas_parcelas
+version: 1
+description: >-
+  Próximas parcelas A VENCER do contrato da sessão (até 5, da mais próxima
+  para a mais distante): id, origem, número da parcela, total de parcelas,
+  valor em centavos e vencimento. Uso interno do fluxo de pagamento (014) e
+  da conciliação — não é exposta ao modelo; o modelo usa proxima_parcela.
+entities: [titulo]
+modules: [financeiro]
+params:
+  contrato_id:
+    type: string
+    source: session
+    description: Contrato vinculado à sessão (nunca vem do modelo).
+sql: >-
+  SELECT id, origem, parcela, total_parcelas, valor_centavos, vencimento
+  FROM v_titulo
+  WHERE contrato_id = :contrato_id AND status = 'aberto'
+  ORDER BY vencimento ASC
+  LIMIT 5
+limits:
+  timeout_ms: 2000
+  max_rows: 5
+output:
+  columns: [id, origem, parcela, total_parcelas, valor_centavos, vencimento]
+  masking: {}
+tool:
+  expose: false
+  name: proximas_parcelas

@@ -2,13 +2,18 @@
 # erp_mock, spec 012). O seed grava esses vínculos no banco `app` (spec 007).
 # Até 5 números: limite do modo dev da Meta Cloud API (destinatários verificados).
 # Substituir os números pelos telefones reais verificados antes da demo.
+# `documento` (014): CPF do titular, só dígitos — o PSP exige para cobrar e o ERP
+# não expõe CPF ao papel de leitura. Valores fictícios com dígito verificador válido.
 contatos:
   - wa_id: '5511999990001'
     cliente_erp: '10001' # contrato ativo e em dia (DIAMANTE PREMIUM, torre 2)
     apelido: Contrato 10001
+    documento: '52998224725'
   - wa_id: '5511999990002'
     cliente_erp: '10002' # contrato ativo inadimplente (parcelas vencidas)
     apelido: Contrato 10002
+    documento: '11144477735'
   - wa_id: '5511999990003'
     cliente_erp: '10003' # contrato cancelado, distrato em análise
     apelido: Contrato 10003
+    documento: '12345678909'

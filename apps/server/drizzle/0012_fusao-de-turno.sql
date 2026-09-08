@@ -1,0 +1,1 @@
+ALTER TABLE "conversa" ADD COLUMN "descartes_consecutivos" integer DEFAULT 0 NOT NULL;

@@ -1,8 +1,10 @@
 import { OutboundTextSchema } from './index.js';
+import { type OutboundTemplate, OutboundTemplateSchema, payloadDeTemplate } from './template.js';
 
 /**
- * Gateway de saída. `send` FALHA EXPLÍCITO se a janela de 24h estiver fechada —
- * na POC não há template aprovado, então o caller loga e marca o ticket.
+ * Gateway de saída. `send` (texto livre) FALHA EXPLÍCITO se a janela de 24h
+ * estiver fechada; `sendTemplate` (013) NÃO exige janela — template aprovado é
+ * exatamente a forma sancionada de iniciar conversa fora dela.
  */
 
 export class JanelaFechadaError extends Error {
@@ -19,6 +21,8 @@ export interface JanelaInfo {
 
 export interface OutboundGateway {
   send(msg: { to: string; body: string }, janela: JanelaInfo): Promise<{ waMessageId: string }>;
+  /** #013: envio de template — dispensa janela (Meta cobra por conversa iniciada). */
+  sendTemplate(msg: OutboundTemplate): Promise<{ waMessageId: string }>;
 }
 
 function exigirJanelaAberta(to: string, janela: JanelaInfo): void {
@@ -38,32 +42,43 @@ export interface MetaGatewayConfig {
 export function createMetaGateway(config: MetaGatewayConfig): OutboundGateway {
   const fetchFn = config.fetchFn ?? fetch;
   const versao = config.graphVersion ?? 'v21.0';
+
+  const postMessages = async (payload: Record<string, unknown>): Promise<string> => {
+    const res = await fetchFn(
+      `https://graph.facebook.com/${versao}/${config.phoneNumberId}/messages`,
+      {
+        method: 'POST',
+        headers: {
+          authorization: `Bearer ${config.accessToken}`,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      },
+    );
+    if (!res.ok) {
+      throw new Error(`Graph API ${res.status}: ${(await res.text()).slice(0, 300)}`);
+    }
+    const corpo = (await res.json()) as { messages?: { id: string }[] };
+    const waMessageId = corpo.messages?.[0]?.id;
+    if (!waMessageId) throw new Error('Graph API sem message id na resposta');
+    return waMessageId;
+  };
+
   return {
     async send(msg, janela) {
       const valida = OutboundTextSchema.parse(msg);
       exigirJanelaAberta(valida.to, janela);
-      const res = await fetchFn(
-        `https://graph.facebook.com/${versao}/${config.phoneNumberId}/messages`,
-        {
-          method: 'POST',
-          headers: {
-            authorization: `Bearer ${config.accessToken}`,
-            'content-type': 'application/json',
-          },
-          body: JSON.stringify({
-            messaging_product: 'whatsapp',
-            to: valida.to,
-            type: 'text',
-            text: { body: valida.body },
-          }),
-        },
-      );
-      if (!res.ok) {
-        throw new Error(`Graph API ${res.status}: ${(await res.text()).slice(0, 300)}`);
-      }
-      const corpo = (await res.json()) as { messages?: { id: string }[] };
-      const waMessageId = corpo.messages?.[0]?.id;
-      if (!waMessageId) throw new Error('Graph API sem message id na resposta');
+      const waMessageId = await postMessages({
+        messaging_product: 'whatsapp',
+        to: valida.to,
+        type: 'text',
+        text: { body: valida.body },
+      });
+      return { waMessageId };
+    },
+    async sendTemplate(msg) {
+      const valida = OutboundTemplateSchema.parse(msg);
+      const waMessageId = await postMessages(payloadDeTemplate(valida));
       return { waMessageId };
     },
   };
@@ -86,6 +101,16 @@ export function createLogGateway(logger: LogGatewayLogger): OutboundGateway {
       seq += 1;
       const waMessageId = `sim-${Date.now()}-${seq}`;
       logger.info({ to: valida.to, waMessageId, body: valida.body }, 'envio simulado (log-only)');
+      return { waMessageId };
+    },
+    async sendTemplate(msg) {
+      const valida = OutboundTemplateSchema.parse(msg);
+      seq += 1;
+      const waMessageId = `sim-tpl-${Date.now()}-${seq}`;
+      logger.info(
+        { to: valida.to, waMessageId, template: valida.nome, variaveis: valida.variaveis },
+        'template simulado (log-only)',
+      );
       return { waMessageId };
     },
   };

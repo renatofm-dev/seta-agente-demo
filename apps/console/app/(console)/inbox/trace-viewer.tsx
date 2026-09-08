@@ -78,6 +78,14 @@ function Evento({ e }: { e: TraceEvento }) {
       </li>
     );
   }
+  if (e.tipo === 'descartado') {
+    return (
+      <li className="rounded border border-dashed border-sky-400/60 p-2">
+        <span className="font-medium">turno superado (#46)</span>
+        <span className="ml-2 text-muted-foreground">{e.motivo}</span>
+      </li>
+    );
+  }
   return (
     <li className="rounded border border-amber-400/60 p-2">
       <span className="font-medium">escalado para humano</span>

@@ -15,6 +15,7 @@ const config: any = require_('../.dependency-cruiser.cjs');
 
 const RULE_PACKAGES_APPS = 'packages-nao-importam-apps';
 const RULE_AGENT_CONNECTOR = 'agent-nao-importa-erp-connector';
+const RULE_COBRANCA_CONNECTOR = 'cobranca-nao-importa-erp-connector';
 
 interface Violation {
   readonly rule: { readonly name: string };
@@ -36,6 +37,7 @@ describe('fronteiras arquiteturais (dependency-cruiser)', () => {
     });
     const nomes = violationsOf(resultado).map((v) => v.rule.name);
     expect(nomes).toContain(RULE_AGENT_CONNECTOR);
+    expect(nomes).toContain(RULE_COBRANCA_CONNECTOR);
     expect(nomes).toContain(RULE_PACKAGES_APPS);
   });
 
@@ -45,7 +47,7 @@ describe('fronteiras arquiteturais (dependency-cruiser)', () => {
       validate: true,
     });
     const relevantes = violationsOf(resultado).filter((v) =>
-      [RULE_PACKAGES_APPS, RULE_AGENT_CONNECTOR].includes(v.rule.name),
+      [RULE_PACKAGES_APPS, RULE_AGENT_CONNECTOR, RULE_COBRANCA_CONNECTOR].includes(v.rule.name),
     );
     expect(relevantes).toEqual([]);
   });

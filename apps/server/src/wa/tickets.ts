@@ -72,13 +72,14 @@ export async function aplicarTransicao(
 }
 
 /**
- * Gate do debouncer: turno só nasce com o bot ativo. `resolvido` reabre
- * (nova mensagem do contato); `aguardando_humano`/`humano_ativo` silenciam o
- * bot — as mensagens ficam pendentes até devolverem a conversa.
+ * Gate do debouncer. `resolvido` reabre (nova mensagem do contato); #47: em
+ * `aguardando_humano` o bot CONTINUA atendendo (o cliente não fala sozinho na
+ * fila) — só `humano_ativo` silencia; as mensagens ficam pendentes até o
+ * atendente devolver/resolver a conversa.
  */
 export async function ticketPermiteBot(db: Db, conversaId: string): Promise<boolean> {
   const t = await garantirTicket(db, conversaId);
-  if (t.status === 'bot_ativo') return true;
+  if (t.status === 'bot_ativo' || t.status === 'aguardando_humano') return true;
   if (t.status === 'resolvido') {
     await aplicarTransicao(db, t, 'bot_ativo', 'contato', { motivo: 'nova mensagem reabriu' });
     return true;
