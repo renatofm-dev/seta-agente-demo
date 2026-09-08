@@ -143,13 +143,18 @@
   * {
     @apply border-border outline-ring/50;
   }
+  /*
+   * A raiz fica em 16px: as utilities do Tailwind 4 são em rem (h-14 = 56px,
+   * text-xs = 12px, p-4 = 16px), e o mock foi medido nessa base. O corpo de
+   * 14px do design entra no body, que não afeta o rem.
+   */
   html {
     @apply font-sans;
-    font-size: 14px;
     -webkit-font-smoothing: antialiased;
   }
   body {
     @apply bg-background text-foreground;
+    font-size: 14px;
     line-height: 1.45;
   }
   button {
