@@ -34,6 +34,8 @@ verificados — suficiente para a demo (000). WABA real fica para depois da POC.
 
   Na mão, se preferir: `cloudflared tunnel --url http://localhost:3001` e use a
   URL https gerada (`<aleatorio>.trycloudflare.com/webhook`) nos passos abaixo.
+  Por que o override é por número, o que o script faz em cada passo e o diagnóstico
+  do túnel: [`dev/09-whatsapp-real-e-tunel.md`](dev/09-whatsapp-real-e-tunel.md).
 
 1. **WhatsApp → Configuration → Webhook** → **Edit**:
    - Callback URL: `https://<host>/webhook`

@@ -16,6 +16,7 @@ roadmap; o que é comportamento vive nas specs; o resto está nos guias abaixo.
 | 6 | [Como desenvolver](dev/06-como-desenvolver.md) | subir o ambiente, rodar testes, seguir as convenções, escrever uma spec, abrir um PR |
 | 7 | [Operação e deploy](dev/07-operacao-e-deploy.md) | entender CI, release, imagens, homelab e observabilidade |
 | 8 | [O que falta](dev/08-o-que-falta.md) | ver o que ainda vai ser construído, por marco, com link para cada pré-spec |
+| 9 | [WhatsApp real e o túnel](dev/09-whatsapp-real-e-tunel.md) | testar com o número de WhatsApp: por que o túnel, por que o override é por número, o que `pnpm dev-whatsapp` faz e como diagnosticar |
 
 ## Referências
 
