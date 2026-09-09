@@ -20,6 +20,9 @@
   diff → commits → PR. Não faça push sem eu confirmar.
 - **Ambiguidade**: no máximo 3 perguntas antes de começar; fora isso, siga com premissa
   explícita e registre-a na descrição do PR.
+- **Documentação**: `docs/README.md` é a porta de entrada; convenções e receitas em
+  `docs/dev/06-como-desenvolver.md`; o que falta tem pré-spec em `specs/` (015b, 015c, 018+).
+  Ao entregar uma spec, atualizar `docs/dev/04-modulos-entregues.md` e `specs/README.md`.
 
 ## Decisões registradas
 - TypeScript pinado em `~5.9.x` (decisão do Renato, 2026-08-26): a linha 7.0 (tsgo) é
