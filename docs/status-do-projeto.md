@@ -1,12 +1,48 @@
 # Agente Autônomo de Atendimento — Status do Projeto
 
-**Data:** 31 de agosto de 2026
+**Data:** 31 de agosto de 2026 · **atualizado em 8 de setembro de 2026** (bloco "Atualização de 08/09" logo abaixo; o plano vive no [`roadmap.md`](roadmap.md))
 **Para:** grupo de sócios da SETA
 **Preparado por:** Renato Martins
 
 > Este documento é uma fotografia do momento. Ele descreve o que já foi construído,
 > o que estamos aprendendo com os primeiros testes reais, e o caminho até atender
 > clientes de verdade. Não usa linguagem técnica; há um glossário no final.
+
+---
+
+## Atualização de 08/09/2026
+
+Desde a fotografia de 31/08:
+
+- **Tudo o que estava pronto entrou no histórico principal do código** em 08/09, com
+  esteira verde e **373 testes automáticos**. O erro de ordem na integração, encontrado
+  na revisão de 06/09, foi corrigido e o histórico voltou a ser confiável.
+- **As quatro melhorias do teste real estão prontas.** O agente não fica mais mudo antes
+  de o atendente assumir; mensagens que chegam durante a resposta são fundidas em uma
+  só; o painel virou uma tela de atendimento no estilo WhatsApp Web; e a **cobrança pelo
+  WhatsApp** (boleto, PIX ou link de cartão) funciona de ponta a ponta, por enquanto com o
+  fornecedor de pagamentos em modo de teste.
+- **Mensagens proativas existem.** Campanhas com modelo aprovado pela Meta para a
+  carteira, com funil de entrega e leitura; quem responde cai no atendimento normal.
+- **Agente de vendas.** Quem escreve sem cadastro é qualificado, recebe oferta dentro da
+  alçada de 3% e é encaminhado ao comercial. O núcleo está pronto; a aprovação das
+  exceções pelo painel é o próximo passo.
+- **Proteção de dados foi além.** Nome e CPF nunca saíam do banco; agora nomes,
+  telefones, e-mails e documentos **digitados nas conversas** também viram códigos antes
+  de qualquer coisa ir ao fornecedor de IA.
+- **Painel redesenhado** conforme o design aprovado, em sete áreas: Atendimento,
+  Campanhas, Cobranças, Leads, Aprendizado, Métricas e Configurações. Métricas ganhou um
+  **relatório de campanhas** que cruza o resultado (respostas, cobranças, pagamentos)
+  com a meta de conversão, com filtros por período e exportação.
+- **Blindagem para exposição.** O sistema recusa subir em produção com chaves de
+  desenvolvimento, as senhas saíram do arquivo de instalação e a imagem só é publicada
+  com a esteira verde.
+
+**O que continua igual:** o servidor de demonstração ainda roda a versão de agosto.
+Publicar é o próximo passo (marco M0 do roadmap), junto com a transferência do
+repositório para a organização. As decisões que só os sócios podem tomar estão no
+roadmap (D1 a D9): a mais urgente é quem constrói (D9, 13/09) e a que mais move o
+calendário é a saída de dados para o fornecedor de IA (D6, 27/09).
 
 ---
 
@@ -86,24 +122,24 @@ O caminho até o produto tem três estágios. O primeiro está concluído e em t
 
 | Estágio | O que é | Status |
 |---|---|---|
-| **1. Protótipo demonstrável** | Sistema completo, conversando por WhatsApp real | ✅ **Concluído e em teste** |
-| **2. Piloto com um cliente real** | Ligado ao sistema de gestão de um resort, atendendo os cotistas dele | 🔄 **Preparação iniciada** |
-| **3. Produto para vários clientes** | Plataforma que atende vários resorts ao mesmo tempo | ⬜ A iniciar |
+| **1. Protótipo demonstrável** | Sistema completo, conversando por WhatsApp real | ✅ **Concluído** (08/09: integrado; publicação no servidor pendente) |
+| **2. Piloto com um cliente real** | Ligado ao sistema de gestão de um resort, atendendo os cotistas dele | 🔄 **Em preparação** — depende das decisões D1–D9 do roadmap |
+| **3. Produto para vários clientes** | Uma base de código, **uma instalação por cliente** (redefinido em 02/09: parte dos clientes não permite dado saindo da rede deles) | ⬜ A iniciar |
 
 ### O que o estágio 1 entregou, em números
 
 | Indicador | Resultado |
 |---|---|
-| Módulos planejados × construídos | **11 de 11** |
-| Tarefas de desenvolvimento concluídas | **22** |
-| Tarefas em aberto | **5** — 1 de cadastro e 4 de melhoria identificadas no teste real |
-| Testes automáticos | **cerca de 200**, executados a cada alteração |
-| Rodadas de revisão de qualidade | **4** — 11 pontos de robustez corrigidos |
+| Módulos planejados × construídos | **11 de 11** em 31/08; **18 especificações entregues** em 08/09 |
+| Tarefas de desenvolvimento concluídas | **22** em 31/08; as 5 em aberto e mais 7 entregas até 08/09 |
+| Tarefas em aberto | **nenhuma** das identificadas no teste real; o restante está no roadmap |
+| Testes automáticos | **373**, executados a cada alteração |
+| Rodadas de revisão de qualidade | **5** — 11 pontos de robustez em 31/08 e a blindagem para exposição em 08/09 |
 | Pendências de código esquecidas | **nenhuma** |
-| Período de construção | 26 a 30 de agosto de 2026 |
+| Período de construção | 26 de agosto a 8 de setembro de 2026 |
 
 A cada alteração no código, uma esteira automática verifica o projeto inteiro:
-padrão de escrita, consistência, banco de dados real, os ~200 testes e a compilação
+padrão de escrita, consistência, banco de dados real, os 373 testes e a compilação
 final. Nada entra no sistema sem passar por ela.
 
 ### O que os testes reais já registraram
@@ -160,8 +196,26 @@ Qualquer resposta pode ser aberta e destrinchada. E há uma tela de indicadores:
 conversas por dia, percentual resolvido sem humano, motivos das transferências para
 atendente, e o custo estimado de inteligência artificial no período.
 
-**O painel de controle** já tem as telas de login, caixa de entrada de chamados,
-detalhe do chamado com auditoria, aprendizado e indicadores.
+**5. Campanhas e cobrança** *(novo em setembro)*.
+O atendente escolhe um modelo aprovado pela Meta e dispara para a carteira; o painel
+mostra entregas e leituras. Quando o cotista quer pagar, o agente lista as parcelas em
+aberto, ele escolhe boleto, PIX ou cartão, confirma, e o meio de pagamento chega na
+própria conversa. O pagamento é conciliado de volta e o cotista recebe a confirmação.
+
+**6. Agente de vendas** *(novo em setembro)*.
+Um número sem cadastro pergunta preço. O agente qualifica (quantas pessoas, época de
+uso), apresenta o que há disponível, oferta na tabela ou com até 3% de desconto e
+agenda com o comercial. Acima disso, o pedido vira pendência para uma pessoa — a
+inteligência artificial nunca calcula o valor.
+
+**7. Relatório de campanhas** *(novo em setembro)*.
+Para cada campanha: quantos receberam, leram, responderam, geraram cobrança e pagaram;
+a conversão contra a meta; comparação com o período anterior; leitura em prosa do que
+os números dizem; exportação em planilha e PDF.
+
+**O painel de controle** foi redesenhado em setembro conforme o design aprovado:
+Atendimento (estilo WhatsApp Web, com o contexto do cotista ao lado), Campanhas,
+Cobranças, Leads, Aprendizado, Métricas e Configurações.
 
 ---
 
@@ -206,7 +260,7 @@ humano — e agora essa limitação é verdadeira, não encenada para a demonstr
 ## O que o teste real nos ensinou
 
 As conversas reais da seção anterior revelaram quatro melhorias que nenhum teste
-automático apontaria. Todas já estão detalhadas e prontas para execução.
+automático apontaria. **As quatro foram entregues e integradas até 08/09.**
 
 | # | O que descobrimos | Por que importa |
 |---|---|---|
@@ -231,9 +285,9 @@ demonstrável. Cada item volta ao plano nas fases seguintes.
 |---|---|
 | Conexão direta com o sistema de gestão do cliente | Já temos uma cópia do banco real para desenvolver com segurança. A conexão ao ambiente vivo é etapa do piloto. |
 | Conta comercial de WhatsApp | Exige processo de aprovação junto à Meta. Para testar, um número de teste resolve. |
-| Mensagens proativas (cobrança, lembrete de vencimento) | Dependem de modelos de mensagem aprovados pela Meta, que só existem com a conta comercial. |
+| Mensagens proativas (cobrança, lembrete de vencimento) | ✅ Entregue em setembro: campanhas com modelo aprovado pela Meta. Em escala real, ainda depende da conta comercial. |
 | Inteligência artificial rodando dentro da empresa | Exige servidor com placa de vídeo. Hoje usamos um fornecedor externo — e o sistema foi construído para trocar de fornecedor sem reescrever nada. |
-| Atender vários clientes na mesma instalação | É o trabalho mais pesado da lista e não era necessário para provar a arquitetura. |
+| Atender vários clientes na mesma instalação | Redefinido em 02/09: cada cliente terá a sua instalação. O trabalho passa a ser versionar e instalar bem. |
 | Envio de fotos, áudios e documentos pelo WhatsApp | Hoje o agente só troca texto. |
 
 ---
@@ -250,6 +304,8 @@ demonstrável. Cada item volta ao plano nas fases seguintes.
 >   instalações). O que precisamos é versionar e instalar bem, não multi-cliente.
 > - O roadmap integra o backlog da empresa (Project "SETA — Backlog") e as decisões que
 >   só os sócios podem tomar, com dono, prazo e consequência.
+> - **08/09:** a Fase A está integrada no histórico principal (falta só o servidor); as
+>   Fases B e C viraram os marcos M1 a M4 do roadmap, que traz a situação de cada item.
 
 Quatro fases, nesta ordem. Só a primeira tem previsão de data — as demais dependem de
 decisões que ainda serão tomadas.
@@ -321,6 +377,10 @@ de operação.
 Esta merece destaque separado, porque é a primeira funcionalidade que **movimenta
 dinheiro** — e isso muda o nível de risco do produto.
 
+**Situação em 08/09:** o fluxo está construído e testado com o fornecedor de pagamentos
+em **modo de teste** (nenhuma cobrança real é emitida). As três perguntas ao fim desta
+seção continuam abertas — são a decisão D1 do roadmap, com prazo 27/09.
+
 **A oportunidade.** Hoje o agente informa que existe uma parcela vencida. Se ele
 puder enviar o link de pagamento junto, o atendimento deixa de ser informação e vira
 recebimento. Num negócio de crediário longo, com inadimplência relevante, esse é
@@ -363,7 +423,7 @@ conservador:
 | **Acesso ao sistema de gestão vivo do cliente-piloto** | Sem ele, a Fase C não começa | Depende de negociação comercial. Já temos vantagem: a cópia do banco está mapeada |
 | **Cobrança pelo WhatsApp movimenta dinheiro** | Muda o nível de risco do produto | Ver seção acima — decisão pendente dos sócios |
 | **Infraestrutura atual é um servidor pequeno de teste** | Suporta o protótipo, não suporta operação com volume | Dimensionar junto com a definição do piloto |
-| **Dados de cotistas reais e LGPD** | Obrigação legal a partir do primeiro cliente real | O mecanismo técnico já está em uso. Definir a política formal antes da Fase C, não durante |
+| **Dados de cotistas reais e LGPD** | Obrigação legal a partir do primeiro cliente real | O mecanismo técnico já está em uso e, desde 08/09, dados pessoais digitados nas conversas são anonimizados antes de sair. Falta a política formal e o contrato com o fornecedor de IA (D6 do roadmap, 27/09) |
 
 ---
 
