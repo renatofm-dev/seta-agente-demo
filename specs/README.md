@@ -32,15 +32,55 @@ autônomo sobre WhatsApp, rodando local (repo privado + homelab), fora da org se
 4. 008 → 010 → 011 e ensaio do roteiro.
 
 ## Depois da POC (012 em diante)
-| Spec | O que | Estado em 06/09/2026 |
+| Spec | O que | Estado em 08/09/2026 |
 |---|---|---|
-| 012 | Domínio de multipropriedade (corrige a 002 a partir do espelho real) | ✅ no `main` |
-| 013 | Disparos de template para a carteira (reverte o corte da 004) | ✅ código pronto — PR #59 |
-| 014 | Compra e cobrança pelo WhatsApp (PSP Asaas, ADR 0001) | ✅ código pronto — PR #59 |
-| 015 | Agente SDR para lead frio (alçada de 3%) | 🟡 base de dados — PR #60 |
-| 016+ | Conexão ao espelho real, embeddings, KB de produtos, release por cliente, operação, LGPD | planejadas |
+| 012 | Domínio de multipropriedade (corrige a 002 a partir do espelho real) | ✅ `main` (#50) |
+| 013 | Disparos de template para a carteira (reverte o corte da 004) | ✅ `main` (#59) |
+| 014 | Compra e cobrança pelo WhatsApp (PSP Asaas, ADR 0001) | ✅ `main` (#59) — PSP em modo de teste |
+| 015 / 015a | Agente SDR para lead frio: dados (#60) e núcleo (#64) | ✅ `main` — faltam 015b e 015c |
+| 016 | Anonimização do que sai para a LLM | ✅ `main` (#61) |
+| 017 | Relatório analítico de campanhas | ✅ `main` (#63) |
 
-A ordem, o calendário e as decisões pendentes estão em **[`docs/roadmap.md`](../docs/roadmap.md)**.
+A ordem, o calendário e as decisões pendentes estão em **[`docs/roadmap.md`](../docs/roadmap.md)**;
+o mapa técnico do que cada spec entregou está em
+**[`docs/dev/04-modulos-entregues.md`](../docs/dev/04-modulos-entregues.md)**.
+
+## Pré-specs (o que ainda vamos desenvolver)
+
+Escopo já desenhado, no mesmo formato, com o banner "Pré-spec" no topo e uma seção
+"Reaproveita" apontando o código que já existe. Viram spec quando entram no sprint. A
+numeração é a ordem de escrita, não de execução (015b e 015c executam antes das 018+; a 026
+executa em M2, antes de M4).
+
+| Pré-spec | Marco | Depende |
+|---|---|---|
+| [015b](015b-sdr-aprovacao-console.md) aprovar/recusar proposta no console | M1 | 015a |
+| [015c](015c-sdr-guardrail-percentual.md) percentual por extenso na raia SDR | M1 | 015a |
+| [026](026-backup-monitor-gitleaks.md) backup, monitor e gitleaks | M2 | — |
+| [018](018-espelho-real.md) conexão ao espelho real | M4 | D5 |
+| [019](019-embeddings-reais.md) embeddings reais | M4 | D8 |
+| [020](020-kb-produtos-e-cotas.md) KB de produtos e cotas | M4 | D5, 019 |
+| [021](021-release-por-cliente.md) release por cliente | M4 | D2 |
+| [022](022-operacao-minima.md) operação mínima | M4 | 026 |
+| [023](023-waba-do-cliente.md) WABA do cliente | M4 | D4, D7 |
+| [024](024-lgpd-retencao.md) LGPD: retenção e descarte | M4 | D6 |
+| [025](025-llm-on-prem.md) LLM dentro da rede do cliente | M4, só se D6 negar | D6 |
+| [027](027-asaas-producao.md) Asaas em produção | M4, só se D1 sim | D1, 024 |
+| [028](028-adaptador-seven.md) adaptador Seven (Winthor) | M5 | piloto |
+| [029](029-copiloto-cobranca.md) copiloto de cobrança | M5 | piloto |
+| [030](030-campanha-segmentada.md) campanha segmentada e opt-out | M5 | piloto |
+| [031](031-sdr-fase-2.md) SDR fase 2 | M5 | 015b, 023 |
+| [032](032-configuracao-pela-interface.md) configuração pela interface | M5 | 021 |
+| [033](033-midia-no-whatsapp.md) mídia no WhatsApp | M5 | piloto |
+| [034](034-multi-instancia.md) multi-instância | M5 | 021 |
+
+```
+M0 ─► 015b ─► P-27          026 ─► 022
+      015c
+D5 ─► 018 ─► 020 ◄─ 019 ◄─ D8
+D2 ─► 021      D4/D7 ─► 023      D6 ─► 024 ─► 027 ◄─ D1      D6(não) ─► 025
+018 · 019 · 020 · 021 · 022 · 023 · 024 ─► piloto ─► 028–034
+```
 
 ## Convenções
 - Toda fronteira valida com Zod. IDs UUIDv7. Logs pino estruturados com traceId.

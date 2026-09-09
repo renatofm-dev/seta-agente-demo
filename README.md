@@ -3,6 +3,9 @@
 POC do agente de atendimento autônomo da SETA (WhatsApp + ERP TS Explorer mock + HITL +
 skills com aprovação). As specs em `specs/` são a fonte de verdade; regras em `CLAUDE.md`.
 
+**Documentação de desenvolvimento:** [`docs/README.md`](docs/README.md) (visão geral,
+arquitetura, mapa do repositório, módulos entregues, como desenvolver, operação, o que falta).
+
 ## Dev
 
 ```sh
