@@ -32,7 +32,8 @@ análise). Um número fora do `contatos.yaml` é lead frio (raia SDR). Espere o 
 **WhatsApp real** (número de teste da Meta): `pnpm dev-whatsapp` faz o mesmo que `pnpm dev`
 e abre um túnel Cloudflare apontando o webhook **só do número de teste** para a sua máquina;
 `Ctrl+C` desfaz. Requer `WA_PHONE_NUMBER_ID`, `WA_ACCESS_TOKEN`, `WA_VERIFY_TOKEN` (ver
-[`meta-setup.md`](../meta-setup.md)). Para campanhas, `WA_WABA_ID`.
+[`meta-setup.md`](../meta-setup.md)). Para campanhas, `WA_WABA_ID`. Como o túnel e o override
+funcionam, passo a passo e diagnóstico: [`09-whatsapp-real-e-tunel.md`](09-whatsapp-real-e-tunel.md).
 
 **Pagamentos:** sem `ASAAS_API_KEY` o PSP é simulado e o drawer de Cobranças tem "Simular
 pagamento". Com o sandbox, ver [`asaas-setup.md`](../asaas-setup.md); o `dev-whatsapp`

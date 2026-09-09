@@ -150,5 +150,5 @@ tools/boundaries.spec.ts prova das regras do dependency-cruiser
 
 ```
 specs/        000–017 entregues; pré-specs do que falta; README com estado e grafo
-docs/         este conjunto (dev/), roadmap, status, guias operacionais, ADRs
+docs/         este conjunto (dev/01–09), roadmap, status, guias operacionais, ADRs
 ```
