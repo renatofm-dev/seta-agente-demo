@@ -262,8 +262,8 @@ contra o `guardrailPreco` **sem alterá-lo**).
 | ID | Item | Tam | Dono | Depende | Aceite |
 |---|---|---|---|---|---|
 | **P-24** (015a) | ✅ **no `main` (#64)** — **Núcleo.** `packages/sdr`: máquina `qualificacao → apresentacao → oferta → agendamento → encerrado`, parser determinístico, `interpretarResposta` (LLM só como fallback), piso em bps com aritmética inteira. Migração 0015: `lead`, `fluxo_sdr`, `proposta_sdr` (gravada **antes** do envio). `catalog/comercial/estoque_disponivel.yaml` + `condicoes_cota.yaml` com `price_source: true` (campo já existe em `CatalogEntrySchema:55`, nunca usado) devolvendo `valor_tabela_centavos` **e** `valor_minimo_centavos`; piso via param `source: session` (conferir `KNOWN_SESSION_PARAMS`). `buildToolSpecs` filtra por escopo da tool, não por vínculo (`tools.ts:38`). `comprar_cota` **sem vínculo** inicia o fluxo (`turno-handler.ts:405`, mesma forma de `pagar → fluxo` em `:400`); com vínculo, mantém escalada. Trigger `desconto_acima_alcada` + ticket com a proposta. `modulos.sdr`, `personaSdr`, env `SDR_DESCONTO_MAX_BPS=300`, `SDR_FLUXO_EXPIRA_MIN`, `SDR_MAX_PROPOSTAS_DIA` | G → fatiar se passar de 1 sprint | CTO | #60 mergeado | Número sem vínculo entra no fluxo e o trace sai com `tools_expostas` não-nulo; número com vínculo continua escalando `interesse_compra`; oferta na tabela e no piso passam o guardrail; abaixo do piso escala; testes no molde de `cobranca.integration.test.ts` |
-| **P-25** (015b) | **Aprovar/recusar no console:** a tela de Leads com drawer já existe (console redesenhado, `leads-routes.ts` de leitura); faltam os endpoints de aprovar/recusar `desconto_acima_alcada` (molde: `cobrancas-routes.ts`), ligar os botões que hoje são a nota "chega com a 015b" e o lead receber a resposta | P–M | CTO | ✅ 015a | Humano aprova/recusa proposta acima da alçada pelo console e o lead recebe a resposta |
-| **P-26** (015c) | **Guardrail da raia SDR:** fecha a lacuna do percentual por extenso **sem tocar `preco.ts`** — hook próprio registrado só com `modulos.sdr`; inverte o teste "LACUNA" na raia SDR. Vocabulário proibido nos templates: `desconto`, `abatimento`, `cortesia`, `preço especial`, `condição especial`, `baixar o preço`, **`faço por`** | P | CTO | 015a | "aplico três por cento" escala na raia SDR; raia do cotista inalterada (teste) |
+| **P-25** ([015b](../specs/015b-sdr-aprovacao-console.md)) | **Aprovar/recusar no console:** a tela de Leads com drawer já existe (console redesenhado, `leads-routes.ts` de leitura); faltam os endpoints de aprovar/recusar `desconto_acima_alcada` (molde: `cobrancas-routes.ts`), ligar os botões que hoje são a nota "chega com a 015b" e o lead receber a resposta | P–M | CTO | ✅ 015a | Humano aprova/recusa proposta acima da alçada pelo console e o lead recebe a resposta |
+| **P-26** ([015c](../specs/015c-sdr-guardrail-percentual.md)) | **Guardrail da raia SDR:** fecha a lacuna do percentual por extenso **sem tocar `preco.ts`** — hook próprio registrado só com `modulos.sdr`; inverte o teste "LACUNA" na raia SDR. Vocabulário proibido nos templates: `desconto`, `abatimento`, `cortesia`, `preço especial`, `condição especial`, `baixar o preço`, **`faço por`** | P | CTO | 015a | "aplico três por cento" escala na raia SDR; raia do cotista inalterada (teste) |
 | **V-03** (gateway#34) | Templates do agente de vendas aprovados na Meta | P | Externo | — | Template aprovado; habilita prospecção ativa (M5) |
 | **P-27** | `docs/roteiro-demo.md` ganha o **Ato 6 — SDR** | P | CTO | 015a | Roteiro com as mensagens exatas e o plano B pelo simulador |
 
@@ -278,11 +278,11 @@ no repositório (premissa D9).
 | **P-29** | ✅ **08/09 (#64)** `compose.prod.yml` lê as senhas do `.env.prod`; **falta rotacionar** `app_owner`/`erp_ro` no homelab junto com o P-21 | P | Dev | Compose sem senha literal; homelab com senha nova; `deploy.sh` documenta |
 | **P-30** | ✅ **08/09 (#64)** `release.yml` só publica com CI verde (`needs: ci` ou workflow único) | P | Dev | Push com teste quebrado não gera imagem |
 | **P-31** | ✅ **08/09 (#64)** `.env.example` completo (6 variáveis faltando) | P | Dev | Script/diff `env.ts` × exemplo vazio; CI falha se divergir |
-| **I-12** (seta-gestao#17) | gitleaks em pre-commit + CI igual ao do gateway (gitleaks, audit) — backlog V2 §8 passo 5 | M | Dev | Hook ativo e documentado; CI com gitleaks/audit |
+| **I-12** (seta-gestao#17, [026](../specs/026-backup-monitor-gitleaks.md)) | gitleaks em pre-commit + CI igual ao do gateway (gitleaks, audit) — backlog V2 §8 passo 5 | M | Dev | Hook ativo e documentado; CI com gitleaks/audit |
 | **P-32** | ✅ **08/09 (#64)** `kb:ingest` remove documento cujo arquivo sumiu | P | Dev | Ingest com arquivo removido apaga `documento` + `chunk` |
 | **P-33** | ✅ **08/09 (#64)** Índice HNSW em migração (`0016`); `/` redireciona para `/inbox`; remover `turnoHandlerLog` e comentários "stub até lá"/"POC sem template" | P | Dev | Migração criada; `/` não é placeholder; grep limpo |
-| **P-34** | Backup automático do volume Postgres no homelab (cron + `pg_dumpall` + retenção) com **restore testado** | M | Dev | Restore em banco limpo reproduz KB, contatos e cobranças |
-| **I-04** (seta-gestao#10) | Monitor de disponibilidade cobre a plataforma: probe em `/healthz` + mensagem de teste periódica pelo simulador | M | Dev | Silêncio de 5 min alerta no `#dev-alertas` |
+| **P-34** ([026](../specs/026-backup-monitor-gitleaks.md)) | Backup automático do volume Postgres no homelab (cron + `pg_dumpall` + retenção) com **restore testado** | M | Dev | Restore em banco limpo reproduz KB, contatos e cobranças |
+| **I-04** (seta-gestao#10, [026](../specs/026-backup-monitor-gitleaks.md)) | Monitor de disponibilidade cobre a plataforma: probe em `/healthz` + mensagem de teste periódica pelo simulador | M | Dev | Silêncio de 5 min alerta no `#dev-alertas` |
 
 ## M3 — Decisões e pré-requisitos (S4–S7, paralelo; Dono Gestão/Externo)
 
@@ -305,28 +305,28 @@ campanhas** já foram entregues, então os itens abaixo começam na 018.
 
 | ID | Item | Tam | Dono | Depende | Aceite |
 |---|---|---|---|---|---|
-| **P-36** (spec 018) | **Conexão ao espelho real:** `ERP_DATABASE_URL` → `bali_tse`; validar as 7 views canônicas contra o espelho (012: "a integração é outra sessão"); `DbConnector` não muda; política de masking completa (003: "sem política completa" — hoje só `cnpj`, sem uso) | M–G | CTO | D5 | `titulos_atraso` de um contrato real bate com o TSE; nenhuma coluna de PII passa; `erp_ro` equivalente sem SELECT em tabela física |
-| **P-37** (spec 019) | **Embeddings reais:** `EMBEDDING_BASE_URL`/`EMBEDDING_API_KEY` separados no `AIProvider`; re-ingest KB + skills; `EMBEDDING_DIM` casado | M | CTO | D8 | `hybrid` com vetor; teste "híbrida supera lexical" da 008 volta a valer |
-| **P-38** (spec 020) | **KB de produtos e cotas + glossário na persona:** OURO/DIAMANTE × PREMIUM/MASTER/SPECIAL, modelos de uso (anual 1–3 períodos, bienal), UH, pontos por tier — a partir do espelho; validada na terça com o Bali | M | CTO + Externo | D5, P-37 | "o que é DIAMANTE PREMIUM?" responde com fonte; agente decodifica o retorno de `meu_produto`; sem PII no repo |
-| **P-39** (spec 021) | **Release por cliente** conforme D2: tags `vX.Y.Z`, imagem por versão, `configs/<cliente>/client.yaml` + `contatos.yaml` fora da imagem, staging (decisão M-03 do gateway) | M | Dev | D2 | `TAG=vX.Y.Z CLIENTE=bali ./deploy.sh` sobe o piloto; `/healthz` expõe a versão |
-| **P-40** (spec 022) | **Operação mínima:** rate limit em `/webhook` e `/webhooks/asaas`; rota de inspeção de dead-letter (hoje só log); segredos fora do `.env` (cofre — junto com D2); retenção de logs | M–G | Dev | P-28–P-30 | Fase C "preparar a operação" do status-do-projeto coberta item a item |
-| **P-41** (spec 023) | **WABA do cliente:** trocar o número de teste; submeter templates 013/014 como utility (D7) | P + espera | Externo + Dev | D4, D7 | Template aprovado; `WA_TEMPLATE_PAGAMENTO_CONFIRMADO` real |
-| **P-42** (spec 024) | **LGPD técnico:** retenção/descarte de `mensagem`, `trace_turno`, `evento_*` por política; `contato.documento` só com base legal (014: "em produção viria do cadastro") | M | Dev | D6 | Job de expurgo; documento não vem de YAML |
-| **P-35** (spec 025) | **Só se D6 negar:** vLLM on-prem — port já existe; validar tool calling do modelo; infra do cliente | G | CTO + Externo | D6 | `LLM_BASE_URL` interno; suíte do agente verde |
-| **P-43** | **Só se D1 sim:** Asaas produção — chave, webhook público, `documento` com base legal | M | Dev | D1, P-42 | Cobrança real paga no piloto |
+| **P-36** ([spec 018](../specs/018-espelho-real.md)) | **Conexão ao espelho real:** `ERP_DATABASE_URL` → `bali_tse`; validar as 7 views canônicas contra o espelho (012: "a integração é outra sessão"); `DbConnector` não muda; política de masking completa (003: "sem política completa" — hoje só `cnpj`, sem uso) | M–G | CTO | D5 | `titulos_atraso` de um contrato real bate com o TSE; nenhuma coluna de PII passa; `erp_ro` equivalente sem SELECT em tabela física |
+| **P-37** ([spec 019](../specs/019-embeddings-reais.md)) | **Embeddings reais:** `EMBEDDING_BASE_URL`/`EMBEDDING_API_KEY` separados no `AIProvider`; re-ingest KB + skills; `EMBEDDING_DIM` casado | M | CTO | D8 | `hybrid` com vetor; teste "híbrida supera lexical" da 008 volta a valer |
+| **P-38** ([spec 020](../specs/020-kb-produtos-e-cotas.md)) | **KB de produtos e cotas + glossário na persona:** OURO/DIAMANTE × PREMIUM/MASTER/SPECIAL, modelos de uso (anual 1–3 períodos, bienal), UH, pontos por tier — a partir do espelho; validada na terça com o Bali | M | CTO + Externo | D5, P-37 | "o que é DIAMANTE PREMIUM?" responde com fonte; agente decodifica o retorno de `meu_produto`; sem PII no repo |
+| **P-39** ([spec 021](../specs/021-release-por-cliente.md)) | **Release por cliente** conforme D2: tags `vX.Y.Z`, imagem por versão, `configs/<cliente>/client.yaml` + `contatos.yaml` fora da imagem, staging (decisão M-03 do gateway) | M | Dev | D2 | `TAG=vX.Y.Z CLIENTE=bali ./deploy.sh` sobe o piloto; `/healthz` expõe a versão |
+| **P-40** ([spec 022](../specs/022-operacao-minima.md)) | **Operação mínima:** rate limit em `/webhook` e `/webhooks/asaas`; rota de inspeção de dead-letter (hoje só log); segredos fora do `.env` (cofre — junto com D2); retenção de logs | M–G | Dev | P-28–P-30 | Fase C "preparar a operação" do status-do-projeto coberta item a item |
+| **P-41** ([spec 023](../specs/023-waba-do-cliente.md)) | **WABA do cliente:** trocar o número de teste; submeter templates 013/014 como utility (D7) | P + espera | Externo + Dev | D4, D7 | Template aprovado; `WA_TEMPLATE_PAGAMENTO_CONFIRMADO` real |
+| **P-42** ([spec 024](../specs/024-lgpd-retencao.md)) | **LGPD técnico:** retenção/descarte de `mensagem`, `trace_turno`, `evento_*` por política; `contato.documento` só com base legal (014: "em produção viria do cadastro") | M | Dev | D6 | Job de expurgo; documento não vem de YAML |
+| **P-35** ([spec 025](../specs/025-llm-on-prem.md)) | **Só se D6 negar:** vLLM on-prem — port já existe; validar tool calling do modelo; infra do cliente | G | CTO + Externo | D6 | `LLM_BASE_URL` interno; suíte do agente verde |
+| **P-43** ([spec 027](../specs/027-asaas-producao.md)) | **Só se D1 sim:** Asaas produção — chave, webhook público, `documento` com base legal | M | Dev | D1, P-42 | Cobrança real paga no piloto |
 
 ## M5 — Depois do piloto (sem sprint)
 
 | ID | Item | Origem |
 |---|---|---|
-| **P-19** (#58) | Adaptador Winthor (Seven): ressuscitar catálogo/views da spec 002 do histórico git como `catalog/seven/` + `erp-mock` alternativo | backlog V2 |
+| **P-19** (#58, [028](../specs/028-adaptador-seven.md)) | Adaptador Winthor (Seven): ressuscitar catálogo/views da spec 002 do histórico git como `catalog/seven/` + `erp-mock` alternativo | backlog V2 |
 | **P-11** (seta-gestao#2) | Discovery do agente Seven | backlog V2 |
-| **E-03 / P-09c** (seta-gestao#1) | Copiloto de cobrança Bali no WhatsApp — a 014 é a semente | backlog V2 |
-| **E-04 restante** | P-13c opt-out/lista de supressão; segmentação via catálogo; webhook `message_template_status_update` | spec 013 "fora de escopo" |
-| **SDR fase 2** | Prospecção ativa (013 + V-03); raia do cotista (upgrade/cross-sell); parcelamento | spec 015 "fora de escopo" |
-| **Fase D** | Config/KB/catálogo pela interface; gestão de usuários; mídia; multi-instância (`debounce.ts:77`, #33); papel `marketing` (013) | status-do-projeto |
+| **E-03 / P-09c** (seta-gestao#1, [029](../specs/029-copiloto-cobranca.md)) | Copiloto de cobrança Bali no WhatsApp — a 014 é a semente | backlog V2 |
+| **E-04 restante** ([030](../specs/030-campanha-segmentada.md)) | P-13c opt-out/lista de supressão; segmentação via catálogo; webhook `message_template_status_update` | spec 013 "fora de escopo" |
+| **SDR fase 2** ([031](../specs/031-sdr-fase-2.md)) | Prospecção ativa (013 + V-03); raia do cotista (upgrade/cross-sell); parcelamento | spec 015 "fora de escopo" |
+| **Fase D** | Config/KB/catálogo pela interface e usuários ([032](../specs/032-configuracao-pela-interface.md)); mídia ([033](../specs/033-midia-no-whatsapp.md)); multi-instância (`debounce.ts:77`, #33 — [034](../specs/034-multi-instancia.md)); papel `marketing` (013) | status-do-projeto |
 | — | `RE_PERCENTUAL` na raia do cotista, se 015c não bastar | PR #60 |
-| **Relatórios fase 2** | Envio automático (Slack/e-mail), opt-outs no funil, competência financeira por vencimento da parcela, relatórios de cobrança e de atendimento | spec 017 "fora de escopo" |
+| **Relatórios fase 2** ([030](../specs/030-campanha-segmentada.md)) | Envio automático (Slack/e-mail), opt-outs no funil, competência financeira por vencimento da parcela, relatórios de cobrança e de atendimento | spec 017 "fora de escopo" |
 
 ## Reconciliação com o backlog V2 (Project 6 "SETA — Backlog")
 
