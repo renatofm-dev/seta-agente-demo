@@ -14,10 +14,12 @@ sudo mkswap /swapfile && sudo swapon /swapfile
 echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
 
 # 2. clone raso (só para compose/infra/docs — nada é buildado aqui)
-git clone --depth 1 git@github.com:renatofm-dev/seta-agente.git && cd seta-agente
+git clone --depth 1 git@github.com:SETA-IA/seta-agente.git && cd seta-agente
 
-# 3. login no GHCR com PAT (classic) de escopo read:packages
-echo "$GHCR_PAT" | docker login ghcr.io -u renatofm-dev --password-stdin
+# 3. login no GHCR com PAT (classic) de escopo read:packages, de um usuário
+#    membro da org SETA-IA (as imagens são pacotes da org; se a org exigir SSO,
+#    autorize o PAT para ela em Settings → Developer settings → Tokens)
+echo "$GHCR_PAT" | docker login ghcr.io -u <seu-usuario-github> --password-stdin
 
 # 4. Caddy do host: importar o site block e recarregar
 #    (ajuste o caminho no Caddyfile)
@@ -127,6 +129,9 @@ retry — os testes de integração da 004 cobrem exatamente isso.
 - P-30: a imagem só é publicada no GHCR depois do workflow `ci` passar no `main`
   (`release.yml` dispara por `workflow_run`); `workflow_dispatch` republica um
   SHA à mão.
+- Desde a transferência do repo para a org (09/09/2026) as imagens são
+  `ghcr.io/seta-ia/seta-agente-{server,console}` (owner em minúsculas — o
+  registry exige). As antigas em `ghcr.io/renatofm-dev/…` ficam como histórico.
 - Imagem do server carrega o monorepo compilado com install prod filtrado
   (`--filter @seta/server...`) — gorda o bastante para rodar seed/ingestão
   dentro do container, pequena o bastante para a CX23.

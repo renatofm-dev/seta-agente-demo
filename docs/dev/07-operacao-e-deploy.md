@@ -19,8 +19,10 @@ free em repo privado), então a disciplina é do fluxo de PR.
 - Dispara **depois** do workflow `ci` terminar com sucesso no `main` (`workflow_run`), no SHA
   que o CI validou — push com teste quebrado não gera imagem (P-30). `workflow_dispatch`
   republica um SHA à mão.
-- Duas imagens no GHCR: `ghcr.io/<owner>/seta-agente-server` e `…-console`, com as tags
-  `latest` e `<sha>`. Numeração de versão (`vX.Y.Z`) chega com a spec 021.
+- Duas imagens no GHCR: `ghcr.io/seta-ia/seta-agente-server` e `…-console`, com as tags
+  `latest` e `<sha>` (o owner vem de `github.repository_owner` em minúsculas — o registry
+  exige; antes da transferência para a org, 09/09/2026, eram `ghcr.io/renatofm-dev/…`).
+  Numeração de versão (`vX.Y.Z`) chega com a spec 021.
 - `infra/docker/server.Dockerfile`: build com `tsc -b`, runtime só com deps de produção,
   **baixa o modelo NER na build** (o container sobe sem rede para o Hugging Face).
 - `infra/docker/console.Dockerfile`: `next build` standalone; `SERVER_INTERNAL_URL` é lido

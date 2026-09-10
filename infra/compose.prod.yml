@@ -33,7 +33,7 @@ services:
     # sem ports: o banco só existe na rede interna do compose
 
   server:
-    image: ghcr.io/renatofm-dev/seta-agente-server:${TAG:-latest}
+    image: ghcr.io/seta-ia/seta-agente-server:${TAG:-latest}
     restart: unless-stopped
     depends_on:
       db:
@@ -59,7 +59,7 @@ services:
     logging: *logging
 
   console:
-    image: ghcr.io/renatofm-dev/seta-agente-console:${TAG:-latest}
+    image: ghcr.io/seta-ia/seta-agente-console:${TAG:-latest}
     restart: unless-stopped
     depends_on:
       - server
