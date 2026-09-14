@@ -144,7 +144,7 @@ Variáveis (todas em `.env.example`):
 | `TSE_SIM_DATABASE_URL` | papel `tse_sim` no banco `erp_mock` — **não** o `erp_ro`, que é só-leitura, nem o admin |
 | `TSE_SIM_USERS` | usuários aceitos pelo `/token` do simulador |
 | `TSE_SIM_PAINEL_ESCOPO` | `token` ou `qualquer` (ver §6) |
-| `TSE_BASE_URL` | o que o **produto** chama: o simulador em dev, o TSE real na 041 |
+| `TSE_BASE_URL` | o que o **produto** chama: `http://localhost:3010` em dev, `http://tse-sim:3010` no homelab (rede interna do compose, sem porta publicada), o TSE real na 041 |
 | `TSE_USERNAME` / `TSE_PASSWORD` | credencial de operador — **poder de escrita financeira e de venda**; cofre e rotação, nunca `.env` commitado |
 | `ERP_LEITURA` | `sql` (default) ou `api` |
 | `ERP_CONCILIACAO` | `auto` (default), `on` ou `off` — ver [036](../specs/036-erp-escrita-baixa.md) |

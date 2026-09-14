@@ -156,6 +156,10 @@ violadoras em `tools/fixtures/`. Acrescentar `import '@seta/erp-api-tse'` em
 `SENHAS_DE_DEV` (boot recusa valor de dev em produção) e nas regras do gitleaks da 026 — é
 credencial de operador com poder de escrita financeira e de venda.
 
+No homelab, `TSE_BASE_URL: http://tse-sim:3010` no serviço `server` do `infra/compose.prod.yml` —
+o simulador que a 035 implanta, alcançável só pela rede interna do compose. Na 041 essa variável
+passa a apontar para o TSE de verdade, e é a única coisa que muda.
+
 ## Fora de escopo
 - Catálogo por HTTP (037) — as leituras continuam por SQL nesta fatia, **de propósito**.
 - Reserva (038), lead/venda (039), 2ª via (040).

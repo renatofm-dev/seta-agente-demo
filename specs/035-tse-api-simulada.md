@@ -127,12 +127,35 @@ campo), e a lista `PENDENTES` de rotas não implementadas só encolhe.
 - `.env.example` + `apps/server/test/env.test.ts` continuam batendo (bloco `TSE_SIM_*`).
 - `docs/dev/05-dados-e-integracoes.md`: a seção do ERP ganha o terceiro papel e a API.
 
+### Deploy no homelab — o simulador sobe com a demo
+A demo que a SETA mostra roda em `seta.outerlab.com.br`, e o `erp_mock` **já está lá** (o
+`infra/postgres/init/01-init.sh` cria o banco e o `infra/docker/demo-seed.sh` o popula dentro do
+container do server). Sem o simulador implantado, tudo que esta frente constrói — baixa real,
+reserva, 2ª via — existiria só na máquina de quem programou, e a demo continuaria lendo por SQL.
+
+O custo é pequeno e o caminho já existe:
+
+- `infra/docker/tse-sim.Dockerfile`, no molde de `server.Dockerfile`.
+- Serviço `tse-sim` no `infra/compose.prod.yml` **sem `ports:`** — igual ao `db`, só na rede
+  interna do compose. O Caddy não ganha rota nenhuma para ele, e o `server` o alcança em
+  `http://tse-sim:3010`. O simulador **nunca** é acessível da internet.
+- Duas linhas na matriz do `.github/workflows/release.yml` (`nome: tse-sim`).
+- `docs/deploy-homelab.md`: uma seção dizendo o que o serviço é e por que ele não tem porta
+  publicada.
+
+O `server.Dockerfile` já faz `COPY infra/erp-mock ./apps/server/erp-mock` (`:34`), então os
+`04/05/06-sim-*.sql` novos entram na imagem sem alteração — o `demo-seed.sh` os aplica junto com o
+resto.
+
+> O `compose.prod.yml` em `main` referencia `ghcr.io/renatofm-dev/…`; a branch
+> `chore/owner-seta-ia` troca para `SETA-IA`. Seguir o que estiver no `main` no dia e não resolver
+> esse conflito aqui.
+
 ## Fora de escopo
 - O adapter HTTP, o catálogo por HTTP e qualquer mudança em `apps/server` (036/037).
 - Endpoints de `OperadorSistema` e `Reports` — 30 rotas que nenhuma jornada da demo usa.
 - Reserva (038), lead/venda (039), 2ª via em PDF (040).
-- `infra/docker/tse-sim.Dockerfile`, `compose.prod.yml` e release do sim — fatia própria, só se a
-  demo for para a VPS.
+- Apontar o simulador para dado de cliente — ele **é** o dublê; o TSE real é a 041.
 
 ## Premissas
 - A coleção é o contrato: sem ambiente do fornecedor, **forma vale mais que valor**. O teste de
@@ -159,6 +182,10 @@ campo), e a lista `PENDENTES` de rotas não implementadas só encolhe.
   não acha e-mail nem CPF do fornecedor.
 - Teste de contrato verde, com `PENDENTES` explícito; teste de escrita verde rodando **duas vezes
   seguidas** (prova a ressincronização dos `setval`).
+- **Deploy:** `TAG=<sha> docker compose -f infra/compose.prod.yml --env-file .env.prod up -d` sobe
+  o `tse-sim` no homelab, e `docker compose exec server curl -s http://tse-sim:3010/healthz`
+  responde. De fora, `curl https://seta.outerlab.com.br/token` e `:3010` **não** alcançam nada —
+  o serviço não publica porta e o Caddy não tem rota para ele.
 - `pnpm lint && pnpm test && pnpm build` verdes.
 
 ## O que dá para demonstrar ao final
