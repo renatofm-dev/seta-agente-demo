@@ -64,6 +64,34 @@ desenvolvimento) quando entra no sprint. Datas, donos e decisões estão no
 | [033 — mídia no WhatsApp](../../specs/033-midia-no-whatsapp.md) | fotos, áudio e documentos |
 | [034 — multi-instância](../../specs/034-multi-instancia.md) | N réplicas do server; debounce fora do processo |
 
+### Demo ponta a ponta (frente própria, aberta em 14/09/2026)
+
+Integrar a **API HTTP do TS Explorer** ao lado do SQL, para a demo fazer o que o espelho
+read-only nunca fará: baixar o pagamento no ERP, reservar, registrar lead e venda, mandar a 2ª via
+em PDF. Decisão no [ADR 0002](../adr/0002-integracao-erp-por-api.md); contrato da API em
+[`tse-api-setup.md`](../tse-api-setup.md).
+
+| Pré-spec | O que fecha | Depende |
+|---|---|---|
+| [035 — simulador da API do TSE](../../specs/035-tse-api-simulada.md) | `apps/tse-sim` sobre o `erp_mock`, fiel aos 89 exemplos da coleção, com escrita | — |
+| [036 — escrita no ERP e baixa real](../../specs/036-erp-escrita-baixa.md) | `ErpWriter`, `erp_escrita`, `FILA_ERP_BAIXA`; a conciliação vira compensação do que está em voo | 035 |
+| [037 — catálogo por HTTP](../../specs/037-catalogo-http.md) | `source: sql \| api` no catálogo; `financeiro.*` lendo do TSE | 035, 036 |
+| [038 — reserva de utilização](../../specs/038-reserva-utilizacao.md) | o agente reserva de verdade (hoje a persona diz que não sabe) | 035, 036 |
+| [039 — SDR escreve no ERP](../../specs/039-sdr-escreve-no-erp.md) | lead vira casal e proposta aprovada vira contrato | 036, 015b |
+| [040 — 2ª via em PDF](../../specs/040-segunda-via-pdf.md) | envio de documento no WhatsApp (fatia fina da 033) | 036, 033 |
+| [041 — TSE real](../../specs/041-tse-real-e-fim-da-conciliacao.md) | aponta para um TSE de verdade e apaga `conciliacao.ts` | 037, ambiente do TSE |
+
+**Duas coisas que quem executar precisa saber antes de abrir o editor:**
+
+- O **catálogo híbrido é o estado final**, não transição: `contrato.minha_cota`,
+  `contrato.status_cancelamento` e `atendimento.meu_chamado` não têm endpoint equivalente na
+  coleção. A [018](../../specs/018-espelho-real.md) continua sendo o caminho do piloto.
+- **Premissa aberta e bloqueante da 037:** `PainelDoCliente/*` pode resolver escopo pelo dono do
+  token — e o agente atende N cotistas com uma credencial só. Pergunta ao fornecedor antes da 037.
+
+**Impacto de capacidade:** esta frente consome os dois desenvolvedores. Enquanto ela roda,
+#69–#72 (M2, vence 27/09) e os itens de M4 não avançam — ver [`roadmap.md`](../roadmap.md).
+
 ## Grafo de dependências
 
 ```mermaid

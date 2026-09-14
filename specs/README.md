@@ -73,8 +73,36 @@ executa em M2, antes de M4).
 | [032](032-configuracao-pela-interface.md) configuração pela interface | M5 | 021 |
 | [033](033-midia-no-whatsapp.md) mídia no WhatsApp | M5 | piloto |
 | [034](034-multi-instancia.md) multi-instância | M5 | 021 |
+| [035](035-tse-api-simulada.md) simulador da API do TSE | **Demo** | — |
+| [036](036-erp-escrita-baixa.md) escrita no ERP e baixa real | **Demo** | 035 |
+| [037](037-catalogo-http.md) catálogo por HTTP (`source: api`) | **Demo** | 035, 036 |
+| [038](038-reserva-utilizacao.md) reserva de utilização pelo agente | **Demo** | 035, 036 |
+| [039](039-sdr-escreve-no-erp.md) SDR escreve lead e venda no ERP | **Demo** | 036, 015b |
+| [040](040-segunda-via-pdf.md) 2ª via de boleto em PDF | **Demo** | 036, 033 (fatia fina) |
+| [041](041-tse-real-e-fim-da-conciliacao.md) TSE real e fim da conciliação | **Demo** | 037, ambiente do TSE |
+
+### A frente "demo ponta a ponta" (035–041)
+
+Aberta em 14/09/2026: uma demo utilizável pela SETA, com pagamento em sandbox de gateway real, um
+ambiente que simula o TSE pela **API** do fornecedor e o agente atendendo de ponta a ponta. A
+decisão está no [ADR 0002](../docs/adr/0002-integracao-erp-por-api.md) e o contrato da API em
+[`docs/tse-api-setup.md`](../docs/tse-api-setup.md).
+
+Duas coisas que valem para quem for executar:
+
+- **O catálogo híbrido (`source: sql | api`) é o estado final, não uma transição.**
+  `contrato.minha_cota`, `contrato.status_cancelamento` e `atendimento.meu_chamado` **não têm
+  endpoint** na coleção do fornecedor. A [018](018-espelho-real.md) segue necessária.
+- **Premissa aberta e bloqueante da 037:** `PainelDoCliente/*` pode resolver escopo pelo dono do
+  token, e o agente atende N cotistas com uma credencial. Resolver com o fornecedor antes de
+  começar a 037.
 
 ```
+035 ─► 036 ─┬─► 037 ─► 041
+            ├─► 038
+            ├─► 039 ◄─ 015b
+            └─► 040 ◄─ 033
+
 M0 ─► 015b ─► P-27          026 ─► 022
       015c
 D5 ─► 018 ─► 020 ◄─ 019 ◄─ D8

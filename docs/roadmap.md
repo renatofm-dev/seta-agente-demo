@@ -39,6 +39,13 @@ as decisões listadas na seção "Decisões" sejam tomadas até o fim de setembr
 | **M3 — Decisões e pré-requisitos** | até 04/10 | Cliente-piloto, WhatsApp comercial, acesso ao banco, LGPD, pagamentos — nada disso é código | ⏳ nenhuma decisão registrada ainda; D9 vence em 13/09 |
 | **M4 — Pronto para o piloto** | até 18/10 | Conectado ao banco real do cliente, com operação mínima e versão identificada | ⏳ não iniciado (gated por M3) |
 | **M5 — Depois do piloto** | sem data | Segunda vertical (Seven), copiloto de cobrança, configuração pela interface | — |
+| **Demo ponta a ponta** | S5–S9 | Pagamento em sandbox de gateway real, ambiente simulando o TSE pela **API** do fornecedor, e o agente fechando o ciclo — inclusive a baixa no ERP | 🆕 aberta em 14/09; specs [035–041](../specs/README.md); [ADR 0002](adr/0002-integracao-erp-por-api.md) |
+
+**Frente nova, e o que ela custa (14/09).** A demo ponta a ponta entrou por decisão do Renato e
+**consome os dois desenvolvedores de S5 a S9**. Consequência direta, registrada aqui para não
+virar surpresa: **#69–#72 (M2, vence 27/09) e os itens de M4 não avançam nesse período**. Se o
+piloto de 19/10 for inegociável, ou a demo encolhe, ou o CTO assume 035/036 por spec + Claude Code
+(a premissa D9 dizia o contrário: specs = CTO, itens P/M = dev).
 
 **Uma mudança de rumo registrada aqui:** o relatório de 31/08 previa, como estágio 3,
 "uma plataforma que atende vários resorts ao mesmo tempo". O briefing da empresa de
@@ -164,6 +171,7 @@ fotos, áudios e documentos.
 | **D7** | A Meta passa a cobrar mensagens de serviço em **outubro de 2026**: quais modelos viram "utilidade", custo projetado por cliente (já no backlog como P-20, prazo 30/09) | CTO | 30/09 | Custo surpresa em outubro nas duas linhas de produto |
 | **D8** | Fornecedor de busca semântica (embeddings) — o atual não oferece | CTO | 20/09 | A base de conhecimento continua buscando só por palavras; piora conforme cresce |
 | **D9** | **Quem constrói a plataforma.** Premissa: as especificações continuam com o CTO usando Claude Code (foi assim que 15 saíram em ~8 dias); o dev pleno entra pelos itens de infraestrutura do M2 | CTO | 13/09 | O calendário dos marcos muda |
+| **D10** | **A API do TS Explorer resolve escopo por token ou por contrato?** `PainelDoCliente/*` pode devolver só os contratos do **dono do token** — e o nosso agente atende N cotistas com **uma** credencial de integração. Pergunta pronta para enviar em [`tse-api-setup.md` §6](tse-api-setup.md). Vale também perguntar se existe ambiente de homologação | CTO + fornecedor | 27/09 | A [037](../specs/037-catalogo-http.md) não pode começar; leitura financeira por API fica sem caminho confirmado (plano B: `Relatorios/ObterJsonDadosRelatorioComParametros`) |
 
 ## Riscos que mudam o roadmap
 
