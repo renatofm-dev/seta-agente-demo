@@ -1,7 +1,7 @@
 import { type Candidato, formatarReais, textoPago } from '@seta/cobranca';
 import { newTraceId } from '@seta/observability';
 import type { OutboundGateway } from '@seta/wa-meta';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, isNull } from 'drizzle-orm';
 import type { PgBoss } from 'pg-boss';
 import type { Logger } from 'pino';
 import { z } from 'zod';
@@ -93,7 +93,8 @@ export async function processarEventoPsp(deps: EventosDeps, eventoId: string): P
   if (!ev || ev.processadoEm) return;
   const body = EventoPspBodySchema.safeParse(ev.payload);
   if (!body.success) {
-    await concluir(deps, eventoId, 'payload inválido');
+    // terminal: o payload está gravado e não muda — reprocessar nunca resolveria.
+    await concluir(deps, eventoId, 'payload inválido', true);
     return;
   }
   const { event, payment } = body.data;
@@ -126,15 +127,51 @@ export async function processarEventoPsp(deps: EventosDeps, eventoId: string): P
     await concluir(deps, eventoId, null);
   } catch (err) {
     await concluir(deps, eventoId, err instanceof Error ? err.message.slice(0, 500) : String(err));
-    throw err; // pg-boss re-tenta (o evento continua com processado_em preenchido? não — ver concluir)
+    throw err; // pg-boss re-tenta; `concluir` deixou processado_em nulo, então o retry passa de novo
   }
 }
 
-async function concluir(deps: EventosDeps, eventoId: string, erro: string | null) {
+/**
+ * Fecha o evento. Erro comum deixa `processado_em` nulo — é o que o torna
+ * "pendente" e elegível ao reprocesso do console (042). `terminal` marca o
+ * erro que reprocessar jamais resolveria, preservando a mensagem.
+ */
+async function concluir(
+  deps: EventosDeps,
+  eventoId: string,
+  erro: string | null,
+  terminal = false,
+) {
   await deps.db
     .update(eventoPsp)
-    .set({ processadoEm: erro ? null : new Date(), erro })
+    .set({ processadoEm: erro && !terminal ? null : new Date(), erro })
     .where(eq(eventoPsp.id, eventoId));
+}
+
+/**
+ * Reenfileira um evento pendente (042). A guarda de concorrência é o próprio
+ * UPDATE condicional: só reenfileira quem continua com `processado_em` nulo,
+ * então dois cliques simultâneos geram um job só. Limpar `erro` no mesmo
+ * UPDATE dá o sinal de "tentando de novo"; se falhar, `concluir` reescreve.
+ */
+export async function reenfileirarEventoPsp(
+  deps: Pick<EventosDeps, 'db' | 'boss'>,
+  eventoId: string,
+): Promise<'reenfileirado' | 'ja-processado' | 'inexistente'> {
+  const [alvo] = await deps.db
+    .update(eventoPsp)
+    .set({ erro: null })
+    .where(and(eq(eventoPsp.id, eventoId), isNull(eventoPsp.processadoEm)))
+    .returning({ id: eventoPsp.id });
+  if (!alvo) {
+    const [ev] = await deps.db
+      .select({ id: eventoPsp.id })
+      .from(eventoPsp)
+      .where(eq(eventoPsp.id, eventoId));
+    return ev ? 'ja-processado' : 'inexistente';
+  }
+  await deps.boss.send(FILA_COBRANCA_EVENTO, { eventoId });
+  return 'reenfileirado';
 }
 
 async function mudarStatus(db: Db, id: string, status: CobrancaRow['status'], motivo?: string) {

@@ -28,11 +28,11 @@ Asaas devolve ao criar a cobrança; o código do botão é o copia-e-cola que
 
 | | Estado |
 |---|---|
-| Port `PaymentProvider`, adapter Asaas, erros tipados | ✅ pronto, nunca exercitado contra a API real |
+| Port `PaymentProvider`, adapter Asaas, erros tipados | ✅ exercitado contra o sandbox real (042) |
 | Máquina de estados, teto de HITL, referência idempotente | ✅ pronto |
-| Webhook do Asaas autenticado e idempotente | ✅ pronto, nunca recebeu evento de verdade |
+| Webhook do Asaas autenticado e idempotente | ✅ recebendo evento real pelo túnel; evento preso tem reprocesso (042) |
 | Conciliação (compensa o ERP read-only) | ✅ pronto |
-| Console › Cobranças, aprovar, recusar, simular | ✅ pronto |
+| Console › Cobranças, aprovar, recusar, simular | ✅ pronto — simular agora é barrado em produção (042) |
 | Envio de template sem janela de 24 h | ⚠️ só corpo de texto — sem header e sem botão |
 | Cadastro e sync de template na WABA | ✅ pronto, exige `WA_WABA_ID` (ausente) |
 | Disparo em lote com funil entregue/lido | ✅ pronto, variáveis globais ao disparo |
@@ -41,26 +41,37 @@ Asaas devolve ao criar a cobrança; o código do botão é o copia-e-cola que
 
 ## As três etapas
 
+A **042 foi entregue em 15/09/2026** (PR #20) — o que ela expôs está no fim da
+[spec](../specs/042-asaas-sandbox-real.md) e no diagnóstico do
+[`asaas-setup.md`](asaas-setup.md). Restam duas:
+
 | Etapa | O que fecha | Depende | Issue |
 |---|---|---|---|
-| [042 — Asaas de verdade no sandbox](../specs/042-asaas-sandbox-real.md) | o PSP deixa de ser simulado: cobrança emitida, paga e conciliada contra a API real | conta sandbox | #11 |
 | [043 — template de pagamento com PIX](../specs/043-template-pagamento-pix.md) | o WhatsApp manda o template do cliente, com link no corpo e código PIX no botão | 042, `WA_WABA_ID` | — |
 | [044 — cobrança proativa](../specs/044-cobranca-proativa.md) | a plataforma abre a conversa com quem deve, e o ciclo fecha sozinho até o "pagamento confirmado" | 042, 043 | — |
 
 A ordem não é negociável: a 043 precisa de uma cobrança real para ter link e PIX de verdade
-no template, e a 044 precisa das duas para ter o que disparar.
+no template — e agora tem —, e a 044 precisa das duas para ter o que disparar.
 
-### 042 — Asaas de verdade no sandbox
+### 042 — Asaas de verdade no sandbox ✅ 15/09/2026
 
-Ligar a chave não é código — é `.env` e o webhook publicado pelo túnel, que
-`tools/dev-whatsapp.sh` já sabe registrar e desligar. O código que esta etapa escreve é o
-que a primeira validação real cobra:
+Ligar a chave não foi código — foi `.env` e o webhook publicado pelo túnel, que
+`tools/dev-whatsapp.sh` já sabia registrar e desligar. O código veio do que a primeira
+validação real cobrou:
 
-- **reprocessar evento que falhou.** Hoje `evento_psp.processado_em` só é preenchido quando
-  não houve erro, e a reentrega do Asaas bate no `onConflictDoNothing` por id — o evento
-  fica parado para sempre, sem rota de retry. Com PSP simulado isso nunca apareceu.
-- **`simular-pagamento` não pode existir em produção.** Hoje a guarda é `DEV_SIMULATOR`;
-  com chave real, o botão chama `receiveInCash` de verdade.
+- **reprocessar evento que falhou.** `evento_psp.processado_em` só era preenchido quando
+  não houve erro, e a reentrega do Asaas batia no `onConflictDoNothing` por id — o evento
+  ficava parado para sempre. Agora a tela de Cobranças conta os pendentes e a lista
+  (`GET /api/console/eventos-psp?pendente=true`) é a única superfície que alcança os
+  órfãos, com botão de reprocesso.
+- **`simular-pagamento` não pode existir em produção.** A guarda era só `DEV_SIMULATOR`;
+  agora exige também `psp.ambiente !== 'producao'`, computado no server para o console não
+  duplicar a regra.
+- **e três coisas que ninguém tinha previsto:** a chave do Asaas começa com `$` e o
+  `dev-whatsapp.sh` sourceia o `.env` pelo shell (sem aspas, o webhook não registrava, em
+  silêncio); o id de evento do Asaas contém `&`; e o `post()` do console mandava
+  `content-type: application/json` sem corpo, o que já quebrava *Aprovar* e *Simular
+  pagamento* com 500. Detalhes no fim da [spec](../specs/042-asaas-sandbox-real.md).
 
 ### 043 — template de pagamento com PIX
 
@@ -96,8 +107,8 @@ Nada aqui anda sem estas quatro coisas, e nenhuma delas depende do time de desen
 
 | O quê | Onde | Trava |
 |---|---|---|
-| Conta sandbox do Asaas e chave de API | [`asaas-setup.md`](asaas-setup.md) | 042 |
-| CPF do titular no vínculo (`documento` no `contatos.yaml`) | o Asaas exige `cpfCnpj` e o ERP não expõe CPF ao papel de leitura | 042 |
+| ~~Conta sandbox do Asaas e chave de API~~ | [`asaas-setup.md`](asaas-setup.md) | ✅ feito (042) |
+| ~~CPF do titular no vínculo (`documento` no `contatos.yaml`)~~ | o Asaas exige `cpfCnpj` e o ERP não expõe CPF ao papel de leitura | ✅ feito (042) |
 | `WA_WABA_ID` e o nome exato do template aprovado | [`meta-setup.md`](meta-setup.md) | 043 |
 | Templates submetidos na categoria **utility** | a Meta pode recategorizar para marketing | 043, 044 |
 

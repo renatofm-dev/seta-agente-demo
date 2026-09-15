@@ -40,6 +40,7 @@ autônomo sobre WhatsApp, rodando local (repo privado + homelab), fora da org se
 | 015 / 015a | Agente SDR para lead frio: dados (#60) e núcleo (#64) | ✅ `main` — faltam 015b e 015c |
 | 016 | Anonimização do que sai para a LLM | ✅ `main` (#61) |
 | 017 | Relatório analítico de campanhas | ✅ `main` (#63) |
+| 042 | Asaas de verdade no sandbox (PSP deixa de ser simulado) | ✅ `main` (#20) |
 
 A ordem, o calendário e as decisões pendentes estão em **[`docs/roadmap.md`](../docs/roadmap.md)**;
 o mapa técnico do que cada spec entregou está em
@@ -80,8 +81,7 @@ executa em M2, antes de M4).
 | [039](039-sdr-escreve-no-erp.md) SDR escreve lead e venda no ERP | **Demo** | 036, 015b |
 | [040](040-segunda-via-pdf.md) 2ª via de boleto em PDF | **Demo** | 036, 033 (fatia fina) |
 | [041](041-tse-real-e-fim-da-conciliacao.md) TSE real e fim da conciliação | **Demo** | 037, ambiente do TSE |
-| [042](042-asaas-sandbox-real.md) Asaas de verdade no sandbox | **Pagamentos** | conta sandbox |
-| [043](043-template-pagamento-pix.md) template de pagamento com PIX | **Pagamentos** | 042, `WA_WABA_ID` |
+| [043](043-template-pagamento-pix.md) template de pagamento com PIX | **Pagamentos** | ✅042, `WA_WABA_ID` |
 | [044](044-cobranca-proativa.md) cobrança proativa | **Pagamentos** | 042, 043 |
 
 ### A frente "demo ponta a ponta" (035–041)
@@ -107,11 +107,10 @@ já tem aprovado na WABA — card com o valor, link de pagamento no corpo e bot�
 PIX. O roadmap da frente está em
 [`docs/roadmap-pagamentos-whatsapp.md`](../docs/roadmap-pagamentos-whatsapp.md).
 
-O código da 014 não precisa mudar para falar com o Asaas real: o provedor é escolhido pela
-presença de `ASAAS_API_KEY`. O que falta é operacional (conta, chave, CPF do titular) mais o que
-a primeira execução verdadeira cobra — reprocesso de evento que falhou e a guarda do
-`simular-pagamento`. Do lado do WhatsApp, `packages/wa-meta` só monta template de corpo com
-texto: header e botão são a 043.
+A **042 foi entregue em 15/09/2026**: o PSP fala com o sandbox de verdade, cobrança emitida é
+paga por webhook real e conciliada, evento preso tem reprocesso pelo console, e
+`simular-pagamento` é barrado em produção. Do lado do WhatsApp, `packages/wa-meta` só monta
+template de corpo com texto: header e botão são a 043.
 
 **A 043 começa descobrindo, não codando.** O JSON do template aprovado, lido da Graph API, é a
 especificação; o preview do WhatsApp Manager não é prova do formato do payload.
@@ -122,7 +121,7 @@ especificação; o preview do WhatsApp Manager não é prova do formato do paylo
             ├─► 039 ◄─ 015b
             └─► 040 ◄─ 033
 
-042 ─► 043 ─► 044          (042 ─► 027 ◄─ D1)
+042✅ ─► 043 ─► 044         (042 ─► 027 ◄─ D1)
 
 M0 ─► 015b ─► P-27          026 ─► 022
       015c

@@ -17,6 +17,7 @@ import type { Db } from './db/index.js';
 import { disparosRoutes } from './disparos-routes.js';
 import type { Env } from './env.js';
 import { cobrancasRoutes } from './pagamentos/cobrancas-routes.js';
+import { eventosPspRoutes } from './pagamentos/eventos-routes.js';
 import type { PagamentosRepo } from './pagamentos/repo.js';
 import { webhookPspRoutes } from './pagamentos/webhook-routes.js';
 import { relatoriosRoutes } from './relatorios-routes.js';
@@ -147,6 +148,11 @@ export function buildApp({
           auth: consoleDeps.auth,
           repo: pagamentos.repo,
           psp: pagamentos.psp,
+        });
+        app.register(eventosPspRoutes, {
+          db: wa.db,
+          boss: wa.boss,
+          auth: consoleDeps.auth,
         });
       }
       if (consoleDeps.registry) {

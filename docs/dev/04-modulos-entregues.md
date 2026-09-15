@@ -1,4 +1,4 @@
-# 04 — Módulos entregues (specs 000–017)
+# 04 — Módulos entregues (specs 000–017, 042)
 
 Cada bloco diz o que a spec entrega, onde isso mora no código, como exercitar e o que ficou
 de fora por decisão. A spec em `specs/` continua sendo a fonte de verdade do comportamento;
@@ -21,12 +21,13 @@ aqui é o mapa.
 | 012 | Domínio de multipropriedade | #50 | ✅ |
 | #45/#46/#47 | Console WhatsApp Web, fusão de turno, HITL na fila | #59 | ✅ |
 | 013 | Disparos de template para a carteira | #59 | ✅ |
-| 014 | Compra e cobrança pelo WhatsApp | #59 | ✅ (PSP em modo de teste) |
+| 014 | Compra e cobrança pelo WhatsApp | #59 | ✅ (PSP real no sandbox pela 042) |
 | 015 / 015a | SDR para lead frio: dados + núcleo | #60, #64 | ✅ núcleo · 015b/015c faltam |
 | 016 | Anonimização do que sai para a LLM | #61 | ✅ |
 | M2 (P-28..P-33) | Blindagem para exposição | #64 | ✅ |
 | Console redesenhado | Design "Console SETA" em todas as telas | #64 | ✅ |
 | 017 | Relatório analítico de campanhas | #63 | ✅ |
+| 042 | Asaas de verdade no sandbox | #20 | ✅ |
 
 ## 000 — Escopo da POC
 - **Entrega:** define a demo vendável: WhatsApp real, ERP mockado, HITL, skills com
@@ -214,3 +215,22 @@ aqui é o mapa.
 - **Como exercitar:** `relatorio-campanhas.integration.test.ts`, `apps/console/test/relatorio.test.ts`.
 - **Ficou de fora:** opt-outs, envio automático, competência financeira, relatórios de
   cobrança e atendimento (030).
+
+## 042 — Asaas de verdade no sandbox
+- **Entrega:** o PSP deixa de ser simulado — cobrança emitida, paga e conciliada contra a
+  API real do Asaas (validado em 15/09/2026: `pay_yjpuup1ic7tn42tb`, dois webhooks pelo
+  túnel, baixa e conciliação). Reprocesso de evento do PSP preso
+  (`GET /api/console/eventos-psp?pendente=true`, `POST …/:id/reprocessar` com guarda de
+  concorrência em SQL), contagem de pendentes e painel no console; `simular-pagamento`
+  passa a exigir ambiente diferente de produção, não só `DEV_SIMULATOR`.
+- **Onde está:** `apps/server/src/pagamentos/eventos-routes.ts` (novo),
+  `pagamentos/eventos.ts` (`reenfileirarEventoPsp`, `concluir(..., terminal)`),
+  `pagamentos/cobrancas-routes.ts` (`simuladorAtivo`, `eventosPspPendentes`),
+  `apps/console/app/(console)/cobrancas/eventos-psp.tsx` (novo) e `page.tsx`,
+  `apps/console/lib/console-api.ts`.
+- **Como exercitar:** `asaas-sandbox.integration.test.ts` (ciclo real com `fetchFn` fake
+  roteado, reaproveitamento por referência, 401/reentrega, 404 em produção) e os dois casos
+  `042:` em `cobranca.integration.test.ts`. Contra o Asaas de verdade:
+  `pnpm dev-whatsapp` + `docs/asaas-setup.md`.
+- **Ficou de fora:** produção e chave de produção (027), estorno ativo pela plataforma,
+  eventos fora dos sete assinados, baixa no ERP (036), template de PIX no WhatsApp (043).

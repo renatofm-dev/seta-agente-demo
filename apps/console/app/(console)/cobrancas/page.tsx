@@ -21,6 +21,7 @@ import { dataCurta, dataHoraCurta, hora, nomeExibicao, reaisDeCentavos } from '@
 import { METODO_COBRANCA, STATUS_COBRANCA } from '@/lib/rotulos';
 import { cn } from '@/lib/utils';
 import { useInstalacao, useResumo } from '../layout';
+import { PainelEventosPsp } from './eventos-psp';
 
 /**
  * Cobranças (014 + design 5.4): KPIs, filtros, tabela e painel lateral com
@@ -206,13 +207,31 @@ function DrawerCobranca({
             {detalhe.eventos.map((e) => (
               <div
                 key={e.id}
-                className="flex justify-between gap-2 rounded-[9px] border border-line bg-surface-2 px-2.5 py-2 font-mono text-[11px] text-text-2"
+                className="flex items-center justify-between gap-2 rounded-[9px] border border-line bg-surface-2 px-2.5 py-2 font-mono text-[11px] text-text-2"
               >
-                <span>{e.tipo}</span>
-                <span className="truncate text-text-3">
-                  {hora(e.recebidoEm)} · {e.id.slice(0, 12)}
-                  {e.erro ? ' · erro' : ''}
+                <span className="flex min-w-0 flex-col">
+                  <span>{e.tipo}</span>
+                  <span className="truncate text-text-3">
+                    {hora(e.recebidoEm)} · {e.processadoEm ? 'processado' : 'pendente'}
+                    {e.erro ? ` · ${e.erro}` : ''}
+                  </span>
                 </span>
+                {/* 042: evento com processado_em nulo ficaria preso para sempre. */}
+                {!e.processadoEm && (
+                  <Button
+                    variant="outline"
+                    size="xs"
+                    disabled={ocupado}
+                    onClick={() =>
+                      executar(
+                        () => api.reprocessarEventoPsp(e.id),
+                        'Evento reenfileirado — acompanhe o estado.',
+                      )
+                    }
+                  >
+                    Reprocessar
+                  </Button>
+                )}
               </div>
             ))}
           </div>
@@ -286,6 +305,7 @@ function CobrancasConteudo() {
   const [dados, setDados] = useState<CobrancasResposta | null>(null);
   const [filtro, setFiltro] = useState<Filtro>('todas');
   const [aviso, setAviso] = useState<string | null>(null);
+  const [verEventos, setVerEventos] = useState(false);
   const k = params.get('k');
 
   const recarregar = useCallback(() => {
@@ -301,6 +321,15 @@ function CobrancasConteudo() {
     return () => clearInterval(timer);
   }, [recarregar]);
 
+  const aoMudar = useCallback(
+    (msg: string | null) => {
+      setAviso(msg);
+      recarregar();
+      recarregarResumo();
+    },
+    [recarregar, recarregarResumo],
+  );
+
   const todas = dados?.cobrancas ?? [];
   const contagens = dados?.contagens ?? {};
   const conta = (f: Filtro) =>
@@ -314,6 +343,7 @@ function CobrancasConteudo() {
     [todas, filtro],
   );
   const item = k ? (todas.find((c) => c.id === k) ?? null) : null;
+  const pendentesPsp = dados?.eventosPspPendentes ?? 0;
   const fechar = useCallback(() => router.replace('/cobrancas'), [router]);
 
   const hoje = new Date();
@@ -358,6 +388,18 @@ function CobrancasConteudo() {
             nota={(contagens.falha ?? 0) > 0 ? 'precisa de ação' : 'nenhuma'}
           />
         </div>
+        {/* 042: evento do PSP que falhou não reaparece sozinho — a reentrega bate
+            na idempotência por id e nenhum job novo nasce. */}
+        {pendentesPsp > 0 && (
+          <p className="m-0 flex items-center gap-2 text-xs text-warn">
+            <Chip papel="warn">{pendentesPsp}</Chip>
+            {pendentesPsp === 1 ? 'evento do PSP não processado' : 'eventos do PSP não processados'}
+            <button type="button" className="underline" onClick={() => setVerEventos((v) => !v)}>
+              {verEventos ? 'esconder' : 'ver'}
+            </button>
+          </p>
+        )}
+        {verEventos && <PainelEventosPsp aoMudar={aoMudar} />}
         {dados?.psp === 'simulado' && (
           <p className="m-0 text-xs text-text-3">
             PSP simulado: links e códigos são fictícios. Configure ASAAS_API_KEY para o sandbox do
@@ -442,11 +484,7 @@ function CobrancasConteudo() {
             simuladorAtivo={dados?.simuladorAtivo ?? false}
             tetoCentavos={instalacao?.alcadas.tetoAprovacaoCentavos ?? null}
             aoFechar={fechar}
-            aoMudar={(msg) => {
-              setAviso(msg);
-              recarregar();
-              recarregarResumo();
-            }}
+            aoMudar={aoMudar}
           />
         </div>
       )}
