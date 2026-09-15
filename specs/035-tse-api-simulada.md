@@ -147,9 +147,9 @@ O `server.Dockerfile` já faz `COPY infra/erp-mock ./apps/server/erp-mock` (`:34
 `04/05/06-sim-*.sql` novos entram na imagem sem alteração — o `demo-seed.sh` os aplica junto com o
 resto.
 
-> O `compose.prod.yml` em `main` referencia `ghcr.io/renatofm-dev/…`; a branch
-> `chore/owner-seta-ia` troca para `SETA-IA`. Seguir o que estiver no `main` no dia e não resolver
-> esse conflito aqui.
+> Neste repositório o `compose.prod.yml` referencia `ghcr.io/renatofm-dev/seta-agente-demo-…` e o
+> `release.yml` deriva o nome do pacote do próprio repo. A branch `chore/owner-seta-ia`, herdada do
+> upstream, troca para `SETA-IA` — não resolver esse conflito aqui.
 
 ## Fora de escopo
 - O adapter HTTP, o catálogo por HTTP e qualquer mudança em `apps/server` (036/037).

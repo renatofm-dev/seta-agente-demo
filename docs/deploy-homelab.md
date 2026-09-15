@@ -14,7 +14,7 @@ sudo mkswap /swapfile && sudo swapon /swapfile
 echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
 
 # 2. clone raso (só para compose/infra/docs — nada é buildado aqui)
-git clone --depth 1 git@github.com:renatofm-dev/seta-agente.git && cd seta-agente
+git clone --depth 1 git@github.com:renatofm-dev/seta-agente-demo.git && cd seta-agente-demo
 
 # 3. login no GHCR com PAT (classic) de escopo read:packages
 echo "$GHCR_PAT" | docker login ghcr.io -u renatofm-dev --password-stdin

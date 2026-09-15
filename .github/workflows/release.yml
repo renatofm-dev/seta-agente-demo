@@ -46,7 +46,7 @@ jobs:
           file: ${{ matrix.dockerfile }}
           push: true
           tags: |
-            ghcr.io/${{ github.repository_owner }}/seta-agente-${{ matrix.nome }}:latest
-            ghcr.io/${{ github.repository_owner }}/seta-agente-${{ matrix.nome }}:${{ env.SHA }}
+            ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}-${{ matrix.nome }}:latest
+            ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}-${{ matrix.nome }}:${{ env.SHA }}
           cache-from: type=gha,scope=${{ matrix.nome }}
           cache-to: type=gha,scope=${{ matrix.nome }},mode=max

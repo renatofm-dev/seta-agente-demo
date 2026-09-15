@@ -54,7 +54,7 @@ Pré-requisitos: **Docker Desktop** rodando, **Node 24** e **pnpm 10** (`corepac
 versão pinada no `package.json`). Nenhuma chave é necessária para subir.
 
 ```sh
-git clone git@github.com:renatofm-dev/seta-agente.git && cd seta-agente
+git clone git@github.com:renatofm-dev/seta-agente-demo.git && cd seta-agente-demo
 pnpm install
 cp .env.example .env     # sem editar já funciona
 pnpm dev                 # Postgres (Docker) → tsc -b → migrações → server :3001 + console :3000
