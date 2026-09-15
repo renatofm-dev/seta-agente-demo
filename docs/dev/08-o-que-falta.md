@@ -92,6 +92,29 @@ em PDF. Decisão no [ADR 0002](../adr/0002-integracao-erp-por-api.md); contrato 
 **Impacto de capacidade:** esta frente consome os dois desenvolvedores. Enquanto ela roda,
 #69–#72 (M2, vence 27/09) e os itens de M4 não avançam — ver [`roadmap.md`](../roadmap.md).
 
+### Pagamentos: Asaas real e template de PIX (frente própria, aberta em 15/09/2026)
+
+Ligar o Asaas de verdade — o adapter existe e nunca foi exercitado — e mandar a cobrança pelo
+template já aprovado na WABA, com link de pagamento no corpo e botão de copiar o código PIX.
+Roadmap da frente em [`roadmap-pagamentos-whatsapp.md`](../roadmap-pagamentos-whatsapp.md).
+
+| Pré-spec | O que fecha | Depende |
+|---|---|---|
+| [042 — Asaas de verdade no sandbox](../../specs/042-asaas-sandbox-real.md) | o PSP deixa de ser simulado; reprocesso de evento com erro; `simular-pagamento` barrado em produção | conta sandbox, CPF no vínculo |
+| [043 — template de pagamento com PIX](../../specs/043-template-pagamento-pix.md) | `wa-meta` aprende header e botão; `WA_TEMPLATE_PAGAMENTO_CONFIRMADO` preenchido e testado | 042, `WA_WABA_ID` |
+| [044 — cobrança proativa](../../specs/044-cobranca-proativa.md) | variável por destinatário, seleção pelo catálogo, opt-out e ritmo de envio | 042, 043 |
+
+**Duas coisas que quem executar precisa saber antes de abrir o editor:**
+
+- **O escopo da 043 depende de uma descoberta.** O JSON do template aprovado, lido em
+  `GET /{WABA_ID}/message_templates`, é a especificação. Se for uma mensagem de *order details*
+  da Meta (pagamentos no Brasil) em vez de um template comum, o escopo cresce e a spec é
+  reescrita antes de começar.
+- **Opt-out não existe em nenhuma linha do repositório.** Envio proativo sem lista de supressão
+  é risco de qualidade do número na Meta — por isso ele é escopo da 044, não "depois".
+
+Esta frente para no sandbox. Produção é a [027](../../specs/027-asaas-producao.md), presa à D1.
+
 ## Grafo de dependências
 
 ```mermaid
@@ -106,6 +129,8 @@ flowchart TD
   D7{D7 Meta cobra} --> S023
   D6{D6 dado sai?} -->|não| S025[025 LLM on-prem]
   D6 --> S024[024 LGPD retenção]
+  S042[042 Asaas sandbox] --> S043[043 template PIX] --> S044[044 cobrança proativa]
+  S042 --> S027
   D1{D1 pagamentos} --> S027[027 Asaas produção]
   S024 --> S027
   S018 & S019 & S020 & S021 & S022 & S023 & S024 --> PILOTO((piloto S10))
@@ -121,6 +146,11 @@ flowchart TD
 | `packages/guardrails/src/preco.ts:23` | `RE_PERCENTUAL` exige dígito ("três por cento" passa); travado em teste | 015c |
 | `packages/query-catalog/src/masking.ts` | só o masker `cnpj`; política de masking incompleta | 018 |
 | `apps/server/src/boss.ts:13` | dead-letter só no log; sem inspeção nem reprocesso | 022 |
+| `apps/server/src/pagamentos/eventos.ts:133` | evento do PSP com erro fica com `processado_em` nulo e a reentrega não gera job — sem reprocesso | 042 |
+| `apps/server/src/pagamentos/cobrancas-routes.ts:210` | `simular-pagamento` guardado só por `DEV_SIMULATOR`, não pelo ambiente do PSP | 042 |
+| `packages/wa-meta/src/template.ts:176` | template só com corpo de texto: sem header, botão ou parâmetro nomeado | 043 |
+| `apps/server/src/wa/disparo.ts:79` | laço sequencial sem pausa, backoff ou retry; `disparo.variaveis` global ao disparo | 044 |
+| — | opt-out/supressão não existe; envio proativo sem ela é risco na Meta | 044 |
 | `apps/server/src/app.ts:81` | `/healthz` sem versão | 021 |
 | `apps/console/app/(console)/{disparos,ticket}` | rotas legadas que só redirecionam | remover quando nenhum link externo apontar |
 | `apps/console/test` | cobertura de UI baixa (só helpers puros) | teste de componente entra com a 032 |

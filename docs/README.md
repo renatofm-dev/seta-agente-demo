@@ -25,6 +25,10 @@ roadmap; o que é comportamento vive nas specs; o resto está nos guias abaixo.
   o escopo desenhado do que falta.
 - **Roadmap** — [`roadmap.md`](roadmap.md): marcos M0–M5, datas, decisões D1–D9 com dono e
   prazo, itens do backlog da empresa. Para os sócios (Parte 1) e para o time (Parte 2).
+- **Roadmap da frente de pagamentos** —
+  [`roadmap-pagamentos-whatsapp.md`](roadmap-pagamentos-whatsapp.md): ligar o Asaas de
+  verdade e mandar a cobrança pelo template com PIX (pré-specs 042–044). Uma frente só; o
+  calendário e as decisões continuam no roadmap geral.
 - **Status do projeto** — [`status-do-projeto.md`](status-do-projeto.md): fotografia de
   31/08 para os sócios, com a atualização de 08/09 no topo.
 - **Decisões de arquitetura** — [`adr/`](adr/): uma decisão por arquivo

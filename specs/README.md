@@ -80,6 +80,9 @@ executa em M2, antes de M4).
 | [039](039-sdr-escreve-no-erp.md) SDR escreve lead e venda no ERP | **Demo** | 036, 015b |
 | [040](040-segunda-via-pdf.md) 2ª via de boleto em PDF | **Demo** | 036, 033 (fatia fina) |
 | [041](041-tse-real-e-fim-da-conciliacao.md) TSE real e fim da conciliação | **Demo** | 037, ambiente do TSE |
+| [042](042-asaas-sandbox-real.md) Asaas de verdade no sandbox | **Pagamentos** | conta sandbox |
+| [043](043-template-pagamento-pix.md) template de pagamento com PIX | **Pagamentos** | 042, `WA_WABA_ID` |
+| [044](044-cobranca-proativa.md) cobrança proativa | **Pagamentos** | 042, 043 |
 
 ### A frente "demo ponta a ponta" (035–041)
 
@@ -97,11 +100,29 @@ Duas coisas que valem para quem for executar:
   token, e o agente atende N cotistas com uma credencial. Resolver com o fornecedor antes de
   começar a 037.
 
+### A frente "pagamentos" (042–044)
+
+Aberta em 15/09/2026: ligar o Asaas de verdade e mandar a cobrança pelo template que o cliente
+já tem aprovado na WABA — card com o valor, link de pagamento no corpo e botão de copiar o código
+PIX. O roadmap da frente está em
+[`docs/roadmap-pagamentos-whatsapp.md`](../docs/roadmap-pagamentos-whatsapp.md).
+
+O código da 014 não precisa mudar para falar com o Asaas real: o provedor é escolhido pela
+presença de `ASAAS_API_KEY`. O que falta é operacional (conta, chave, CPF do titular) mais o que
+a primeira execução verdadeira cobra — reprocesso de evento que falhou e a guarda do
+`simular-pagamento`. Do lado do WhatsApp, `packages/wa-meta` só monta template de corpo com
+texto: header e botão são a 043.
+
+**A 043 começa descobrindo, não codando.** O JSON do template aprovado, lido da Graph API, é a
+especificação; o preview do WhatsApp Manager não é prova do formato do payload.
+
 ```
 035 ─► 036 ─┬─► 037 ─► 041
             ├─► 038
             ├─► 039 ◄─ 015b
             └─► 040 ◄─ 033
+
+042 ─► 043 ─► 044          (042 ─► 027 ◄─ D1)
 
 M0 ─► 015b ─► P-27          026 ─► 022
       015c

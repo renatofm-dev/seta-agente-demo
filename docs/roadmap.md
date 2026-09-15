@@ -40,12 +40,21 @@ as decisões listadas na seção "Decisões" sejam tomadas até o fim de setembr
 | **M4 — Pronto para o piloto** | até 18/10 | Conectado ao banco real do cliente, com operação mínima e versão identificada | ⏳ não iniciado (gated por M3) |
 | **M5 — Depois do piloto** | sem data | Segunda vertical (Seven), copiloto de cobrança, configuração pela interface | — |
 | **Demo ponta a ponta** | S5–S9 | Pagamento em sandbox de gateway real, ambiente simulando o TSE pela **API** do fornecedor, e o agente fechando o ciclo — inclusive a baixa no ERP | 🆕 aberta em 14/09; specs [035–041](../specs/README.md); [ADR 0002](adr/0002-integracao-erp-por-api.md) |
+| **Pagamentos** | S5–S6 | O Asaas sai do simulado e a cobrança vai pelo template que o cliente já tem aprovado, com link e código PIX | 🆕 aberta em 15/09; pré-specs [042–044](../specs/README.md); [roadmap da frente](roadmap-pagamentos-whatsapp.md) |
 
 **Frente nova, e o que ela custa (14/09).** A demo ponta a ponta entrou por decisão do Renato e
 **consome os dois desenvolvedores de S5 a S9**. Consequência direta, registrada aqui para não
 virar surpresa: **#69–#72 (M2, vence 27/09) e os itens de M4 não avançam nesse período**. Se o
 piloto de 19/10 for inegociável, ou a demo encolhe, ou o CTO assume 035/036 por spec + Claude Code
 (a premissa D9 dizia o contrário: specs = CTO, itens P/M = dev).
+
+**Segunda frente, bem menor (15/09).** A frente de pagamentos existe porque o Asaas nunca foi
+ligado — o adapter está pronto e testado desde a 014, mas sem `ASAAS_API_KEY` o sistema roda no
+provedor simulado — e porque já existe um template de cobrança aprovado na WABA, com link de
+pagamento e botão de copiar o código PIX, que o código ainda não sabe montar. São três pré-specs
+(042–044) e o escopo está em [`roadmap-pagamentos-whatsapp.md`](roadmap-pagamentos-whatsapp.md).
+Ela **para no sandbox**: cobrança com dinheiro real continua sendo a 027, presa à D1. Ao contrário
+da demo do TSE, não depende de nenhuma decisão dos sócios para começar.
 
 **Uma mudança de rumo registrada aqui:** o relatório de 31/08 previa, como estágio 3,
 "uma plataforma que atende vários resorts ao mesmo tempo". O briefing da empresa de
