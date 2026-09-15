@@ -13,6 +13,7 @@ import { createPgConnector, type DbConnector } from '@seta/erp-connector';
 import { createLogger, createNoopObsEmitter } from '@seta/observability';
 import { createSimulatedPaymentProvider } from '@seta/payment-provider';
 import { createExecutor, type Executor, loadCatalog } from '@seta/query-catalog';
+import type { OutboundTemplate } from '@seta/wa-meta';
 import { asc, count, eq } from 'drizzle-orm';
 import { migrate } from 'drizzle-orm/node-postgres/migrator';
 import pg from 'pg';
@@ -85,6 +86,10 @@ let executor: Executor;
 let cookie = '';
 let fake = createFakeProvider();
 const psp = createSimulatedPaymentProvider();
+/** 043: templates que o gateway fake recebeu, por teste. */
+const templatesEnviados: OutboundTemplate[] = [];
+/** 043: o worker de eventos captura o env no registro — getter para trocar por teste. */
+let templateConfirmado: string | undefined;
 /** Mutável: os cenários de teto trocam o limite sem re-registrar o handler. */
 let envPagamentos: Env;
 
@@ -163,6 +168,24 @@ async function fluxoAteConfirmar(waId: string, escolha: string, metodo: string) 
   await turnoDe(waId, metodo);
   expect(await ultimaSaida()).toContain('Posso gerar o pagamento?');
   await turnoDe(waId, 'sim');
+}
+
+/** 043: corpo de webhook "pago" para uma cobrança já emitida. */
+function eventoPago(
+  c: { pspCobrancaId: string | null; valorCentavos: number; referenciaExterna: string },
+  id: string,
+) {
+  return {
+    id,
+    event: 'PAYMENT_RECEIVED',
+    payment: {
+      id: c.pspCobrancaId,
+      status: 'RECEIVED',
+      value: c.valorCentavos / 100,
+      externalReference: c.referenciaExterna,
+      paymentDate: '2026-09-15',
+    },
+  };
 }
 
 async function webhook(body: unknown, token = WEBHOOK_TOKEN) {
@@ -255,16 +278,32 @@ beforeAll(async () => {
     psp,
     logger,
     nomeCliente: clientConfig.nome,
+    env,
+    pixRecebedor: { merchantName: 'SETA TECH LTDA', key: 'chave-pix-teste', keyType: 'EVP' }, // 043
   });
+  // 043: o fake precisa REGISTRAR — sem isso não dá para asserir o ramo de
+  // template de `notificarPago`, que é o que os critérios 4 e 5 exigem.
   const gatewayFake = {
     async send() {
       return { waMessageId: 'wamid.x' };
     },
-    async sendTemplate() {
-      return { waMessageId: 'wamid.tpl' };
+    async sendTemplate(msg: OutboundTemplate) {
+      templatesEnviados.push(msg);
+      return { waMessageId: `wamid.tpl-${templatesEnviados.length}` };
     },
   };
-  await registerCobrancaEventoWorker({ db, boss, repo, gateway: gatewayFake, env, logger });
+  await registerCobrancaEventoWorker({
+    db,
+    boss,
+    repo,
+    gateway: gatewayFake,
+    env: {
+      get WA_TEMPLATE_PAGAMENTO_CONFIRMADO() {
+        return templateConfirmado;
+      },
+    },
+    logger,
+  });
 
   app = buildApp({
     env,
@@ -288,6 +327,8 @@ beforeAll(async () => {
 }, 60_000);
 
 beforeEach(async () => {
+  templatesEnviados.length = 0;
+  templateConfirmado = undefined;
   fake = createFakeProvider();
   envPagamentos = env;
   for (const fila of [FILA_DEBOUNCE, FILA_OUTBOX, FILA_COBRANCA_EMITIR, FILA_COBRANCA_EVENTO]) {
@@ -734,4 +775,51 @@ describe('spec 014 — compra e cobrança pelo WhatsApp', () => {
     const [sinal] = await db.select().from(sinalAprendizado);
     expect((sinal?.payload as { trigger?: string } | undefined)?.trigger).toBe('interesse_compra');
   });
+  it('043: janela ABERTA ⇒ confirmação em texto livre pelo outbox, sem template', async () => {
+    await fluxoAteConfirmar(WA_INADIMPLENTE, 'todas', '2');
+    await aguardar(async () => (await db.select().from(cobranca))[0]?.status === 'emitida');
+    const c = await cobrancaUnica();
+    expect((await webhook(eventoPago(c, 'evt_ja_1'))).statusCode).toBe(200);
+    await aguardar(async () => (await ultimaSaida()).includes('Pagamento confirmado'));
+    expect(templatesEnviados).toHaveLength(0);
+  }, 60_000);
+
+  it('043: janela FECHADA + modelo configurado ⇒ confirmação por template', async () => {
+    await fluxoAteConfirmar(WA_INADIMPLENTE, 'todas', '2');
+    await aguardar(async () => (await db.select().from(cobranca))[0]?.status === 'emitida');
+    const c = await cobrancaUnica();
+    // fecha a janela e liga o modelo só para este teste
+    await db
+      .update(conversa)
+      .set({ janelaExpiraEm: new Date(Date.now() - 60_000) })
+      .where(eq(conversa.id, c.conversaId));
+    templateConfirmado = 'pagamento_confirmado';
+
+    expect((await webhook(eventoPago(c, 'evt_jf_1'))).statusCode).toBe(200);
+    await aguardar(async () => templatesEnviados.length > 0);
+    expect(templatesEnviados[0]).toMatchObject({
+      nome: 'pagamento_confirmado',
+      idioma: 'pt_BR',
+      variaveis: ['R$ 4.623,00'],
+    });
+    // e a mensagem fica na thread, para o console mostrar o que o cotista viu
+    const msgs = await db.select().from(mensagem).where(eq(mensagem.conversaId, c.conversaId));
+    expect(msgs.some((m) => m.waMessageId?.startsWith('wamid.tpl-'))).toBe(true);
+  }, 60_000);
+
+  it('043: janela FECHADA e SEM modelo ⇒ nada é enviado e nada quebra (critério 5)', async () => {
+    await fluxoAteConfirmar(WA_INADIMPLENTE, 'todas', '2');
+    await aguardar(async () => (await db.select().from(cobranca))[0]?.status === 'emitida');
+    const c = await cobrancaUnica();
+    await db
+      .update(conversa)
+      .set({ janelaExpiraEm: new Date(Date.now() - 60_000) })
+      .where(eq(conversa.id, c.conversaId));
+    templateConfirmado = undefined;
+
+    expect((await webhook(eventoPago(c, 'evt_jf_2'))).statusCode).toBe(200);
+    // a baixa acontece do mesmo jeito — o aviso é que não sai
+    await aguardar(async () => (await db.select().from(cobranca))[0]?.status === 'paga');
+    expect(templatesEnviados).toHaveLength(0);
+  }, 60_000);
 });

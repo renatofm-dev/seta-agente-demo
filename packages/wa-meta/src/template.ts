@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { BotaoTemplateSchema, componenteDeBotao } from './order-details.js';
 
 /**
  * Telefone em E.164 sem o `+`. Vive AQUI (e não no index) porque este módulo
@@ -169,11 +170,27 @@ export const OutboundTemplateSchema = z.object({
   idioma: z.string().min(2).default('pt_BR'),
   /** Valores das variáveis posicionais, na ordem {{1}}..{{N}}. */
   variaveis: z.array(z.string().min(1).max(1024)).default([]),
+  /** 043: botão com payload estruturado (hoje só `order_details`). */
+  botao: BotaoTemplateSchema.optional(),
 });
 export type OutboundTemplate = z.infer<typeof OutboundTemplateSchema>;
 
-/** Corpo do POST /messages para um template (compartilhado pelos gateways). */
+/**
+ * Corpo do POST /messages para um template (compartilhado pelos gateways).
+ *
+ * A lista de componentes é montada e só entra no payload se tiver algo — sem
+ * variáveis e sem botão, a saída é byte a byte a de antes da 043, que é o que
+ * os templates só-corpo da 013 dependem.
+ */
 export function payloadDeTemplate(msg: OutboundTemplate): Record<string, unknown> {
+  const components: Record<string, unknown>[] = [];
+  if (msg.variaveis.length > 0) {
+    components.push({
+      type: 'body',
+      parameters: msg.variaveis.map((texto) => ({ type: 'text', text: texto })),
+    });
+  }
+  if (msg.botao) components.push(componenteDeBotao(msg.botao));
   return {
     messaging_product: 'whatsapp',
     to: msg.to,
@@ -181,16 +198,7 @@ export function payloadDeTemplate(msg: OutboundTemplate): Record<string, unknown
     template: {
       name: msg.nome,
       language: { code: msg.idioma },
-      ...(msg.variaveis.length > 0
-        ? {
-            components: [
-              {
-                type: 'body',
-                parameters: msg.variaveis.map((texto) => ({ type: 'text', text: texto })),
-              },
-            ],
-          }
-        : {}),
+      ...(components.length > 0 ? { components } : {}),
     },
   };
 }

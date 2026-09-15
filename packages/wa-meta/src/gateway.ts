@@ -108,7 +108,17 @@ export function createLogGateway(logger: LogGatewayLogger): OutboundGateway {
       seq += 1;
       const waMessageId = `sim-tpl-${Date.now()}-${seq}`;
       logger.info(
-        { to: valida.to, waMessageId, template: valida.nome, variaveis: valida.variaveis },
+        {
+          to: valida.to,
+          waMessageId,
+          template: valida.nome,
+          variaveis: valida.variaveis,
+          // 043: o modo log tem que mostrar o botão, senão diverge do real.
+          // O `code` do PIX fica de fora de propósito: é instrumento de
+          // pagamento e o log estruturado vai para arquivo.
+          botao: valida.botao?.tipo ?? null,
+          pedido: valida.botao?.orderDetails.referenceId ?? null,
+        },
         'template simulado (log-only)',
       );
       return { waMessageId };

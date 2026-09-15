@@ -1,7 +1,7 @@
 import { join } from 'node:path';
 import { loadClientConfig } from '@seta/client-config';
 import { createLogger } from '@seta/observability';
-import { JanelaFechadaError, signBody } from '@seta/wa-meta';
+import { JanelaFechadaError, type OutboundTemplate, signBody } from '@seta/wa-meta';
 import { count, eq } from 'drizzle-orm';
 import { migrate } from 'drizzle-orm/node-postgres/migrator';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
@@ -39,6 +39,8 @@ let env: Env;
 let db: Db;
 let closeDb: () => Promise<void>;
 let boss: Awaited<ReturnType<typeof startBoss>>;
+/** 043: templates que o outbox worker mandou ao cair no ramo de janela fechada. */
+const templatesEnviados: OutboundTemplate[] = [];
 let app: App;
 const turnosProcessados: TurnoPronto[] = [];
 
@@ -251,6 +253,11 @@ describe('outbox', () => {
           enviados.push(msg.body);
           return { waMessageId: `wamid.out-${enviados.length}` };
         },
+        // 043: o worker passa a ter alternativa quando a janela fecha
+        async sendTemplate(msg) {
+          templatesEnviados.push(msg);
+          return { waMessageId: `wamid.tpl-${templatesEnviados.length}` };
+        },
       },
     });
 
@@ -318,6 +325,70 @@ describe('outbox', () => {
     const [tk] = await db.select().from(ticket);
     expect(tk?.status).toBe('aguardando_humano');
     expect(tk?.motivoEscalonamento).toContain('janela');
+  }, 15_000);
+
+  it('043: janela fechada COM template na linha ⇒ reengaja sozinho, sem ticket', async () => {
+    const [conv] = await db
+      .insert(conversa)
+      .values({
+        id: '01990a5d-ac96-774b-bcce-b302099a8059',
+        waId: '5511999990006',
+        janelaExpiraEm: new Date(Date.now() - 1_000),
+      })
+      .returning();
+    if (!conv) throw new Error('setup incompleto');
+
+    await enqueueOutbound(
+      { db, boss },
+      {
+        conversaId: conv.id,
+        chave: 'cobranca:teste-043:1',
+        texto: 'Sua cobrança de R$ 1.141,00 está pronta.',
+        autor: 'bot',
+        template: {
+          nome: 'modelo_msg_pagamento_',
+          idioma: 'pt_BR',
+          variaveis: ['https://sandbox.asaas.com/i/abc'],
+          botao: {
+            tipo: 'order_details',
+            indice: 0,
+            orderDetails: {
+              referenceId: 'cob-1',
+              tipo: 'digital-goods',
+              totalCentavos: 114_100,
+              taxaCentavos: 0,
+              itens: [
+                { retailerId: '138', nome: 'Parcela 7/100', valorCentavos: 114_100, quantidade: 1 },
+              ],
+              pix: {
+                code: '00020101021226820014br.gov.bcb.pix',
+                merchantName: 'SETA TECH LTDA',
+                key: 'chave-pix',
+                keyType: 'EVP',
+              },
+            },
+          },
+        },
+      },
+    );
+
+    await aguardar(async () => {
+      const [linha] = await db
+        .select()
+        .from(outbox)
+        .where(eq(outbox.dedupeKey, 'bot:cobranca:teste-043:1'));
+      return linha?.status === 'enviada';
+    });
+    expect(templatesEnviados).toHaveLength(1);
+    expect(templatesEnviados[0]).toMatchObject({
+      to: '5511999990006',
+      nome: 'modelo_msg_pagamento_',
+    });
+    expect(templatesEnviados[0]?.botao?.orderDetails.totalCentavos).toBe(114_100);
+    // a thread mostra o texto que o cotista viu, e NENHUM ticket é aberto
+    const msgs = await db.select().from(mensagem).where(eq(mensagem.conversaId, conv.id));
+    expect(msgs.some((m) => m.texto.includes('R$ 1.141,00'))).toBe(true);
+    expect(await db.select().from(ticket)).toHaveLength(0);
   }, 15_000);
 
   it('#29: retries esgotados → linha vira `falha` e o ticket escala (dead-letter)', async () => {

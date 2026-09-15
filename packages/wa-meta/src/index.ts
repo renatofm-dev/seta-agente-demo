@@ -23,6 +23,16 @@ export {
   type OutboundGateway,
 } from './gateway.js';
 export {
+  type BotaoTemplate,
+  BotaoTemplateSchema,
+  type ItemPedido,
+  ItemPedidoSchema,
+  type OrderDetails,
+  OrderDetailsSchema,
+  PIX_KEY_TYPES,
+  type PixKeyType,
+} from './order-details.js';
+export {
   type InboundText,
   parseInboundTexts,
   parseStatuses,

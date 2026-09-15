@@ -6,8 +6,10 @@ import type { Logger } from 'pino';
 import { COBRANCA_RETRY_LIMIT, FILA_COBRANCA_EMITIR } from '../boss.js';
 import type { Db } from '../db/index.js';
 import { cobranca } from '../db/schema.js';
+import type { Env } from '../env.js';
 import { enqueueOutbound, enviarJobOutbound, inserirOutbound } from '../wa/outbox.js';
 import { escalarTicketCobranca, TRIGGER_FALHA_EMISSAO } from './escalar.js';
+import { montarBotaoPix, type PixRecebedor } from './order-details.js';
 import type { PagamentosRepo } from './repo.js';
 
 /**
@@ -25,6 +27,10 @@ export interface EmitirDeps {
   readonly logger: Logger;
   /** Nome do cliente (client.yaml) — vai na descrição da cobrança. */
   readonly nomeCliente: string;
+  /** 043: modelo com botão order_details; ausente ⇒ janela fechada vira ticket. */
+  readonly env: Pick<Env, 'WA_TEMPLATE_COBRANCA_PIX'>;
+  /** 043: recebedor do PIX (client.yaml); ausente ⇒ sem template de cobrança. */
+  readonly pixRecebedor: PixRecebedor | null;
 }
 
 export interface JobEmitir {
@@ -110,6 +116,17 @@ export async function processarEmissao(
     const pix = c.metodo === 'pix' ? await deps.psp.obterPix(cob.id) : null;
     const linha = c.metodo === 'boleto' ? await deps.psp.obterLinhaDigitavel(cob.id) : null;
 
+    const botao = montarBotaoPix(
+      { ...c, pixCopiaCola: pix?.payload ?? null, valorCentavos: c.valorCentavos },
+      titulos,
+      deps.pixRecebedor,
+    );
+    const modelo = deps.env.WA_TEMPLATE_COBRANCA_PIX;
+    const template =
+      botao && modelo
+        ? { nome: modelo, idioma: 'pt_BR', variaveis: [cob.urlFatura], botao }
+        : undefined;
+
     const textos = mensagensEmitida({
       metodo: c.metodo,
       valorCentavos: c.valorCentavos,
@@ -139,12 +156,16 @@ export async function processarEmissao(
           atualizadoEm: new Date(),
         })
         .where(eq(cobranca.id, c.id));
+      // 043: o template vai SÓ na linha 1. As linhas 2+ são o copia-e-cola cru,
+      // que já viaja dentro do order_details — anexar nelas abriria uma segunda
+      // conversa de template, cobrada, dizendo a mesma coisa.
       for (const [i, texto] of textos.entries()) {
         const r = await inserirOutbound(tx, {
           conversaId: c.conversaId,
           chave: `cobranca:${c.id}:${i + 1}`,
           texto,
           autor: 'bot',
+          ...(i === 0 && template ? { template } : {}),
         });
         if (r.outboxId) outboxIds.push(r.outboxId);
       }

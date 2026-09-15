@@ -34,6 +34,14 @@ limites:
 # 017: meta de conversão das campanhas (pagas ÷ entregues) — 30%
 campanhas:
   metaConversaoBps: 3000
+# 043: recebedor do PIX no order_details do template de cobrança. A chave e o
+# nome têm que ser os da conta que emite a cobrança no PSP — é o que o cotista
+# vê na tela de pagamento do WhatsApp.
+pagamentos:
+  pix:
+    merchantName: SETA TECH LTDA
+    key: b1080aa2-3265-4208-b7ec-eb691fb7bdd6
+    keyType: EVP
 guardrails:
   temasSensiveis:
     - jurídico

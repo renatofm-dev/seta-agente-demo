@@ -319,6 +319,8 @@ beforeAll(async () => {
     psp,
     logger,
     nomeCliente: clientConfig.nome,
+    env,
+    pixRecebedor: { merchantName: 'SETA TECH LTDA', key: 'chave-pix-teste', keyType: 'EVP' }, // 043
   });
   await registerCobrancaEventoWorker({
     db,
