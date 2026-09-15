@@ -1,5 +1,10 @@
 import { newTraceId } from '@seta/observability';
-import { JanelaFechadaError, type OutboundGateway } from '@seta/wa-meta';
+import {
+  JanelaFechadaError,
+  type OutboundGateway,
+  type OutboundTemplate,
+  OutboundTemplateSchema,
+} from '@seta/wa-meta';
 import { eq, sql } from 'drizzle-orm';
 import type { PgBoss } from 'pg-boss';
 import type { Logger } from 'pino';
@@ -48,6 +53,11 @@ export type OutboundItem =
       readonly chave: string;
       readonly texto: string;
       readonly autor: 'bot';
+      /**
+       * 043: template equivalente a este texto, usado se a janela fechar antes
+       * do envio. Sem ele, janela fechada continua virando ticket (014).
+       */
+      readonly template?: TemplateDaLinha;
     };
 
 /**
@@ -55,6 +65,15 @@ export type OutboundItem =
  * transação da checagem de pendentes). O job do worker é enviado à parte,
  * DEPOIS do commit, via enviarJobOutbound.
  */
+/**
+ * 043: o que a linha carrega para reenviar como template. É `Omit<...,'to'>`
+ * porque o destinatário sai da conversa no instante do envio, não da gravação.
+ */
+export type TemplateDaLinha = Omit<OutboundTemplate, 'to'>;
+
+/** JSONB é fronteira de entrada: valida na leitura, nunca confia na coluna. */
+const TemplateDaLinhaSchema = OutboundTemplateSchema.omit({ to: true });
+
 export async function inserirOutbound(
   db: Pick<Db, 'insert'>,
   item: OutboundItem,
@@ -74,6 +93,7 @@ export async function inserirOutbound(
       autor: item.autor ?? 'bot',
       atendenteId: semTurno && item.autor === 'atendente' ? item.atendenteId : null,
       texto: item.texto,
+      template: semTurno && item.autor !== 'atendente' ? (item.template ?? null) : null,
     })
     .onConflictDoNothing({ target: outbox.dedupeKey })
     .returning();
@@ -168,7 +188,39 @@ export async function enviarLinha(
   } catch (err) {
     if (err instanceof JanelaFechadaError) {
       // Envio LIVRE fora da janela de 24h não existe na Meta (só template aprovado — 013 usa
-      // nos disparos e no aviso de pagamento). Aqui marca a linha E o ticket: reengajar é humano.
+      // nos disparos e no aviso de pagamento).
+      // 043: se ESTA linha trouxe um template equivalente, o reengajamento é
+      // automático — é o único instante em que dá para decidir texto × template,
+      // porque a janela pode ter fechado depois do INSERT.
+      const template = TemplateDaLinhaSchema.safeParse(linha.template);
+      if (template.success) {
+        const { waMessageId } = await deps.gateway.sendTemplate({
+          ...template.data,
+          to: conv.waId,
+        });
+        await deps.db.transaction(async (tx) => {
+          await tx
+            .update(outbox)
+            .set({ status: 'enviada', waMessageId, atualizadoEm: new Date() })
+            .where(eq(outbox.id, outboxId));
+          await tx.insert(mensagem).values({
+            id: newTraceId(),
+            conversaId: conv.id,
+            direcao: 'out',
+            autor: linha.autor,
+            waMessageId,
+            texto: linha.texto,
+            status: 'enviada',
+            turnoId: linha.turnoId,
+          });
+        });
+        deps.logger.info(
+          { outboxId, waId: conv.waId, template: template.data.nome },
+          'janela fechada — reengajado por template',
+        );
+        return;
+      }
+      // sem template: comportamento da 014 — marca a linha E o ticket.
       await deps.db
         .update(outbox)
         .set({ status: 'janela_fechada', atualizadoEm: new Date() })

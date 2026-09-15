@@ -272,7 +272,16 @@ beforeAll(async () => {
 
   fake = asaasFake();
   psp = createAsaasProvider({ baseUrl: SANDBOX, apiKey: 'chave-sandbox', fetchFn: fake.fn });
-  deps = { db, boss, repo, psp, logger, nomeCliente: clientConfig.nome };
+  deps = {
+    db,
+    boss,
+    repo,
+    psp,
+    logger,
+    nomeCliente: clientConfig.nome,
+    env,
+    pixRecebedor: { merchantName: 'SETA TECH LTDA', key: 'chave-pix-teste', keyType: 'EVP' },
+  };
 
   const gatewayFake = {
     async send() {

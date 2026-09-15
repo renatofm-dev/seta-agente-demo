@@ -120,6 +120,13 @@
       "when": 1788891432235,
       "tag": "0016_relatorio-campanhas",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1789491782976,
+      "tag": "0017_template-pagamento-pix",
+      "breakpoints": true
     }
   ]
 }

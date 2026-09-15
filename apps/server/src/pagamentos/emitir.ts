@@ -6,9 +6,12 @@ import type { Logger } from 'pino';
 import { COBRANCA_RETRY_LIMIT, FILA_COBRANCA_EMITIR } from '../boss.js';
 import type { Db } from '../db/index.js';
 import { cobranca } from '../db/schema.js';
+import type { Env } from '../env.js';
 import { enqueueOutbound, enviarJobOutbound, inserirOutbound } from '../wa/outbox.js';
 import { escalarTicketCobranca, TRIGGER_FALHA_EMISSAO } from './escalar.js';
+import type { PixRecebedor } from './order-details.js';
 import type { PagamentosRepo } from './repo.js';
+import { montarTemplateCobranca } from './template-cobranca.js';
 
 /**
  * Worker de emissão (014): materializa a cobrança no PSP e manda o meio de
@@ -25,6 +28,16 @@ export interface EmitirDeps {
   readonly logger: Logger;
   /** Nome do cliente (client.yaml) — vai na descrição da cobrança. */
   readonly nomeCliente: string;
+  /** 043: modelos aprovados por método; ausente ⇒ janela fechada vira ticket. */
+  readonly env: Pick<
+    Env,
+    | 'WA_TEMPLATE_COBRANCA_PIX'
+    | 'WA_TEMPLATE_COBRANCA_BOLETO'
+    | 'WA_TEMPLATE_BOLETO_SEGUNDA_VIA'
+    | 'WA_TEMPLATE_COBRANCA_CARTAO'
+  >;
+  /** 043: recebedor do PIX (client.yaml); ausente ⇒ sem template de cobrança. */
+  readonly pixRecebedor: PixRecebedor | null;
 }
 
 export interface JobEmitir {
@@ -110,7 +123,7 @@ export async function processarEmissao(
     const pix = c.metodo === 'pix' ? await deps.psp.obterPix(cob.id) : null;
     const linha = c.metodo === 'boleto' ? await deps.psp.obterLinhaDigitavel(cob.id) : null;
 
-    const textos = mensagensEmitida({
+    const dados = {
       metodo: c.metodo,
       valorCentavos: c.valorCentavos,
       vencimento: cob.vencimento || c.vencimentoPsp,
@@ -118,8 +131,24 @@ export async function processarEmissao(
       urlBoleto: cob.urlBoleto,
       linhaDigitavel: linha?.linhaDigitavel ?? null,
       pixCopiaCola: pix?.payload ?? null,
+      // sempre primeira entrega do ponto de vista do cotista: `reaproveita` diz
+      // que o PSP já tinha a cobrança (retry de job), não que ele já a recebeu.
+      // O reenvio de verdade mora em `fluxo.ts`, e lá a janela está aberta por
+      // definição — quando existir reenvio fora da janela (040/044), é ele que
+      // passa `reenvio: true` e o montador escolhe `boleto_segunda_via`.
       reenvio: false,
-    });
+    };
+    const textos = mensagensEmitida(dados);
+    const template =
+      montarTemplateCobranca(dados, c, titulos, {
+        recebedor: deps.pixRecebedor,
+        nomes: {
+          pix: deps.env.WA_TEMPLATE_COBRANCA_PIX,
+          boleto: deps.env.WA_TEMPLATE_COBRANCA_BOLETO,
+          boletoSegundaVia: deps.env.WA_TEMPLATE_BOLETO_SEGUNDA_VIA,
+          cartao: deps.env.WA_TEMPLATE_COBRANCA_CARTAO,
+        },
+      }) ?? undefined;
 
     const outboxIds: string[] = [];
     await deps.db.transaction(async (tx) => {
@@ -139,12 +168,16 @@ export async function processarEmissao(
           atualizadoEm: new Date(),
         })
         .where(eq(cobranca.id, c.id));
+      // 043: o template vai SÓ na linha 1. As linhas 2+ são o copia-e-cola cru,
+      // que já viaja dentro do order_details — anexar nelas abriria uma segunda
+      // conversa de template, cobrada, dizendo a mesma coisa.
       for (const [i, texto] of textos.entries()) {
         const r = await inserirOutbound(tx, {
           conversaId: c.conversaId,
           chave: `cobranca:${c.id}:${i + 1}`,
           texto,
           autor: 'bot',
+          ...(i === 0 && template ? { template } : {}),
         });
         if (r.outboxId) outboxIds.push(r.outboxId);
       }

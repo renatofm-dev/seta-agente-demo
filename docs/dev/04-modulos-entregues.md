@@ -1,4 +1,4 @@
-# 04 — Módulos entregues (specs 000–017, 042)
+# 04 — Módulos entregues (specs 000–017, 042–043)
 
 Cada bloco diz o que a spec entrega, onde isso mora no código, como exercitar e o que ficou
 de fora por decisão. A spec em `specs/` continua sendo a fonte de verdade do comportamento;
@@ -28,6 +28,7 @@ aqui é o mapa.
 | Console redesenhado | Design "Console SETA" em todas as telas | #64 | ✅ |
 | 017 | Relatório analítico de campanhas | #63 | ✅ |
 | 042 | Asaas de verdade no sandbox | #20 | ✅ |
+| 043 | Template de pagamento com PIX (order_details) | #21 | ✅ |
 
 ## 000 — Escopo da POC
 - **Entrega:** define a demo vendável: WhatsApp real, ERP mockado, HITL, skills com
@@ -234,3 +235,22 @@ aqui é o mapa.
   `pnpm dev-whatsapp` + `docs/asaas-setup.md`.
 - **Ficou de fora:** produção e chave de produção (027), estorno ativo pela plataforma,
   eventos fora dos sete assinados, baixa no ERP (036), template de PIX no WhatsApp (043).
+
+## 043 — Template de pagamento com PIX (order_details)
+- **Entrega:** o WhatsApp manda a cobrança fora da janela de 24 h. O template aprovado usa
+  `ORDER_DETAILS` (WhatsApp Pay BR): link no corpo, e no botão um pedido com o copia-e-cola
+  do Asaas, `total_amount` e um item por título. Validado no aparelho em 15/09/2026 — o botão
+  abre o pagamento com valor e recebedor corretos. Também fecha os dois ramos do aviso de
+  "pagamento confirmado", que não tinham teste nenhum.
+- **Onde está:** `packages/wa-meta/src/order-details.ts` (novo, schema + builder do botão),
+  `template.ts` (`OutboundTemplate.botao`, `payloadDeTemplate`), `gateway.ts` (log),
+  `apps/server/src/pagamentos/order-details.ts` (novo, montador),
+  `apps/server/src/wa/outbox.ts` (coluna `template` + reengajamento no ramo de janela
+  fechada), `emitir.ts`, `packages/client-config` (`pagamentos.pix`), migração `0017`.
+- **Como exercitar:** `packages/wa-meta/test/template.test.ts` (payload literal + regressão
+  byte a byte), `apps/server/test/order-details.test.ts`, os casos `043:` em
+  `cobranca.integration.test.ts` e `wa.integration.test.ts`. Contra a Meta:
+  `docs/meta-setup.md` §7.
+- **Ficou de fora:** header de mídia (033); cadastrar template com botão pela plataforma e
+  trazer `components` do remoto (023); variável por destinatário e opt-out (044); dinheiro
+  de verdade (027).

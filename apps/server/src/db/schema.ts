@@ -85,6 +85,11 @@ export const outbox = pgTable('outbox', {
   /** #45: atendente autor da resposta manual (propagado à mensagem no envio). */
   atendenteId: text('atendente_id'),
   texto: text('texto').notNull(),
+  /**
+   * 043: template equivalente a este texto, alternativa quando a janela de 24h
+   * fecha. Nulo ⇒ comportamento da 014 (marca `janela_fechada` + ticket).
+   */
+  template: jsonb('template'),
   status: text('status', {
     enum: ['pendente', 'enviada', 'falha', 'janela_fechada'],
   })

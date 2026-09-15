@@ -150,6 +150,8 @@ await registerCobrancaEmitirWorker({
   psp,
   logger,
   nomeCliente: clientConfig.nome,
+  env,
+  pixRecebedor: clientConfig.pagamentos.pix ?? null, // 043
 });
 await registerCobrancaEventoWorker({ db, boss, repo: pagamentosRepo, gateway, env, logger });
 
@@ -175,6 +177,11 @@ try {
       // 014: confundir sandbox com produção é mandar cobrança de verdade
       psp: psp.nome === 'asaas' ? `asaas-${psp.ambiente}` : 'simulado',
       pagamentos: clientConfig.modulos.pagamentos,
+      // 043: sem modelo ou sem recebedor, janela fechada volta a virar ticket
+      templateCobranca:
+        env.WA_TEMPLATE_COBRANCA_PIX && clientConfig.pagamentos.pix
+          ? env.WA_TEMPLATE_COBRANCA_PIX
+          : 'off',
       sdr: clientConfig.modulos.sdr ? `alçada ${env.SDR_DESCONTO_MAX_BPS} bps` : false, // 015
     },
     'server no ar',

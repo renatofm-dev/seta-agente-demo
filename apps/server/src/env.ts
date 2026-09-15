@@ -83,6 +83,28 @@ export const EnvSchemaBase = z.object({
   /** Fluxo de cobrança sem resposta expira (minutos). */
   PAGAMENTO_FLUXO_EXPIRA_MIN: z.coerce.number().int().min(1).default(60),
   /** Modelo aprovado (013) para avisar "pagamento confirmado" fora da janela de 24h. */
+  /**
+   * 043: modelo aprovado com botão `order_details` para mandar a cobrança fora
+   * da janela de 24h. Ausente ⇒ janela fechada segue o comportamento da 014
+   * (outbox marca `janela_fechada` e escala ticket).
+   */
+  WA_TEMPLATE_COBRANCA_PIX: z
+    .string()
+    .regex(/^[a-z0-9_]+$/)
+    .optional(),
+  WA_TEMPLATE_COBRANCA_BOLETO: z
+    .string()
+    .regex(/^[a-z0-9_]+$/)
+    .optional(),
+  /** Reenvio de boleto já emitido — texto reconhece o envio anterior. */
+  WA_TEMPLATE_BOLETO_SEGUNDA_VIA: z
+    .string()
+    .regex(/^[a-z0-9_]+$/)
+    .optional(),
+  WA_TEMPLATE_COBRANCA_CARTAO: z
+    .string()
+    .regex(/^[a-z0-9_]+$/)
+    .optional(),
   WA_TEMPLATE_PAGAMENTO_CONFIRMADO: z
     .string()
     .regex(/^[a-z0-9_]+$/)

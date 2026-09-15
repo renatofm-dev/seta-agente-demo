@@ -41,6 +41,24 @@ export const ClientConfigSchema = z.object({
       metaConversaoBps: z.number().int().min(0).max(10_000).default(3000),
     })
     .default({ metaConversaoBps: 3000 }),
+  /**
+   * 043: recebedor PIX que vai no `order_details` do template de cobrança.
+   * Mora aqui, e não no `.env`, porque é identidade do cliente e não segredo —
+   * uma chave PIX existe para ser divulgada. A 023 torna isso por-cliente
+   * trocando de YAML, sem mexer em código. Ausente ⇒ o template de cobrança
+   * não é montado e o fluxo segue pelo caminho de texto da 014.
+   */
+  pagamentos: z
+    .object({
+      pix: z
+        .object({
+          merchantName: z.string().min(1).max(60),
+          key: z.string().min(1).max(200),
+          keyType: z.enum(['CPF', 'CNPJ', 'EMAIL', 'PHONE', 'EVP']),
+        })
+        .optional(),
+    })
+    .default({}),
 });
 export type ClientConfig = z.infer<typeof ClientConfigSchema>;
 
