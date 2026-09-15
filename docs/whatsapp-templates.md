@@ -279,12 +279,30 @@ como `UTILITY`, ela recategorizou: o envio continua funcionando, o custo e as re
 
 | Template | Estado | O que falta |
 |---|---|---|
-| `pagamento_confirmado` | ✅ pronto | só aprovar e pôr no `.env` |
-| `cobranca_pix` | ✅ pronto | aguardando aprovação da Meta |
-| `cobranca_boleto` | ❌ falta ligar | montador irmão do de PIX, sem botão |
-| `boleto_segunda_via` | ❌ falta ligar | escolher o nome quando `reenvio` é verdadeiro |
-| `cobranca_cartao` | ❌ falta ligar | idem boleto |
+| `pagamento_confirmado` | ✅ ligado | — |
+| `cobranca_pix` | ✅ ligado | — |
+| `cobranca_boleto` | ✅ ligado | — |
+| `cobranca_cartao` | ✅ ligado | — |
+| `boleto_segunda_via` | ⚠️ montador pronto, **sem gatilho** | ver abaixo |
 | `escolha_metodo` **com botões** | ❌ **não funciona** | ver abaixo |
+
+Os quatro ligados saem de `montarTemplateCobranca`
+(`apps/server/src/pagamentos/template-cobranca.ts`), que escolhe o modelo pelo método e monta
+as variáveis na ordem do corpo aprovado. Os nomes vêm do `.env`
+(`WA_TEMPLATE_COBRANCA_PIX`, `_BOLETO`, `_CARTAO`, `WA_TEMPLATE_BOLETO_SEGUNDA_VIA`); modelo
+ausente ⇒ aquele método não manda template e a janela fechada volta a virar ticket.
+
+### Por que a 2ª via não tem gatilho
+
+O montador escolhe `boleto_segunda_via` quando `DadosEmissao.reenvio` é verdadeiro, e isso
+está testado — mas **ninguém passa `true` num caminho de janela fechada**. A emissão
+(`emitir.ts`) é sempre primeira entrega do ponto de vista do cotista: `reaproveita` só diz que
+o PSP já tinha a cobrança (retry de job), não que o cotista já a recebeu. O reenvio de verdade
+mora em `fluxo.ts:383-396`, e lá a janela está aberta por definição — o cotista acabou de
+escrever.
+
+O gatilho nasce quando existir reenvio **fora** da janela: a [040](../specs/040-segunda-via-pdf.md)
+(pedir 2ª via) ou a [044](../specs/044-cobranca-proativa.md) (a plataforma abre a conversa).
 
 ### A trava do `escolha_metodo`
 

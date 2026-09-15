@@ -1,10 +1,4 @@
-import {
-  formatarData,
-  formatarReais,
-  mensagensEmitida,
-  referenciaCliente,
-  TEXTO_FALHA_EMISSAO,
-} from '@seta/cobranca';
+import { mensagensEmitida, referenciaCliente, TEXTO_FALHA_EMISSAO } from '@seta/cobranca';
 import { type PaymentProvider, PspAuthError, PspBusinessError } from '@seta/payment-provider';
 import { eq, sql } from 'drizzle-orm';
 import type { PgBoss } from 'pg-boss';
@@ -15,8 +9,9 @@ import { cobranca } from '../db/schema.js';
 import type { Env } from '../env.js';
 import { enqueueOutbound, enviarJobOutbound, inserirOutbound } from '../wa/outbox.js';
 import { escalarTicketCobranca, TRIGGER_FALHA_EMISSAO } from './escalar.js';
-import { montarBotaoPix, type PixRecebedor } from './order-details.js';
+import type { PixRecebedor } from './order-details.js';
 import type { PagamentosRepo } from './repo.js';
+import { montarTemplateCobranca } from './template-cobranca.js';
 
 /**
  * Worker de emissão (014): materializa a cobrança no PSP e manda o meio de
@@ -33,8 +28,14 @@ export interface EmitirDeps {
   readonly logger: Logger;
   /** Nome do cliente (client.yaml) — vai na descrição da cobrança. */
   readonly nomeCliente: string;
-  /** 043: modelo com botão order_details; ausente ⇒ janela fechada vira ticket. */
-  readonly env: Pick<Env, 'WA_TEMPLATE_COBRANCA_PIX'>;
+  /** 043: modelos aprovados por método; ausente ⇒ janela fechada vira ticket. */
+  readonly env: Pick<
+    Env,
+    | 'WA_TEMPLATE_COBRANCA_PIX'
+    | 'WA_TEMPLATE_COBRANCA_BOLETO'
+    | 'WA_TEMPLATE_BOLETO_SEGUNDA_VIA'
+    | 'WA_TEMPLATE_COBRANCA_CARTAO'
+  >;
   /** 043: recebedor do PIX (client.yaml); ausente ⇒ sem template de cobrança. */
   readonly pixRecebedor: PixRecebedor | null;
 }
@@ -122,30 +123,7 @@ export async function processarEmissao(
     const pix = c.metodo === 'pix' ? await deps.psp.obterPix(cob.id) : null;
     const linha = c.metodo === 'boleto' ? await deps.psp.obterLinhaDigitavel(cob.id) : null;
 
-    const botao = montarBotaoPix(
-      { ...c, pixCopiaCola: pix?.payload ?? null, valorCentavos: c.valorCentavos },
-      titulos,
-      deps.pixRecebedor,
-    );
-    const modelo = deps.env.WA_TEMPLATE_COBRANCA_PIX;
-    // as variáveis seguem a ordem do corpo aprovado do template `cobranca_pix`:
-    // {{1}} valor, {{2}} vencimento, {{3}} link. Mudar o corpo na Meta exige
-    // mudar esta lista junto — a Meta recusa aridade diferente no envio.
-    const template =
-      botao && modelo
-        ? {
-            nome: modelo,
-            idioma: 'pt_BR',
-            variaveis: [
-              formatarReais(c.valorCentavos),
-              formatarData(cob.vencimento || c.vencimentoPsp),
-              cob.urlFatura,
-            ],
-            botao,
-          }
-        : undefined;
-
-    const textos = mensagensEmitida({
+    const dados = {
       metodo: c.metodo,
       valorCentavos: c.valorCentavos,
       vencimento: cob.vencimento || c.vencimentoPsp,
@@ -153,8 +131,24 @@ export async function processarEmissao(
       urlBoleto: cob.urlBoleto,
       linhaDigitavel: linha?.linhaDigitavel ?? null,
       pixCopiaCola: pix?.payload ?? null,
+      // sempre primeira entrega do ponto de vista do cotista: `reaproveita` diz
+      // que o PSP já tinha a cobrança (retry de job), não que ele já a recebeu.
+      // O reenvio de verdade mora em `fluxo.ts`, e lá a janela está aberta por
+      // definição — quando existir reenvio fora da janela (040/044), é ele que
+      // passa `reenvio: true` e o montador escolhe `boleto_segunda_via`.
       reenvio: false,
-    });
+    };
+    const textos = mensagensEmitida(dados);
+    const template =
+      montarTemplateCobranca(dados, c, titulos, {
+        recebedor: deps.pixRecebedor,
+        nomes: {
+          pix: deps.env.WA_TEMPLATE_COBRANCA_PIX,
+          boleto: deps.env.WA_TEMPLATE_COBRANCA_BOLETO,
+          boletoSegundaVia: deps.env.WA_TEMPLATE_BOLETO_SEGUNDA_VIA,
+          cartao: deps.env.WA_TEMPLATE_COBRANCA_CARTAO,
+        },
+      }) ?? undefined;
 
     const outboxIds: string[] = [];
     await deps.db.transaction(async (tx) => {

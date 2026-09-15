@@ -221,6 +221,10 @@ beforeAll(async () => {
       CONTATOS_PATH: join(import.meta.dirname, '../../../configs/demo/contatos.yaml'),
       EMBEDDING_DIM: '8',
       ASAAS_WEBHOOK_TOKEN: WEBHOOK_TOKEN,
+      // 043: com os modelos configurados, a emissão anexa o template à linha 1
+      WA_TEMPLATE_COBRANCA_BOLETO: 'cobranca_boleto',
+      WA_TEMPLATE_BOLETO_SEGUNDA_VIA: 'boleto_segunda_via',
+      WA_TEMPLATE_COBRANCA_CARTAO: 'cobranca_cartao',
     } as NodeJS.ProcessEnv),
     WA_DEBOUNCE_MS: DEBOUNCE_MS,
   };
@@ -365,12 +369,27 @@ afterAll(async () => {
   // a suíte é serial: cobrança pendurada na conversa impede o `delete from
   // conversa` das outras suítes pela FK. O beforeEach limpa no INÍCIO de cada
   // teste, então sem isto o último caso do arquivo deixa lixo para o próximo.
+  // o beforeEach limpa no INÍCIO de cada teste, então sem isto o último caso do
+  // arquivo deixa lixo para a próxima suíte: cobrança pendurada na conversa
+  // trava o `delete from conversa` pela FK, e a conversa recente vira
+  // `conversas[0]` na listagem do console-atendimento.
   await db?.delete(pagamento);
   await db?.delete(cobrancaTitulo);
   await db?.delete(fluxoCobranca);
   await db?.delete(cobranca);
   await db?.delete(eventoPsp);
   await db?.delete(pspCliente);
+  for (const waId of [WA_EM_DIA, WA_INADIMPLENTE, WA_DISTRATO]) {
+    const [conv] = await db.select().from(conversa).where(eq(conversa.waId, waId));
+    if (!conv) continue;
+    await db.delete(traceTurno).where(eq(traceTurno.conversaId, conv.id));
+    await db.delete(eventoTicket);
+    await db.delete(ticket).where(eq(ticket.conversaId, conv.id));
+    await db.delete(outbox).where(eq(outbox.conversaId, conv.id));
+    await db.delete(mensagem).where(eq(mensagem.conversaId, conv.id));
+    await db.delete(turno).where(eq(turno.conversaId, conv.id));
+    await db.delete(conversa).where(eq(conversa.id, conv.id));
+  }
   await app?.close();
   await boss?.stop({ graceful: false });
   await connector?.close();
@@ -725,7 +744,13 @@ describe('spec 014 — compra e cobrança pelo WhatsApp', () => {
     );
     expect(reproc.statusCode).toBe(202);
     expect(reproc.json()).toEqual({ ok: true, reenfileirado: true });
-    await aguardar(async () => (await db.select().from(cobranca))[0]?.status === 'paga');
+    // esperar o artefato que o assert lê: `concluir` grava processado_em DEPOIS
+    // de marcarPaga, então aguardar por status='paga' abriria uma corrida.
+    await aguardar(async () => {
+      const [ev] = await db.select().from(eventoPsp).where(eq(eventoPsp.id, 'evt_preso&1'));
+      return ev?.processadoEm !== null;
+    });
+    expect((await db.select().from(cobranca))[0]?.status).toBe('paga');
     const [concluido] = await db.select().from(eventoPsp).where(eq(eventoPsp.id, 'evt_preso&1'));
     expect(concluido?.processadoEm).not.toBeNull();
     expect(concluido?.erro).toBeNull();
@@ -830,5 +855,28 @@ describe('spec 014 — compra e cobrança pelo WhatsApp', () => {
     // a baixa acontece do mesmo jeito — o aviso é que não sai
     await aguardar(async () => (await db.select().from(cobranca))[0]?.status === 'paga');
     expect(templatesEnviados).toHaveLength(0);
+  }, 60_000);
+  it('043: emissão de boleto anexa o template de boleto à linha 1 do outbox', async () => {
+    await fluxoAteConfirmar(WA_INADIMPLENTE, 'todas', '1'); // 1 = boleto
+    await aguardar(async () => (await db.select().from(cobranca))[0]?.status === 'emitida');
+    const c = await cobrancaUnica();
+    expect(c.linhaDigitavel).toBeTruthy();
+
+    const linhas = await db
+      .select()
+      .from(outbox)
+      .where(eq(outbox.conversaId, c.conversaId))
+      .orderBy(asc(outbox.criadoEm));
+    const comTemplate = linhas.filter((l) => l.template !== null);
+    // só a linha 1 carrega template: a 2 é a linha digitável crua, que já viaja
+    // dentro do corpo do template — anexar nela abriria conversa cobrada em dobro
+    expect(comTemplate).toHaveLength(1);
+    expect(comTemplate[0]?.dedupeKey).toBe(`bot:cobranca:${c.id}:1`);
+
+    const t = comTemplate[0]?.template as { nome: string; variaveis: string[]; botao?: unknown };
+    expect(t.nome).toBe('cobranca_boleto');
+    expect(t.botao).toBeUndefined(); // boleto não é pagável dentro do WhatsApp
+    expect(t.variaveis).toHaveLength(4); // contrato do corpo aprovado
+    expect(t.variaveis[2]).toBe(c.linhaDigitavel);
   }, 60_000);
 });

@@ -92,6 +92,19 @@ export const EnvSchemaBase = z.object({
     .string()
     .regex(/^[a-z0-9_]+$/)
     .optional(),
+  WA_TEMPLATE_COBRANCA_BOLETO: z
+    .string()
+    .regex(/^[a-z0-9_]+$/)
+    .optional(),
+  /** Reenvio de boleto já emitido — texto reconhece o envio anterior. */
+  WA_TEMPLATE_BOLETO_SEGUNDA_VIA: z
+    .string()
+    .regex(/^[a-z0-9_]+$/)
+    .optional(),
+  WA_TEMPLATE_COBRANCA_CARTAO: z
+    .string()
+    .regex(/^[a-z0-9_]+$/)
+    .optional(),
   WA_TEMPLATE_PAGAMENTO_CONFIRMADO: z
     .string()
     .regex(/^[a-z0-9_]+$/)
