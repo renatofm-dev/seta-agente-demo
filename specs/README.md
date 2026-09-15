@@ -41,6 +41,7 @@ autônomo sobre WhatsApp, rodando local (repo privado + homelab), fora da org se
 | 016 | Anonimização do que sai para a LLM | ✅ `main` (#61) |
 | 017 | Relatório analítico de campanhas | ✅ `main` (#63) |
 | 042 | Asaas de verdade no sandbox (PSP deixa de ser simulado) | ✅ `main` (#20) |
+| 043 | Template de pagamento com PIX (order_details no WhatsApp) | ✅ `main` (#21) |
 
 A ordem, o calendário e as decisões pendentes estão em **[`docs/roadmap.md`](../docs/roadmap.md)**;
 o mapa técnico do que cada spec entregou está em
@@ -81,8 +82,7 @@ executa em M2, antes de M4).
 | [039](039-sdr-escreve-no-erp.md) SDR escreve lead e venda no ERP | **Demo** | 036, 015b |
 | [040](040-segunda-via-pdf.md) 2ª via de boleto em PDF | **Demo** | 036, 033 (fatia fina) |
 | [041](041-tse-real-e-fim-da-conciliacao.md) TSE real e fim da conciliação | **Demo** | 037, ambiente do TSE |
-| [043](043-template-pagamento-pix.md) template de pagamento com PIX | **Pagamentos** | ✅042, `WA_WABA_ID` |
-| [044](044-cobranca-proativa.md) cobrança proativa | **Pagamentos** | 042, 043 |
+| [044](044-cobranca-proativa.md) cobrança proativa | **Pagamentos** | ✅042, ✅043 |
 
 ### A frente "demo ponta a ponta" (035–041)
 
@@ -107,13 +107,14 @@ já tem aprovado na WABA — card com o valor, link de pagamento no corpo e bot�
 PIX. O roadmap da frente está em
 [`docs/roadmap-pagamentos-whatsapp.md`](../docs/roadmap-pagamentos-whatsapp.md).
 
-A **042 foi entregue em 15/09/2026**: o PSP fala com o sandbox de verdade, cobrança emitida é
-paga por webhook real e conciliada, evento preso tem reprocesso pelo console, e
-`simular-pagamento` é barrado em produção. Do lado do WhatsApp, `packages/wa-meta` só monta
-template de corpo com texto: header e botão são a 043.
+A **042 e a 043 foram entregues em 15/09/2026**: o PSP fala com o sandbox de verdade, a
+cobrança é paga por webhook real e conciliada, e o WhatsApp manda o template com o link no
+corpo e o `order_details` no botão — validado no aparelho. Header de mídia continua sendo a
+033; variável por destinatário e opt-out são a 044.
 
-**A 043 começa descobrindo, não codando.** O JSON do template aprovado, lido da Graph API, é a
-especificação; o preview do WhatsApp Manager não é prova do formato do payload.
+**A 043 começou descobrindo, e a descoberta mudou o escopo**: o template aprovado usa
+`ORDER_DETAILS` (WhatsApp Pay BR), e o botão `COPY_CODE` era impossível — aceita 20
+caracteres, o copia-e-cola do Asaas tem 180.
 
 ```
 035 ─► 036 ─┬─► 037 ─► 041
@@ -121,7 +122,7 @@ especificação; o preview do WhatsApp Manager não é prova do formato do paylo
             ├─► 039 ◄─ 015b
             └─► 040 ◄─ 033
 
-042✅ ─► 043 ─► 044         (042 ─► 027 ◄─ D1)
+042✅ ─► 043✅ ─► 044        (042 ─► 027 ◄─ D1)
 
 M0 ─► 015b ─► P-27          026 ─► 022
       015c
