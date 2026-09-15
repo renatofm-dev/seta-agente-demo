@@ -41,6 +41,7 @@ roadmap; o que é comportamento vive nas specs; o resto está nos guias abaixo.
 |---|---|
 | [`meta-setup.md`](meta-setup.md) | App Meta, número de teste, token, webhook e diagnóstico do WhatsApp |
 | [`asaas-setup.md`](asaas-setup.md) | Sandbox do Asaas, webhook de pagamento, simulação, limites |
+| [`whatsapp-templates.md`](whatsapp-templates.md) | Catálogo dos modelos de cobrança para cadastrar na Meta, com payload e o que cada um exige do código |
 | [`tse-api-setup.md`](tse-api-setup.md) | API HTTP do TS Explorer: contrato, autenticação, mapeamento no domínio, armadilhas e como rodar contra o simulador |
 | [`deploy-homelab.md`](deploy-homelab.md) | Preparar a VPS, login no GHCR, Caddy, `.env.prod`, deploy e seed de demo |
 | [`roteiro-demo.md`](roteiro-demo.md) | Os cinco atos da demonstração e o plano B pelo simulador |

@@ -1,4 +1,10 @@
-import { mensagensEmitida, referenciaCliente, TEXTO_FALHA_EMISSAO } from '@seta/cobranca';
+import {
+  formatarData,
+  formatarReais,
+  mensagensEmitida,
+  referenciaCliente,
+  TEXTO_FALHA_EMISSAO,
+} from '@seta/cobranca';
 import { type PaymentProvider, PspAuthError, PspBusinessError } from '@seta/payment-provider';
 import { eq, sql } from 'drizzle-orm';
 import type { PgBoss } from 'pg-boss';
@@ -122,9 +128,21 @@ export async function processarEmissao(
       deps.pixRecebedor,
     );
     const modelo = deps.env.WA_TEMPLATE_COBRANCA_PIX;
+    // as variáveis seguem a ordem do corpo aprovado do template `cobranca_pix`:
+    // {{1}} valor, {{2}} vencimento, {{3}} link. Mudar o corpo na Meta exige
+    // mudar esta lista junto — a Meta recusa aridade diferente no envio.
     const template =
       botao && modelo
-        ? { nome: modelo, idioma: 'pt_BR', variaveis: [cob.urlFatura], botao }
+        ? {
+            nome: modelo,
+            idioma: 'pt_BR',
+            variaveis: [
+              formatarReais(c.valorCentavos),
+              formatarData(cob.vencimento || c.vencimentoPsp),
+              cob.urlFatura,
+            ],
+            botao,
+          }
         : undefined;
 
     const textos = mensagensEmitida({

@@ -362,6 +362,15 @@ beforeEach(async () => {
 });
 
 afterAll(async () => {
+  // a suíte é serial: cobrança pendurada na conversa impede o `delete from
+  // conversa` das outras suítes pela FK. O beforeEach limpa no INÍCIO de cada
+  // teste, então sem isto o último caso do arquivo deixa lixo para o próximo.
+  await db?.delete(pagamento);
+  await db?.delete(cobrancaTitulo);
+  await db?.delete(fluxoCobranca);
+  await db?.delete(cobranca);
+  await db?.delete(eventoPsp);
+  await db?.delete(pspCliente);
   await app?.close();
   await boss?.stop({ graceful: false });
   await connector?.close();

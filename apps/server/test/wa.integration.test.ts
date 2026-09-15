@@ -41,6 +41,18 @@ let closeDb: () => Promise<void>;
 let boss: Awaited<ReturnType<typeof startBoss>>;
 /** 043: templates que o outbox worker mandou ao cair no ramo de janela fechada. */
 const templatesEnviados: OutboundTemplate[] = [];
+/** waIds que este arquivo cria — a limpeza do afterAll é restrita a eles. */
+const WA_IDS_DO_ARQUIVO = [
+  '5511999990001',
+  '5511999990002',
+  '5511999990003',
+  '5511999990004',
+  '5511999990005',
+  '5511999990006',
+  '5511999990007',
+  '5511999990008',
+  '5511999990009',
+] as const;
 let app: App;
 const turnosProcessados: TurnoPronto[] = [];
 
@@ -157,6 +169,23 @@ beforeEach(async () => {
 });
 
 afterAll(async () => {
+  // a suíte é serial e compartilha o banco: a conversa do ÚLTIMO teste deste
+  // arquivo ficaria no topo de `GET /api/console/conversas` e quebraria a
+  // contagem de não-lidas de console-atendimento (o mesmo tropeço da 042).
+  // Só o que este arquivo criou — limpeza ampla aqui derruba outras suítes.
+  for (const waId of WA_IDS_DO_ARQUIVO) {
+    const [conv] = await db.select().from(conversa).where(eq(conversa.waId, waId));
+    if (!conv) continue;
+    await db
+      .delete(eventoTicket)
+      .where(eq(eventoTicket.ticketId, conv.id))
+      .catch(() => {});
+    await db.delete(ticket).where(eq(ticket.conversaId, conv.id));
+    await db.delete(outbox).where(eq(outbox.conversaId, conv.id));
+    await db.delete(mensagem).where(eq(mensagem.conversaId, conv.id));
+    await db.delete(turno).where(eq(turno.conversaId, conv.id));
+    await db.delete(conversa).where(eq(conversa.id, conv.id));
+  }
   await app?.close();
   await boss?.stop({ graceful: false });
   await closeDb?.();
