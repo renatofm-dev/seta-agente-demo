@@ -1,10 +1,9 @@
 # 042 — Asaas de verdade no sandbox: o PSP deixa de ser simulado
 
-> **Pré-spec** (rascunho de 15/09/2026): primeira etapa da
+> **Executada em 15/09/2026** — PR #20. Primeira etapa da
 > [frente de pagamentos](../docs/roadmap-pagamentos-whatsapp.md). Fecha a issue #11 do fork
 > (`SETA-IA/seta-agente#77`). Não depende de decisão dos sócios — a D1 só governa produção
-> ([027](027-asaas-producao.md)). Depende de uma conta sandbox do Asaas e do CPF do titular
-> no vínculo.
+> ([027](027-asaas-producao.md)).
 
 ## Objetivo
 A 014 entregou o fluxo de cobrança inteiro, mas nenhuma linha dele jamais falou com o Asaas:
@@ -63,6 +62,31 @@ produção seria uma baixa indevida. A rota passa a exigir também
 `docs/asaas-setup.md` ganha uma seção de diagnóstico com o que aparecer na primeira
 execução real (`invalid_environment`, fila de webhook interrompida após 15 falhas, QR PIX
 com validade até 23:59 em conta sem chave).
+
+## O que a primeira execução real cobrou (15/09/2026)
+
+O ciclo inteiro fechou contra o sandbox — cobrança `pay_yjpuup1ic7tn42tb` emitida pela
+conversa do contrato 10002, `receiveInCash`, dois webhooks reais pelo túnel, baixa e
+conciliação. Quatro coisas que o código não deixava óbvio:
+
+1. **A chave do Asaas começa com `$`** e o `tools/dev-whatsapp.sh` sourceia o `.env` pelo
+   shell (`set -a; . ./.env`). Sem aspas simples ela é expandida como variável indefinida
+   e vira vazio: o server (Node, `--env-file`, sem expansão) funciona, mas o script pula o
+   registro do webhook em silêncio. Corrigido no `.env.example` e no guia.
+2. **O id de evento do Asaas contém `&`** (`evt_<hash>&<sequência>`), e o hash se repete
+   entre pagamentos diferentes — só o sufixo distingue. A rota de reprocesso recebe esse id
+   no path: `encodeURIComponent` no console, `z.string()` (nunca `z.uuid()`) no server, e
+   jamais truncar no `&`.
+3. **`pix_expira_em` veio `2027-09-18 23:59:59`**, não "23:59 do dia" como o guia afirmava —
+   formato cru do Asaas, não ISO. O guia estava errado.
+4. **Bug pré-existente no console**: `post()` mandava `content-type: application/json` sem
+   corpo, e o Fastify recusa (`FST_ERR_CTP_EMPTY_JSON_BODY`). *Aprovar*, *Simular pagamento*
+   e o *Reprocessar* novo devolviam 500. Os testes não pegavam porque o `app.inject` só põe
+   o header quando há payload. Corrigido no cliente, e os `setErrorHandler` das rotas de
+   pagamento pararam de mascarar 4xx do Fastify como 500.
+
+A corrida do `PAYMENT_CREATED` chegando antes do commit de `emitir.ts` **não existe**: o
+fallback por `externalReference` a cobre.
 
 ## Fora de escopo
 - Produção, chave de produção, cofre de segredos, rotação de token — [027](027-asaas-producao.md)
