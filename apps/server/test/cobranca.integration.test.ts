@@ -628,6 +628,101 @@ describe('spec 014 — compra e cobrança pelo WhatsApp', () => {
     });
   }, 60_000);
 
+  it('042: evento preso aparece como pendente, o reprocesso conclui e repetir é no-op', async () => {
+    await fluxoAteConfirmar(WA_INADIMPLENTE, 'todas', '2');
+    await aguardar(async () => (await db.select().from(cobranca))[0]?.status === 'emitida');
+    const c = await cobrancaUnica();
+
+    // o evento chega antes de a cobrança ser resolvível ⇒ fica com erro e SEM processado_em.
+    // A reentrega do Asaas bate no onConflictDoNothing por id: sem a rota, fica preso para sempre.
+    const corpo = {
+      id: 'evt_preso&1', // o id do Asaas é text e contém `&` — nunca uuid
+      event: 'PAYMENT_RECEIVED',
+      payment: {
+        id: 'pay_ainda_nao_conhecido',
+        status: 'RECEIVED',
+        value: c.valorCentavos / 100,
+        paymentDate: '2026-09-02',
+      },
+    };
+    expect((await webhook(corpo)).statusCode).toBe(200);
+    await aguardar(async () => {
+      const [ev] = await db.select().from(eventoPsp).where(eq(eventoPsp.id, 'evt_preso&1'));
+      return ev?.erro === 'cobrança desconhecida' && ev?.processadoEm === null;
+    });
+    expect((await webhook(corpo)).json()).toEqual({ recebido: true, duplicado: true });
+
+    // o console enxerga: lista de pendentes + contagem na tela de cobranças
+    const pendentes = await apiConsole('GET', '/api/console/eventos-psp?pendente=true');
+    expect(pendentes.statusCode).toBe(200);
+    expect(pendentes.json().pendentes).toBe(1);
+    expect(pendentes.json().eventos[0]).toMatchObject({
+      id: 'evt_preso&1',
+      erro: 'cobrança desconhecida',
+      cobrancaId: null, // órfão: nenhum drawer de cobrança o alcançaria
+    });
+    const lista = await apiConsole('GET', '/api/console/cobrancas');
+    expect(lista.json().eventosPspPendentes).toBe(1);
+
+    // a causa desaparece (a cobrança passa a resolver) e o reprocesso conclui
+    await db
+      .update(cobranca)
+      .set({ pspCobrancaId: 'pay_ainda_nao_conhecido' })
+      .where(eq(cobranca.id, c.id));
+    const reproc = await apiConsole(
+      'POST',
+      `/api/console/eventos-psp/${encodeURIComponent('evt_preso&1')}/reprocessar`,
+    );
+    expect(reproc.statusCode).toBe(202);
+    expect(reproc.json()).toEqual({ ok: true, reenfileirado: true });
+    await aguardar(async () => (await db.select().from(cobranca))[0]?.status === 'paga');
+    const [concluido] = await db.select().from(eventoPsp).where(eq(eventoPsp.id, 'evt_preso&1'));
+    expect(concluido?.processadoEm).not.toBeNull();
+    expect(concluido?.erro).toBeNull();
+    const pagosDepois = await db.select().from(pagamento);
+
+    // repetir é no-op, não conflito: o estado desejado já vale
+    const denovo = await apiConsole(
+      'POST',
+      `/api/console/eventos-psp/${encodeURIComponent('evt_preso&1')}/reprocessar`,
+    );
+    expect(denovo.statusCode).toBe(200);
+    expect(denovo.json()).toMatchObject({ ok: true, reenfileirado: false });
+    expect(await db.select().from(pagamento)).toHaveLength(pagosDepois.length);
+
+    // evento que não existe ⇒ 404
+    const ausente = await apiConsole('POST', '/api/console/eventos-psp/evt_nao_existe/reprocessar');
+    expect(ausente.statusCode).toBe(404);
+
+    const zerado = await apiConsole('GET', '/api/console/cobrancas');
+    expect(zerado.json().eventosPspPendentes).toBe(0);
+  }, 60_000);
+
+  it('042: payload inválido é terminal — reprocessar não o ressuscita', async () => {
+    await db.insert(eventoPsp).values({
+      id: 'evt_lixo&1',
+      psp: 'asaas',
+      tipo: 'PAYMENT_RECEIVED',
+      pspCobrancaId: null,
+      payload: { formato: 'de outra versão' },
+    });
+    await boss.send(FILA_COBRANCA_EVENTO, { eventoId: 'evt_lixo&1' });
+    await aguardar(async () => {
+      const [ev] = await db.select().from(eventoPsp).where(eq(eventoPsp.id, 'evt_lixo&1'));
+      return ev?.erro === 'payload inválido';
+    });
+    // terminal: o payload está gravado e não muda, então não fica na fila de pendentes
+    const [ev] = await db.select().from(eventoPsp).where(eq(eventoPsp.id, 'evt_lixo&1'));
+    expect(ev?.processadoEm).not.toBeNull();
+    const pendentes = await apiConsole('GET', '/api/console/eventos-psp?pendente=true');
+    expect(pendentes.json().pendentes).toBe(0);
+    const r = await apiConsole(
+      'POST',
+      `/api/console/eventos-psp/${encodeURIComponent('evt_lixo&1')}/reprocessar`,
+    );
+    expect(r.json()).toMatchObject({ reenfileirado: false });
+  }, 30_000);
+
   it('interesse em cota nova: texto próprio + escalada interesse_compra (não é "outro canal")', async () => {
     fake.respondeTexto('comprar_cota');
     const [texto] = await turnoDe(WA_EM_DIA, 'quero comprar mais uma cota');

@@ -394,9 +394,23 @@ export interface CobrancaView {
 export interface CobrancasResposta {
   psp: string;
   ambiente: string;
+  /** Server já combina DEV_SIMULATOR com o ambiente do PSP (042) — não recombinar aqui. */
   simuladorAtivo: boolean;
   contagens: Partial<Record<StatusCobranca, number>>;
+  eventosPspPendentes: number;
   cobrancas: CobrancaView[];
+}
+
+/** Evento do PSP como o console o vê (042). `id` é text e contém `&`. */
+export interface EventoPspView {
+  id: string;
+  psp: string;
+  tipo: string;
+  pspCobrancaId: string | null;
+  recebidoEm: string;
+  processadoEm: string | null;
+  erro: string | null;
+  cobrancaId: string | null;
 }
 
 export interface CobrancaDetalhe {
@@ -514,11 +528,15 @@ async function json<T>(res: Response): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+// O content-type só vai junto com o corpo: `application/json` sem corpo é
+// recusado pelo Fastify (FST_ERR_CTP_EMPTY_JSON_BODY) e derrubava as ações
+// sem payload — aprovar, simular pagamento, reprocessar evento (042).
 const post = (url: string, body?: unknown) =>
   fetch(url, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+    ...(body !== undefined
+      ? { headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }
+      : {}),
   });
 
 export const api = {
@@ -636,6 +654,15 @@ export const api = {
   simularPagamento: (id: string) =>
     post(`/api/console/cobrancas/${id}/simular-pagamento`).then((r) =>
       json<{ ok: boolean; psp: string }>(r),
+    ),
+  eventosPsp: (pendente = true) =>
+    fetch(`/api/console/eventos-psp${pendente ? '?pendente=true' : ''}`).then((r) =>
+      json<{ eventos: EventoPspView[]; pendentes: number }>(r),
+    ),
+  // encodeURIComponent é obrigatório: o id do Asaas é `evt_<hash>&<sequência>`.
+  reprocessarEventoPsp: (id: string) =>
+    post(`/api/console/eventos-psp/${encodeURIComponent(id)}/reprocessar`).then((r) =>
+      json<{ ok: boolean; reenfileirado: boolean; motivo?: string }>(r),
     ),
   leads: () => fetch('/api/console/leads').then((r) => json<{ leads: LeadView[] }>(r)),
   lead: (id: string) => fetch(`/api/console/leads/${id}`).then((r) => json<LeadDetalhe>(r)),

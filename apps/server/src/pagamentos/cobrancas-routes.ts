@@ -1,7 +1,7 @@
 import { TEXTO_RECUSADO } from '@seta/cobranca';
 import { newTraceId } from '@seta/observability';
 import type { PaymentProvider } from '@seta/payment-provider';
-import { and, desc, eq, sql } from 'drizzle-orm';
+import { and, desc, eq, isNull, sql } from 'drizzle-orm';
 import type { FastifyPluginCallback, FastifyRequest } from 'fastify';
 import type { PgBoss } from 'pg-boss';
 import { z } from 'zod';
@@ -48,6 +48,12 @@ const BodyRecusa = z.object({ motivo: z.string().min(3).max(300) });
 
 export const cobrancasRoutes: FastifyPluginCallback<CobrancasRoutesOpts> = (app, opts, done) => {
   const { db, boss, auth, repo, psp, env } = opts;
+  /**
+   * 042: o simulador também depende do ambiente. Com chave real o botão chama
+   * `receiveInCash` de verdade — no sandbox é o desejado, em produção seria
+   * baixa indevida. Fonte única: a rota e o console leem esta mesma expressão.
+   */
+  const simuladorAtivo = env.DEV_SIMULATOR && psp.ambiente !== 'producao';
 
   app.addHook('preHandler', async (req, reply) => {
     const sessao = await sessaoDaRequest(auth, req.headers);
@@ -57,6 +63,12 @@ export const cobrancasRoutes: FastifyPluginCallback<CobrancasRoutesOpts> = (app,
   app.setErrorHandler((err, req, reply) => {
     if (err instanceof z.ZodError) {
       return reply.code(400).send({ erro: z.prettifyError(err) });
+    }
+    // requisição malformada é 4xx do próprio Fastify — mascarar de 500 esconde a causa
+    const status = (err as { statusCode?: number }).statusCode;
+    if (status && status >= 400 && status < 500) {
+      req.log.warn({ err }, 'requisição recusada');
+      return reply.code(status).send({ erro: (err as Error).message });
     }
     req.log.error(err);
     return reply.code(500).send({ erro: 'erro interno' });
@@ -113,11 +125,16 @@ export const cobrancasRoutes: FastifyPluginCallback<CobrancasRoutesOpts> = (app,
       .select({ status: cobranca.status, n: sql<number>`count(*)::int` })
       .from(cobranca)
       .groupBy(cobranca.status);
+    const [pendentes] = await db
+      .select({ n: sql<number>`count(*)::int` })
+      .from(eventoPsp)
+      .where(isNull(eventoPsp.processadoEm));
     return {
       psp: psp.nome,
       ambiente: psp.ambiente,
-      simuladorAtivo: env.DEV_SIMULATOR,
+      simuladorAtivo,
       contagens: Object.fromEntries(contagens.map((c) => [c.status, c.n])),
+      eventosPspPendentes: pendentes?.n ?? 0,
       cobrancas: linhas,
     };
   });
@@ -204,10 +221,10 @@ export const cobrancasRoutes: FastifyPluginCallback<CobrancasRoutesOpts> = (app,
   /**
    * Dev/demo: simula o recebimento. PSP real ⇒ receiveInCash no sandbox (o Asaas
    * dispara o webhook de verdade); PSP simulado ⇒ injeta o evento no MESMO
-   * caminho do webhook.
+   * caminho do webhook. Nunca em produção (042): lá isso seria baixa indevida.
    */
   app.post('/api/console/cobrancas/:id/simular-pagamento', async (req, reply) => {
-    if (!env.DEV_SIMULATOR) return reply.code(404).send({ erro: 'simulador desligado' });
+    if (!simuladorAtivo) return reply.code(404).send({ erro: 'simulador desligado' });
     const { id } = ParamsId.parse(req.params);
     const c = await repo.cobrancaPorId(id);
     if (!c) return reply.code(404).send({ erro: 'cobrança não existe' });
