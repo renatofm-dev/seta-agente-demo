@@ -45,6 +45,12 @@ const NAV: ItemNav[] = [
     modulo: 'pagamentos',
   },
   { href: '/leads', rotulo: 'Leads', badge: (r) => r.leadsAguardandoAprovacao, modulo: 'sdr' },
+  {
+    href: '/reservas',
+    rotulo: 'Reservas',
+    badge: (r) => r.reservasAguardandoAprovacao,
+    modulo: 'reserva',
+  },
   { href: '/aprendizado', rotulo: 'Aprendizado' },
   { href: '/metricas', rotulo: 'Métricas' },
   { href: '/config', rotulo: 'Configurações' },

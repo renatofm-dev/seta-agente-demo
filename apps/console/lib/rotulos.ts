@@ -4,6 +4,7 @@ import type {
   StatusCobranca,
   StatusLead,
   StatusPropostaSdr,
+  StatusReserva,
   StatusTicket,
   TraceEvento,
 } from './console-api';
@@ -33,6 +34,20 @@ export const STATUS_COBRANCA: Record<StatusCobranca, { rotulo: string; papel: Pa
 };
 
 export const METODO_COBRANCA = { boleto: 'Boleto', pix: 'PIX', cartao: 'Cartão' } as const;
+
+/**
+ * 038. `criada` é o estado que pede atenção: a utilização EXISTE no TSE
+ * segurando pontos do cotista, mas ainda não foi confirmada.
+ */
+export const STATUS_RESERVA: Record<StatusReserva, { rotulo: string; papel: Papel }> = {
+  aguardando_aprovacao: { rotulo: 'Aguardando aprovação', papel: 'warn' },
+  criando: { rotulo: 'Registrando', papel: 'info' },
+  criada: { rotulo: 'Criada, não confirmada', papel: 'warn' },
+  confirmada: { rotulo: 'Confirmada', papel: 'ok' },
+  falha: { rotulo: 'Falha', papel: 'risk' },
+  cancelada: { rotulo: 'Cancelada', papel: 'off' },
+  recusada: { rotulo: 'Recusada', papel: 'risk' },
+};
 
 export const STATUS_LEAD: Record<StatusLead, { rotulo: string; papel: Papel }> = {
   novo: { rotulo: 'Novo', papel: 'info' },
