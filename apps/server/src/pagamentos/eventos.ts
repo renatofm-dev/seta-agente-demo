@@ -9,6 +9,7 @@ import { FILA_COBRANCA_EVENTO } from '../boss.js';
 import type { Db } from '../db/index.js';
 import { cobranca, conversa, eventoPsp, mensagem, pagamento } from '../db/schema.js';
 import type { Env } from '../env.js';
+import { enfileirarBaixas, registrarBaixasPendentes } from '../erp/baixa.js';
 import { enqueueOutbound } from '../wa/outbox.js';
 import type { CobrancaRow, CobrancaTituloRow, PagamentosRepo } from './repo.js';
 
@@ -198,6 +199,10 @@ async function marcarPaga(
   }
   const titulos = await deps.repo.titulosDe(c.id);
   const recebidoEm = paymentDate ? new Date(`${paymentDate.slice(0, 10)}T12:00:00`) : new Date();
+  // 036: a baixa no ERP nasce na MESMA transação do `pagamento` — as duas
+  // existem juntas ou não existem. O job só é enfileirado depois do commit, e
+  // só para as linhas que realmente entraram (o webhook do Asaas reentrega).
+  let baixasNovas: string[] = [];
   await deps.db.transaction(async (tx) => {
     await tx
       .update(cobranca)
@@ -219,7 +224,25 @@ async function marcarPaga(
         })
         .onConflictDoNothing({ target: [pagamento.cobrancaId, pagamento.tituloId] });
     }
+    const gravados = await tx
+      .select({ id: pagamento.id, tituloId: pagamento.tituloId, valor: pagamento.valorCentavos })
+      .from(pagamento)
+      .where(eq(pagamento.cobrancaId, c.id));
+    baixasNovas = await registrarBaixasPendentes(
+      tx,
+      gravados.map((p) => ({
+        pagamentoId: p.id,
+        contaFinanceiraId: p.tituloId,
+        contratoId: c.contratoId,
+        valorCentavos: p.valor,
+        metodo: c.metodo,
+        // o id da cobrança no PSP vira `CodigoAutorizacao` no TSE: dá ao
+        // financeiro do cliente o link com o extrato do gateway
+        referenciaPsp: c.pspCobrancaId ?? c.referenciaExterna,
+      })),
+    );
   });
+  await enfileirarBaixas(deps.boss, baixasNovas);
   deps.logger.info(
     { cobrancaId: c.id, titulos: titulos.length },
     'pagamento confirmado — baixa registrada',

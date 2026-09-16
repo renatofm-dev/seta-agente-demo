@@ -16,6 +16,18 @@ import {
  * conciliação e o worker poderem receber um stub nos testes de unidade.
  */
 
+/**
+ * 036 — quanto a conciliação da 014 ainda compensa:
+ *   `on`   — comportamento de antes da 036: compensa toda baixa nossa;
+ *   `auto` — compensa só o que AINDA NÃO chegou ao ERP (default);
+ *   `off`  — nada é compensado (o executor nem é decorado).
+ *
+ * `auto` é o que faz a ficção virar ponte: enquanto a baixa está em voo a
+ * conversa continua correta; quando o TSE confirma, a compensação some e a
+ * verdade passa a ser do ERP — sem contagem dupla em nenhum instante.
+ */
+export type ModoConciliacao = 'on' | 'auto' | 'off';
+
 export type FluxoRow = typeof fluxoCobranca.$inferSelect;
 export type CobrancaRow = typeof cobranca.$inferSelect;
 export type CobrancaTituloRow = typeof cobrancaTitulo.$inferSelect;
@@ -50,7 +62,10 @@ export interface PagamentosRepo {
   salvarPspCliente(psp: string, contratoId: string, pspClienteId: string): Promise<void>;
 }
 
-export function createPagamentosRepo(db: Db): PagamentosRepo {
+export function createPagamentosRepo(
+  db: Db,
+  modoConciliacao: ModoConciliacao = 'auto',
+): PagamentosRepo {
   return {
     async fluxoAtivo(conversaId) {
       const [f] = await db
@@ -77,7 +92,19 @@ export function createPagamentosRepo(db: Db): PagamentosRepo {
             eq(cobrancaTitulo.tituloId, pagamento.tituloId),
           ),
         )
-        .where(and(eq(pagamento.contratoId, contratoId), eq(pagamento.status, 'confirmado')));
+        .where(
+          and(
+            eq(pagamento.contratoId, contratoId),
+            eq(pagamento.status, 'confirmado'),
+            // 036: baixa já confirmada no ERP não é compensada — o `v_titulo`
+            // já a enxerga, e somar de novo contaria o pagamento duas vezes
+            modoConciliacao === 'auto'
+              ? sql`NOT EXISTS (SELECT 1 FROM erp_escrita e
+                     WHERE e.chave = 'baixa:' || ${pagamento.id}::text
+                       AND e.estado = 'confirmada')`
+              : undefined,
+          ),
+        );
       return linhas;
     },
 

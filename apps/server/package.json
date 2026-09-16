@@ -16,6 +16,7 @@
     "@seta/client-config": "workspace:*",
     "@seta/cobranca": "workspace:*",
     "@seta/crm": "workspace:*",
+    "@seta/erp-api-tse": "workspace:*",
     "@seta/erp-connector": "workspace:*",
     "@seta/guardrails": "workspace:*",
     "@seta/observability": "workspace:*",

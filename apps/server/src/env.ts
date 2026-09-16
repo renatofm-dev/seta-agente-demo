@@ -11,6 +11,11 @@ export const DEFAULTS_DE_DEV = {
 } as const;
 /** Senhas do init de dev do Postgres — nunca numa URL de banco em produção. */
 export const SENHAS_DE_DEV = ['app_owner_dev', 'erp_ro_dev'] as const;
+/**
+ * 036: credencial de exemplo do simulador do TSE. É credencial de OPERADOR, com
+ * poder de escrita financeira e de venda — em produção o boot recusa.
+ */
+export const CREDENCIAL_TSE_DE_DEV = 'integracao';
 
 /** Contrato de ambiente do server. Env inválida derruba o boot — nunca sobe "meio configurado". */
 export const EnvSchemaBase = z.object({
@@ -140,8 +145,34 @@ export const EnvSchemaBase = z.object({
     .enum(['true', 'false'])
     .default('true')
     .transform((v) => v === 'true'),
+  /**
+   * 036: API do TS Explorer (ADR 0002). Ausente ⇒ o `ErpWriter` simulado assume e
+   * a baixa vira registro local — o boot loga qual dos dois está ativo, no mesmo
+   * desenho do PSP da 014. Em dev e no homelab aponta para o simulador da 035
+   * (`http://tse-sim:3010`); na 041 passa a apontar para o TSE de verdade, e é a
+   * ÚNICA coisa que muda.
+   */
+  TSE_BASE_URL: z.url().optional(),
+  /** Credencial de operador: escreve baixa, reserva e venda. Cofre e rotação. */
+  TSE_USERNAME: z.string().min(1).optional(),
+  TSE_PASSWORD: z.string().min(1).optional(),
+  TSE_TIMEOUT_MS: z.coerce.number().int().min(1_000).max(60_000).default(15_000),
+  /**
+   * Quanto a conciliação da 014 ainda compensa: `auto` (default) compensa só o
+   * que ainda não chegou ao ERP; `on` é o comportamento anterior à 036; `off`
+   * nem decora o executor. `conciliacao.ts` só é APAGADO na 041.
+   */
+  ERP_CONCILIACAO: z.enum(['auto', 'on', 'off']).default('auto'),
 });
 export const EnvSchema = EnvSchemaBase.superRefine((env, ctx) => {
+  // vale em qualquer ambiente: apontar para o TSE sem credencial é boot mudo
+  if (env.TSE_BASE_URL && !(env.TSE_USERNAME && env.TSE_PASSWORD)) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['TSE_USERNAME'],
+      message: 'TSE_BASE_URL definido exige TSE_USERNAME e TSE_PASSWORD',
+    });
+  }
   if (env.NODE_ENV !== 'production') return;
   for (const [chave, valorDev] of Object.entries(DEFAULTS_DE_DEV)) {
     if (env[chave as keyof typeof DEFAULTS_DE_DEV] === valorDev) {
@@ -151,6 +182,14 @@ export const EnvSchema = EnvSchemaBase.superRefine((env, ctx) => {
         message: `valor de desenvolvimento não é aceito em produção — defina ${chave} no .env.prod`,
       });
     }
+  }
+  if (env.TSE_PASSWORD === CREDENCIAL_TSE_DE_DEV || env.TSE_USERNAME === CREDENCIAL_TSE_DE_DEV) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['TSE_PASSWORD'],
+      message:
+        'credencial de exemplo do simulador não sobe em produção — defina TSE_USERNAME/TSE_PASSWORD no .env.prod',
+    });
   }
   for (const chave of ['DATABASE_URL', 'ERP_DATABASE_URL'] as const) {
     if (SENHAS_DE_DEV.some((s) => env[chave].includes(s))) {

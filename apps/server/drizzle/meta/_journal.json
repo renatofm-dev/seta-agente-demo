@@ -127,6 +127,13 @@
       "when": 1789491782976,
       "tag": "0017_template-pagamento-pix",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1789562529493,
+      "tag": "0018_erp-escrita",
+      "breakpoints": true
     }
   ]
 }
