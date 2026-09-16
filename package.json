@@ -11,6 +11,7 @@
     "dev": "docker compose -f infra/compose.dev.yml up -d --wait && tsc -b && pnpm db:migrate && pnpm run '/^dev:/'",
     "dev:tsc": "tsc -b --watch --preserveWatchOutput",
     "dev:server": "node --watch --env-file-if-exists=.env apps/server/dist/index.js",
+    "dev:tse-sim": "node --watch --env-file-if-exists=.env apps/tse-sim/dist/index.js",
     "dev:console": "pnpm --filter @seta/console dev",
     "dev-whatsapp": "tools/dev-whatsapp.sh",
     "build": "tsc -b && pnpm --filter @seta/console build",
@@ -20,6 +21,7 @@
     "db:migrate": "pnpm --filter @seta/server db:migrate",
     "db:seed": "pnpm db:seed:erp && pnpm --filter @seta/server db:seed:app",
     "db:seed:erp": "tsc -b && node --env-file-if-exists=.env infra/erp-mock/seed.ts",
+    "tse:fixtures": "node tools/tse-fixtures.ts",
     "kb:ingest": "tsc -b && pnpm --filter @seta/server kb:ingest",
     "anonimizacao:modelo": "pnpm --filter @seta/anonimizacao modelo:baixar",
     "demo:seed": "pnpm db:seed && pnpm kb:ingest"
