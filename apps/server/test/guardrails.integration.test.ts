@@ -15,6 +15,7 @@ import { FILA_DEBOUNCE, FILA_OUTBOX, startBoss } from '../src/boss.ts';
 import { createDb, type Db } from '../src/db/index.ts';
 import {
   conversa,
+  conversaLeitura,
   eventoQuery,
   eventoTicket,
   mensagem,
@@ -158,6 +159,7 @@ beforeEach(async () => {
       await db.delete(outbox);
       await db.delete(mensagem);
       await db.delete(turno);
+      await db.delete(conversaLeitura);
       await db.delete(conversa);
       break;
     } catch (err) {
