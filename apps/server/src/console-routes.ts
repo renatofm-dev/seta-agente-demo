@@ -51,6 +51,8 @@ export interface InstalacaoInfo {
     readonly diasVencimento: number;
     readonly descontoMaxBps: number;
     readonly maxPropostasDia: number;
+    /** 038: acima disto a taxa da reserva espera aprovação. */
+    readonly tetoTaxaReservaCentavos: number;
   };
   readonly canal: {
     readonly gateway: 'meta' | 'log-only';

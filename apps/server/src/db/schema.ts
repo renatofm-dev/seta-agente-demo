@@ -823,3 +823,105 @@ export const erpEscrita = pgTable(
   },
   (t) => [index('erp_escrita_estado_idx').on(t.estado, t.operacao)],
 );
+
+// --- 038: reserva de utilização de contrato ---------------------------------
+
+export const ETAPAS_RESERVA = [
+  'periodo',
+  'hotel',
+  'unidade',
+  'pagantes',
+  'hospedes',
+  'confirmacao',
+  'encerrado',
+] as const;
+
+/**
+ * `criada` é o estado PERIGOSO e por isso é de primeira classe: a utilização
+ * existe no TSE segurando pontos do cotista, mas ainda não foi confirmada.
+ * Ele aparece no console com aviso, e o worker nunca cancela sozinho.
+ */
+export const STATUS_RESERVA = [
+  'aguardando_aprovacao',
+  'criando',
+  'criada',
+  'confirmada',
+  'falha',
+  'cancelada',
+  'recusada',
+] as const;
+/** Estados em que a reserva ainda "ocupa" a semana — base do índice único. */
+export const STATUS_RESERVA_VIVA = [
+  'aguardando_aprovacao',
+  'criando',
+  'criada',
+  'confirmada',
+] as const;
+
+export const fluxoReserva = pgTable(
+  'fluxo_reserva',
+  {
+    id: uuid('id').primaryKey(),
+    conversaId: uuid('conversa_id')
+      .notNull()
+      .references(() => conversa.id),
+    contratoId: text('contrato_id').notNull(),
+    /** Espelho de `estado.etapa`: o índice parcial precisa da coluna. */
+    etapa: text('etapa', { enum: ETAPAS_RESERVA }).notNull(),
+    encerramento: text('encerramento'),
+    /** O `EstadoFluxo` inteiro (datas, opções mostradas, hóspedes, simulação). */
+    estado: jsonb('estado').notNull(),
+    naoEntendi: integer('nao_entendi').notNull().default(0),
+    reservaId: uuid('reserva_id'),
+    expiraEm: timestamp('expira_em', { withTimezone: true }).notNull(),
+    criadoEm: timestamp('criado_em', { withTimezone: true }).notNull().defaultNow(),
+    atualizadoEm: timestamp('atualizado_em', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    // 1 fluxo ativo por conversa
+    uniqueIndex('fluxo_reserva_ativo_uq').on(t.conversaId).where(sql`etapa <> 'encerrado'`),
+  ],
+);
+
+export const reserva = pgTable(
+  'reserva',
+  {
+    id: uuid('id').primaryKey(),
+    conversaId: uuid('conversa_id')
+      .notNull()
+      .references(() => conversa.id),
+    contratoId: text('contrato_id').notNull(),
+    status: text('status', { enum: STATUS_RESERVA }).notNull(),
+    checkIn: date('check_in', { mode: 'string' }).notNull(),
+    checkOut: date('check_out', { mode: 'string' }).notNull(),
+    idHotel: integer('id_hotel').notNull(),
+    hotel: text('hotel'),
+    idTipoUh: integer('id_tipo_uh').notNull(),
+    tipoUh: text('tipo_uh'),
+    adultos: integer('adultos').notNull(),
+    criancas: integer('criancas').notNull().default(0),
+    hospedes: jsonb('hospedes').notNull().default([]),
+    /** Pontos e taxa como o ERP simulou — nunca recalculados aqui. */
+    custoPontos: integer('custo_pontos').notNull(),
+    taxaCentavos: integer('taxa_centavos').notNull(),
+    /** `IdUtilizacaoContrato`. Gravado ANTES de confirmar: é a âncora do read-back. */
+    erpUtilizacaoId: text('erp_utilizacao_id'),
+    motivo: text('motivo'),
+    aprovadoPor: text('aprovado_por'),
+    aprovadoEm: timestamp('aprovado_em', { withTimezone: true }),
+    criadoEm: timestamp('criado_em', { withTimezone: true }).notNull().defaultNow(),
+    atualizadoEm: timestamp('atualizado_em', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    /**
+     * Chave NATURAL da reserva. `CriarUtilizacaoContrato` não tem campo de
+     * referência externa (a 036 pôde usar `CodigoAutorizacao`), então é esta
+     * combinação que impede duas conversas de reservarem a mesma semana.
+     */
+    uniqueIndex('reserva_periodo_uq')
+      .on(t.contratoId, t.checkIn, t.checkOut, t.idHotel, t.idTipoUh)
+      .where(sql`status IN ('aguardando_aprovacao','criando','criada','confirmada')`),
+    index('reserva_conversa_idx').on(t.conversaId, t.criadoEm),
+    index('reserva_status_idx').on(t.status),
+  ],
+);

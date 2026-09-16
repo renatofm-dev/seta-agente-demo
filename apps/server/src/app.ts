@@ -21,6 +21,7 @@ import { eventosPspRoutes } from './pagamentos/eventos-routes.js';
 import type { PagamentosRepo } from './pagamentos/repo.js';
 import { webhookPspRoutes } from './pagamentos/webhook-routes.js';
 import { relatoriosRoutes } from './relatorios-routes.js';
+import { reservasRoutes } from './reserva/reservas-routes.js';
 import { leadsRoutes } from './sdr/leads-routes.js';
 import { devRoutes } from './wa/dev-routes.js';
 import { waRoutes } from './wa/routes.js';
@@ -116,6 +117,9 @@ export function buildApp({
             diasVencimento: env.PAGAMENTO_DIAS_VENCIMENTO,
             descontoMaxBps: env.SDR_DESCONTO_MAX_BPS,
             maxPropostasDia: env.SDR_MAX_PROPOSTAS_DIA,
+            // 038: teto PRÓPRIO — aqui o HITL não segura dinheiro nosso, segura
+            // o compromisso do cotista com uma taxa que o ERP vai faturar
+            tetoTaxaReservaCentavos: env.RESERVA_TETO_TAXA_SEM_HITL_CENTAVOS,
           },
           canal: {
             gateway: env.WA_ACCESS_TOKEN ? 'meta' : 'log-only',
@@ -154,6 +158,10 @@ export function buildApp({
           boss: wa.boss,
           auth: consoleDeps.auth,
         });
+      }
+      // Reservas (038): listagem e a aprovação da taxa de manutenção
+      if (clientConfig.modulos.reserva) {
+        app.register(reservasRoutes, { db: wa.db, boss: wa.boss, auth: consoleDeps.auth });
       }
       if (consoleDeps.registry) {
         app.register(aprendizadoRoutes, {

@@ -6,10 +6,12 @@ import {
   type TraceEvento,
   toolEscalarParaHumano,
   toolIniciarPagamento,
+  toolIniciarReserva,
 } from '@seta/agent';
 import type { AIProvider, ChatMessage } from '@seta/ai-provider';
 import type { ClientConfig } from '@seta/client-config';
 import { TEXTO_INTERESSE_COMPRA } from '@seta/cobranca';
+import type { ErpWriter } from '@seta/erp-api-tse';
 import {
   classificarIntencao,
   guardrailPreco,
@@ -36,6 +38,15 @@ import {
 import type { PagamentosRepo } from '../pagamentos/repo.js';
 import { toolCobrancaEmAberto } from '../pagamentos/tool-cobranca-em-aberto.js';
 import { toolBuscarConhecimento } from '../rag/tool-buscar-conhecimento.js';
+import {
+  continuarFluxo as continuarFluxoReserva,
+  type EnvFluxoReserva,
+  iniciarFluxo as iniciarFluxoReserva,
+  type ReservaFluxoDeps,
+  type ResultadoFluxoReserva,
+} from '../reserva/fluxo.js';
+import type { ReservaRepo } from '../reserva/repo.js';
+import { toolHoteisDisponiveis, toolMinhasReservas } from '../reserva/tools.js';
 import {
   continuarFluxoSdr,
   type EnvSdr,
@@ -79,6 +90,15 @@ export interface AgentTurnoHandlerDeps {
   readonly anonimizacao?: { consumir(traceId: string): TraceEvento | null };
   /** 015: agente SDR da raia sem vínculo; ausente ⇒ lead frio escala como antes. */
   readonly sdr?: SdrTurnoDeps;
+  /** 038: reserva de utilização; ausente ⇒ o agente não sabe reservar. */
+  readonly reserva?: ReservaTurnoDeps;
+}
+
+/** 038: o que o fluxo de reserva precisa além do que o turno já tem. */
+export interface ReservaTurnoDeps {
+  readonly repo: ReservaRepo;
+  readonly writer: ErpWriter;
+  readonly env: EnvFluxoReserva;
 }
 
 /** 015: o que o agente SDR precisa além do que o turno já tem. */
@@ -371,6 +391,25 @@ async function processarComAgente(
           logger: deps.logger,
         }
       : null;
+  /**
+   * 038: reserva vive na MESMA raia do pagamento (cotista com vínculo) — é a
+   * primeira fatia a dividir raia com outro fluxo. A precedência está no bloco
+   * de "fluxo ativo" abaixo: pagamento primeiro, porque tem dinheiro em jogo.
+   */
+  const reservaDeps: ReservaFluxoDeps | null =
+    deps.clientConfig.modulos.reserva && deps.reserva && pagamentos && clienteId !== ''
+      ? {
+          db: deps.db,
+          boss: deps.boss,
+          executor: deps.executor,
+          repo: deps.reserva.repo,
+          pagamentos: pagamentos.repo,
+          writer: deps.reserva.writer,
+          provider: deps.provider,
+          env: deps.reserva.env,
+          logger: deps.logger,
+        }
+      : null;
   const ctxSdr = {
     conversaId: t.conversaId,
     turnoId: t.id,
@@ -406,6 +445,24 @@ async function processarComAgente(
         return resultadoDoFluxo(r);
       }
       // saiu da frente: o agente geral responde este turno sabendo do contexto
+      personaExtra = NOTA_FLUXO_ABANDONADO;
+    }
+  }
+  /** 038: o fluxo de reserva não emite eventos de trace próprios (ainda). */
+  const resultadoDoFluxoReserva = (r: ResultadoFluxoReserva): ResultadoComFusao =>
+    resultadoDoFluxo({ ...r, eventos: [] });
+
+  // 038: reserva ativa consome o turno (mesma forma da cobrança). Vem DEPOIS do
+  // fluxo de pagamento de propósito: os dois vivem na raia do cotista, e quem
+  // tem dinheiro em jogo fala primeiro.
+  if (reservaDeps) {
+    const ativo = await reservaDeps.repo.fluxoAtivo(t.conversaId);
+    if (ativo) {
+      const r = await continuarFluxoReserva(reservaDeps, ativo, ctxFluxo);
+      if (!r.abandonado) {
+        await enviarVarias(r.mensagens);
+        return resultadoDoFluxoReserva(r);
+      }
       personaExtra = NOTA_FLUXO_ABANDONADO;
     }
   }
@@ -570,6 +627,13 @@ async function processarComAgente(
     toolEscalarParaHumano(),
     // 014: o agente geral pode entregar ao fluxo de cobrança e reler a última cobrança
     ...(pagamentos ? [toolIniciarPagamento(), toolCobrancaEmAberto(pagamentos.repo)] : []),
+    ...(reservaDeps
+      ? [
+          toolIniciarReserva(),
+          toolHoteisDisponiveis(reservaDeps.writer),
+          toolMinhasReservas(reservaDeps.repo),
+        ]
+      : []),
   ];
 
   // skills top-2 no contexto (009); ids entram no trace p/ atribuição de uso
@@ -635,7 +699,16 @@ async function processarComAgente(
     fluxoIniciado = await iniciarFluxo(fluxoDeps, ctxFluxo);
     await enviarVarias(fluxoIniciado.mensagens, 2);
   }
-  const escalado = (resultado.escalado || fluxoIniciado?.escalado === true) && !filaHumano;
+  let reservaIniciada: ResultadoFluxoReserva | null = null;
+  if (resultado.fluxoReservaSolicitado && reservaDeps && fusao.resultado === 'enviado') {
+    reservaIniciada = await iniciarFluxoReserva(reservaDeps, ctxFluxo);
+    await enviarVarias(reservaIniciada.mensagens, fluxoIniciado ? 3 : 2);
+  }
+  const escalado =
+    (resultado.escalado ||
+      fluxoIniciado?.escalado === true ||
+      reservaIniciada?.escalado === true) &&
+    !filaHumano;
   return {
     ...resultado,
     // #47: escalada com a conversa JÁ na fila não é nova escalada — o ticket
@@ -643,14 +716,21 @@ async function processarComAgente(
     escalado,
     escaladoTrigger: filaHumano
       ? null
-      : (resultado.escaladoTrigger ?? fluxoIniciado?.escaladoTrigger ?? null),
+      : (resultado.escaladoTrigger ??
+        fluxoIniciado?.escaladoTrigger ??
+        reservaIniciada?.escaladoTrigger ??
+        null),
     eventos: [...resultado.eventos, ...(fluxoIniciado?.eventos ?? [])],
-    tokensEntrada: resultado.tokensEntrada + usageExtra.entrada,
-    tokensSaida: resultado.tokensSaida + usageExtra.saida,
+    tokensEntrada:
+      resultado.tokensEntrada + usageExtra.entrada + (reservaIniciada?.tokensEntrada ?? 0),
+    tokensSaida: resultado.tokensSaida + usageExtra.saida + (reservaIniciada?.tokensSaida ?? 0),
     fusao: fusao.resultado,
-    respostaEnviada: fluxoIniciado
-      ? [textoAgente, ...fluxoIniciado.mensagens].filter((s) => s).join('\n\n')
-      : fusao.textoEnviado,
+    respostaEnviada:
+      fluxoIniciado || reservaIniciada
+        ? [textoAgente, ...(fluxoIniciado?.mensagens ?? []), ...(reservaIniciada?.mensagens ?? [])]
+            .filter((s) => s)
+            .join('\n\n')
+        : fusao.textoEnviado,
   };
 }
 

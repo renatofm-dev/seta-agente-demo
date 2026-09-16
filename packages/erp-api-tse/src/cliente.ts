@@ -256,6 +256,15 @@ export function createTseErpApi(config: TseHttpConfig): TseErpApi {
       return saida;
     },
 
+    async lerSaldoPontos(contratoId) {
+      const { json } = await api.request({
+        method: 'GET',
+        path: '/api/PainelDoCliente/MinhasUtilizacoesContrato',
+        query: { idContrato: contratoId, paginaAtual: 1 },
+      });
+      return MinhasUtilizacoesSchema.parse(json).SaldoPontosGeral;
+    },
+
     async lerParcela(contaFinanceiraId, contratoId) {
       // o painel pagina de 10 em 10 e não filtra por parcela: varre até achar
       for (let pagina = 1; pagina <= MAX_PAGINAS; pagina++) {

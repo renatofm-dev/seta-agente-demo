@@ -90,6 +90,8 @@ export interface ErpWriter {
   lerUtilizacao(idUtilizacao: string): Promise<UtilizacaoErp | null>;
   /** Base do read-back por chave natural quando a resposta da criação se perde. */
   listarUtilizacoes(contratoId: string): Promise<UtilizacaoErp[]>;
+  /** Pontos que o contrato ainda tem — o fluxo precisa antes de simular. */
+  lerSaldoPontos(contratoId: string): Promise<number>;
   /**
    * Leitura de VERIFICAÇÃO do write (read-back de idempotência). Mora aqui, e
    * não no catálogo, porque não faz parte da superfície do agente.

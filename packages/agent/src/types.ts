@@ -90,6 +90,8 @@ export interface ResultadoTurno {
   readonly latenciaMs: number;
   /** 014: o agente chamou `iniciar_pagamento` — o server inicia o fluxo após a resposta. */
   readonly fluxoPagamentoSolicitado?: boolean;
+  /** 038: o agente pediu para iniciar a reserva. */
+  readonly fluxoReservaSolicitado?: boolean;
 }
 
 export interface AgentRuntimeDeps {

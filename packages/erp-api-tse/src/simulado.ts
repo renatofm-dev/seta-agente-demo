@@ -33,6 +33,7 @@ export interface ErpSimulado extends ErpWriter {
     custoPontosPorDiaria?: number;
     taxaCentavosPorDiaria?: number;
     diasBloqueados?: string[];
+    saldoPontos?: number;
   }): void;
   readonly utilizacoes: readonly UtilizacaoErp[];
 }
@@ -62,6 +63,7 @@ export function createErpSimulado(): ErpSimulado {
   let custoPontosPorDiaria = 800;
   let taxaCentavosPorDiaria = 9_000;
   let diasBloqueados: string[] = [];
+  let saldoPontos = 66_000;
   let seqUtilizacao = 0;
 
   return {
@@ -110,6 +112,7 @@ export function createErpSimulado(): ErpSimulado {
       if (cfg.taxaCentavosPorDiaria !== undefined)
         taxaCentavosPorDiaria = cfg.taxaCentavosPorDiaria;
       if (cfg.diasBloqueados) diasBloqueados = cfg.diasBloqueados;
+      if (cfg.saldoPontos !== undefined) saldoPontos = cfg.saldoPontos;
     },
 
     async listarHoteis() {
@@ -188,6 +191,15 @@ export function createErpSimulado(): ErpSimulado {
 
     async listarUtilizacoes() {
       return [...utilizacoes];
+    },
+
+    async lerSaldoPontos() {
+      return (
+        saldoPontos -
+        utilizacoes
+          .filter((u) => u.status.toUpperCase() !== 'CANCELADA')
+          .reduce((a, u) => a + u.custoPontos, 0)
+      );
     },
 
     async health() {

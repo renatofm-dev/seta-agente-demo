@@ -9,7 +9,7 @@ import {
 import type { ToolSpec } from '@seta/query-catalog';
 import { z } from 'zod';
 import { renderPromptBase } from './prompt.js';
-import { NOME_ESCALAR, NOME_INICIAR_PAGAMENTO } from './tools-internas.js';
+import { NOME_ESCALAR, NOME_INICIAR_PAGAMENTO, NOME_INICIAR_RESERVA } from './tools-internas.js';
 import type {
   AgentRuntime,
   AgentRuntimeDeps,
@@ -52,6 +52,11 @@ const StateAnnotation = Annotation.Root({
   respostaFinal: Annotation<string | null>({ reducer: (_a, b) => b, default: () => null }),
   /** 014: tool `iniciar_pagamento` chamada neste turno. */
   fluxoPagamentoSolicitado: Annotation<boolean>({
+    reducer: (a, b) => a || b,
+    default: () => false,
+  }),
+  /** 038: tool `iniciar_reserva` chamada neste turno. */
+  fluxoReservaSolicitado: Annotation<boolean>({
     reducer: (a, b) => a || b,
     default: () => false,
   }),
@@ -195,6 +200,7 @@ export function createAgentRuntime(deps: AgentRuntimeDeps): AgentRuntime {
         let fallbackMotivo: string | null = null;
         let falhas = 0;
         let fluxoPagamentoSolicitado = false;
+        let fluxoReservaSolicitado = false;
 
         for (const call of state.pendingToolCalls) {
           const t0 = Date.now();
@@ -241,6 +247,7 @@ export function createAgentRuntime(deps: AgentRuntimeDeps): AgentRuntime {
                 escaladoTrigger = escaladoTrigger ?? 'pedido_do_agente';
               }
               if (call.name === NOME_INICIAR_PAGAMENTO) fluxoPagamentoSolicitado = true;
+              if (call.name === NOME_INICIAR_RESERVA) fluxoReservaSolicitado = true;
               const r = await executarTool(spec, params);
               erro = r.erro;
               if (erro) falhas += 1;
@@ -307,6 +314,7 @@ export function createAgentRuntime(deps: AgentRuntimeDeps): AgentRuntime {
           toolCallsFeitas: state.toolCallsFeitas + state.pendingToolCalls.length,
           pendingToolCalls: [],
           fluxoPagamentoSolicitado,
+          fluxoReservaSolicitado,
           ...(fallbackMotivo ? { fallbackMotivo } : {}),
         };
       };
@@ -397,6 +405,7 @@ export function createAgentRuntime(deps: AgentRuntimeDeps): AgentRuntime {
         tokensSaida: final.tokensSaida,
         latenciaMs: Date.now() - inicio,
         fluxoPagamentoSolicitado: final.fluxoPagamentoSolicitado,
+        fluxoReservaSolicitado: final.fluxoReservaSolicitado,
       };
     },
   };

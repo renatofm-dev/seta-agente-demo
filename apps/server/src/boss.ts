@@ -12,6 +12,8 @@ export const FILA_COBRANCA_EMITIR = 'cobranca-emitir';
 export const FILA_COBRANCA_EVENTO = 'cobranca-evento';
 /** 036: baixa no ERP pela API do TSE (retry com backoff; auth/negócio vão para humano). */
 export const FILA_ERP_BAIXA = 'erp-baixa';
+/** 038: criação e confirmação da reserva no ERP (retry com backoff). */
+export const FILA_ERP_RESERVA = 'erp-reserva';
 /** Mesmo retryLimit da fila — a última tentativa vira dead-letter (#29). */
 export const OUTBOX_RETRY_LIMIT = 5;
 export const COBRANCA_RETRY_LIMIT = 5;
@@ -40,6 +42,11 @@ export async function startBoss(url: string, logger: Logger): Promise<PgBoss> {
     retryDelay: 2,
   });
   await boss.createQueue(FILA_ERP_BAIXA, {
+    retryLimit: COBRANCA_RETRY_LIMIT,
+    retryBackoff: true,
+    retryDelay: 2,
+  });
+  await boss.createQueue(FILA_ERP_RESERVA, {
     retryLimit: COBRANCA_RETRY_LIMIT,
     retryBackoff: true,
     retryDelay: 2,

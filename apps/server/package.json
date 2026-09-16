@@ -23,6 +23,7 @@
     "@seta/payment-provider": "workspace:*",
     "@seta/query-catalog": "workspace:*",
     "@seta/rag": "workspace:*",
+    "@seta/reserva": "workspace:*",
     "@seta/sdr": "workspace:*",
     "@seta/skills": "workspace:*",
     "@seta/wa-meta": "workspace:*",

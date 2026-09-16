@@ -18,6 +18,8 @@ export const ClientConfigSchema = z.object({
     pagamentos: z.boolean().default(false),
     /** 015: agente SDR na raia SEM vínculo (lead frio) + tools `comercial.*`. */
     sdr: z.boolean().default(false),
+    /** 038: reserva de utilização de contrato pelo agente (exige `pagamentos`). */
+    reserva: z.boolean().default(false),
   }),
   /** 015: persona da raia do lead frio; ausente ⇒ usa `persona`. */
   personaSdr: z.string().min(1).optional(),

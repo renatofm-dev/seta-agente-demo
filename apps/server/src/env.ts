@@ -163,6 +163,21 @@ export const EnvSchemaBase = z.object({
    * nem decora o executor. `conciliacao.ts` só é APAGADO na 041.
    */
   ERP_CONCILIACAO: z.enum(['auto', 'on', 'off']).default('auto'),
+  /**
+   * 038: acima desta taxa de manutenção a reserva espera aprovação humana.
+   * Teto PRÓPRIO, não o de pagamento: aqui o HITL não segura dinheiro nosso,
+   * segura o compromisso do cotista com uma taxa que o ERP vai faturar.
+   */
+  RESERVA_TETO_TAXA_SEM_HITL_CENTAVOS: z.coerce.number().int().min(0).default(100_000),
+  /** Fluxo de reserva sem resposta expira (minutos). */
+  RESERVA_FLUXO_EXPIRA_MIN: z.coerce.number().int().min(1).default(60),
+  /**
+   * Credencial de operador DEDICADA ao agente. O TSE grava quem pediu a reserva
+   * (`IdOperadorRespSolicitacao`), e é isso que separa, na auditoria, o que o
+   * robô fez do que um atendente fez. Ausentes ⇒ usa a credencial da 036.
+   */
+  TSE_RESERVA_USERNAME: z.string().min(1).optional(),
+  TSE_RESERVA_PASSWORD: z.string().min(1).optional(),
 });
 export const EnvSchema = EnvSchemaBase.superRefine((env, ctx) => {
   // vale em qualquer ambiente: apontar para o TSE sem credencial é boot mudo
