@@ -92,6 +92,30 @@ uma única vez.
 | datas | `"2021-03-21T00:00:00-03:00"` | **Fatiar a string** (`.slice(0,10)`); passar por `Date` + `toISOString()` desloca o dia pelo offset, e um dia de erro troca `vencido` por `aberto` |
 | dinheiro | decimal (`66.68`) | `Math.round(reais * 100)` — `66.68 * 100 = 6668.000000000001` |
 
+## 4b. A baixa de pagamento: o buraco que a coleção tem
+
+**Não existe endpoint de baixa para PIX ou boleto.** `financeiro/TransacaoEletronica` é o único
+caminho de baixa das 90 rotas, e o corpo dele é inteiramente de cartão:
+
+```
+IdContaFinanceira, Valor, QuatroPrimeirosDigitosCartao,
+QuatroUltimosDigitosCartao, CodigoAutorizacao, QuantidadeParcelas, NomePessoa
+```
+
+Varredura em todos os corpos de request da coleção atrás de `DataPagamento`, `DataRecebimento`,
+`DataLiquidacao`, baixa ou quitação: **nenhum campo**. O `PUT ContaFinanceira` também não tem — ele
+altera valor, vencimento e meio, nunca registra recebimento.
+
+A plataforma cobra por PIX e boleto (042/043). **Premissa adotada na 036**, enquanto o fornecedor
+não responde (pergunta 1 do §6):
+
+> usar `TransacaoEletronica` com os campos de cartão **nulos** e o id da cobrança no PSP em
+> `CodigoAutorizacao`.
+
+Ela não inventa endpoint nem campo — usa só o que a coleção tem —, dá ao financeiro do cliente o
+link com o extrato do gateway, e é o que o read-back usa para reconhecer a própria baixa. Se a
+resposta vier diferente, muda `packages/erp-api-tse/src/cliente.ts:registrarPagamento` e nada mais.
+
 ## 5. Respostas que não são JSON
 
 Três escritas devolvem **prosa**, e HTTP 200 **não é prova de sucesso**:
@@ -129,24 +153,46 @@ se a D10 vier ruim, é por ali que o agente ainda acha o contrato certo. Plano B
 [roadmap](roadmap.md) e como decisão externa na
 [spec 041](../specs/041-tse-real-e-fim-da-conciliacao.md).
 
+**Nenhuma destas respostas bloqueia a demo** — ela roda contra o simulador da 035, que é nosso.
+Elas bloqueiam a [041](../specs/041-tse-real-e-fim-da-conciliacao.md), que é o piloto. Cada uma
+virou **premissa escrita e isolada**, para que a resposta custe uma função e não um redesenho:
+
+| Pergunta | Premissa em vigor | Onde muda |
+|---|---|---|
+| baixa de PIX/boleto | `TransacaoEletronica` com cartão nulo + id do PSP na autorização (§4b) | `cliente.ts:registrarPagamento` |
+| como é uma falha | 200 só é sucesso se a prosa casar com a regex; o resto é `ErpBusinessError` → ticket | `cliente.ts` (`ID_DA_PROSA`) |
+| idempotência | assumir que **não** é; read-back antes de repetir, e `erp_escrita.chave` como PK | `erp/baixa.ts` |
+| escopo do painel (D10) | demo com `escopo=qualquer`; o adapter acha o contrato por `obtercontratos?cpf=` | `TSE_SIM_PAINEL_ESCOPO` |
+
+A terceira nem era pergunta deles: a garantia de não baixar duas vezes é nossa de qualquer jeito.
+
 **Pergunta pronta para enviar ao fornecedor** (copiar e colar):
 
-> Estamos integrando um assistente de atendimento à API do TS Explorer, usando **uma única
-> credencial de integração** para atender vários cotistas de um mesmo cliente.
+> Estamos integrando um assistente de atendimento à API do TS Explorer. Ele atende vários cotistas
+> de um mesmo cliente com **uma única credencial de integração**, e registra pagamentos recebidos
+> por um gateway externo (PIX e boleto).
 >
-> 1. Os endpoints de `PainelDoCliente` (`MeusContratos`, `FinanceiroContrato`, `MeusBoletos`,
->    `SegundaViaBoleto`) resolvem o escopo pelo **operador dono do token**, ou aceitam o
->    `idContrato` de qualquer cotista da empresa desde que o operador tenha permissão?
-> 2. Se for pelo dono do token: qual é o caminho recomendado para um integrador ler o financeiro
->    de N cotistas? (`utilizacaocontrato/obtercontratos?cpf=` + algum endpoint de parcelas, ou
->    `Relatorios/ObterJsonDadosRelatorioComParametros`?)
-> 3. `POST /api/financeiro/TransacaoEletronica` é **idempotente**? Se reenviarmos a mesma
->    transação (mesma `IdContaFinanceira`, mesmo `CodigoAutorizacao`), ela é registrada duas
->    vezes? Qual o tamanho máximo do campo `CodigoAutorizacao`?
-> 4. `/token` e `utilizacaocontrato/SimularUtilizacaoContrato` aparecem na coleção como `GET` com
->    corpo. Confirmam que aceitam `POST`?
-> 5. Existe **ambiente de homologação** com credenciais que possamos usar para testes
->    automatizados?
+> 1. **Baixa de pagamento que não é cartão.** O único endpoint de baixa que encontramos é
+>    `POST /api/financeiro/TransacaoEletronica`, e o corpo dele é de cartão
+>    (`QuatroPrimeirosDigitosCartao`, `CodigoAutorizacao`, `QuantidadeParcelas`). Como registramos
+>    o pagamento de uma parcela recebida por **PIX ou boleto**? Existe outro endpoint, ou usamos o
+>    mesmo colocando o identificador da transação do gateway em `CodigoAutorizacao`? Se for o
+>    mesmo, qual `IdMeioPagamento` devemos informar?
+> 2. **Escopo do `PainelDoCliente`.** `MeusContratos`, `FinanceiroContrato`, `MeusBoletos` e
+>    `SegundaViaBoleto` resolvem o escopo pelo **operador dono do token**, ou aceitam o
+>    `idContrato` de qualquer cotista da empresa desde que o operador tenha permissão? Se for pelo
+>    dono do token, qual o caminho recomendado para ler o financeiro de N cotistas?
+> 3. **Como é uma falha.** Os 89 exemplos da coleção são todos HTTP 200, e três escritas respondem
+>    com uma frase. Quando a operação **falha** — parcela inexistente, valor divergente, parcela já
+>    baixada — a API devolve status diferente de 200, ou 200 com mensagem de erro no corpo? Existe
+>    código de erro estruturado?
+> 4. **Idempotência.** `POST /api/financeiro/TransacaoEletronica` é idempotente? Se reenviarmos a
+>    mesma transação (mesma `IdContaFinanceira`, mesmo `CodigoAutorizacao`) por um retry de rede,
+>    ela é registrada duas vezes? Qual o tamanho máximo de `CodigoAutorizacao`?
+> 5. **Homologação.** Existe ambiente de homologação com credenciais para testes automatizados?
+>
+> *(Obs.: na coleção, `/token` e `SimularUtilizacaoContrato` aparecem como `GET` com corpo, o que a
+> maioria dos clientes HTTP recusa. Assumimos `POST`; se estiver errado, nos avisem.)*
 
 ## 7. Rodar localmente
 
@@ -176,7 +222,7 @@ Do **simulador** (035, já valem):
 | `TSE_SIM_PAINEL_ESCOPO` | `token` ou `qualquer` (ver §6) |
 | `TSE_SIM_LATENCIA_MS` / `TSE_SIM_FALHA_BPS` | caos controlado: atraso fixo e falhas 500 em basis points, para exercitar timeout e retry do adapter |
 
-Do **produto** (036/037 — ainda não existem):
+Do **produto** (036 entregue; `ERP_LEITURA` é da 037, ainda não existe):
 
 | Var | Para que |
 |---|---|

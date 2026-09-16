@@ -287,3 +287,29 @@ aqui é o mapa.
   lead e venda (039), 2ª via em PDF (040), o TSE real (041) e as 59 rotas ainda não respondidas
   (placar em `apps/tse-sim/test/pendentes.ts`). `OperadorSistema/*` e `Relatorios/*` não têm dono:
   nenhuma jornada da demo as usa.
+
+## 036 — Escrita no ERP (`ErpWriter`) e baixa real do pagamento
+- **Entrega:** a conciliação deixa de ser ficção e vira ponte. O cotista paga, o webhook do Asaas
+  chega, e a baixa é **gravada no TSE** por `POST financeiro/TransacaoEletronica`; como a leitura
+  continua por SQL **sobre a mesma base**, a parcela aparece `v_titulo.status = 'pago'` na leitura
+  seguinte — sem esperar a 037. O decorator da 014 passa a compensar **só o que ainda está em voo**
+  (`ERP_CONCILIACAO=auto`), então em nenhum instante há contagem dupla.
+- **A descoberta que mudou a spec:** *não existe endpoint de baixa para PIX ou boleto*.
+  `TransacaoEletronica` é o único caminho das 90 rotas e o corpo dele é de cartão; nenhum request da
+  coleção tem campo de pagamento/recebimento/liquidação. Entregue sob **premissa registrada** —
+  campos de cartão nulos, id do PSP em `CodigoAutorizacao` — em `docs/tse-api-setup.md` §4b.
+- **Onde está:** `packages/erp-api-tse` (novo: `tipos`, `erros`, `token`, `http`, `cliente`,
+  `simulado`), `apps/server/src/erp/baixa.ts` (novo), `pagamentos/eventos.ts` (`marcarPaga` grava a
+  intenção na MESMA transação), `pagamentos/repo.ts` (`ModoConciliacao`), `db/schema.ts`
+  (`erp_escrita`), migração `0018`, `boss.ts` (`FILA_ERP_BAIXA`), `env.ts`, `index.ts`,
+  `.dependency-cruiser.cjs` (duas regras novas) e `infra/compose.prod.yml`.
+- **Idempotência em quatro camadas**, porque o webhook reentrega e o pg-boss re-tenta:
+  `erp_escrita.chave` é PK (guarda antes) · **read-back** antes de repetir o POST (a única defesa
+  real: o TSE não é idempotente) · `CodigoAutorizacao` com o id do PSP (rastro no próprio ERP) ·
+  retry limitado, com `ErpAuthError`/`ErpBusinessError` indo direto para humano.
+- **Como exercitar:** `packages/erp-api-tse/test/` (21 casos contra as fixtures do fornecedor, sem
+  rede) e `apps/server/test/erp-baixa.integration.test.ts` (12 casos contra o simulador da 035 **de
+  verdade**: o `fetchFn` entra no Fastify do `apps/tse-sim` por `inject`). O efeito é conferido em
+  `contafinanceira` e em `v_titulo`, lido pelo papel do PRODUTO (`erp_ro`).
+- **Ficou de fora:** catálogo por HTTP (037 — as leituras continuam por SQL, de propósito), reserva
+  (038), lead e venda (039), 2ª via (040), apagar `conciliacao.ts` e apontar para o TSE real (041).
