@@ -1,4 +1,11 @@
 import { z } from 'zod';
+import type {
+  CriarUtilizacaoInput,
+  OpcaoErp,
+  SimulacaoErp,
+  SimularUtilizacaoInput,
+  UtilizacaoErp,
+} from './reserva.js';
 
 /**
  * Fronteira tipada com a API do TS Explorer (036). Dinheiro entra e sai em
@@ -73,6 +80,16 @@ export interface ApiConnector {
 export interface ErpWriter {
   readonly fornecedor: 'tse';
   registrarPagamento(i: RegistrarPagamentoInput): Promise<{ transacaoId: string }>;
+  // --- 038: reserva (utilização de contrato) --------------------------------
+  listarHoteis(contratoId: string): Promise<OpcaoErp[]>;
+  listarTiposUh(idHotel: number): Promise<OpcaoErp[]>;
+  simularUtilizacao(i: SimularUtilizacaoInput): Promise<SimulacaoErp>;
+  criarUtilizacao(i: CriarUtilizacaoInput): Promise<UtilizacaoErp>;
+  confirmarUtilizacao(idUtilizacao: string): Promise<void>;
+  cancelarUtilizacao(idUtilizacao: string, motivo: string): Promise<void>;
+  lerUtilizacao(idUtilizacao: string): Promise<UtilizacaoErp | null>;
+  /** Base do read-back por chave natural quando a resposta da criação se perde. */
+  listarUtilizacoes(contratoId: string): Promise<UtilizacaoErp[]>;
   /**
    * Leitura de VERIFICAÇÃO do write (read-back de idempotência). Mora aqui, e
    * não no catálogo, porque não faz parte da superfície do agente.
