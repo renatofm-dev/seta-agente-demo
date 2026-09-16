@@ -2,7 +2,7 @@ import type { FastifyInstance, FastifyPluginOptions } from 'fastify';
 import { z } from 'zod';
 import type { Autenticador, Sessao } from '../auth.js';
 import type { Consulta } from '../db.js';
-import { agoraTse, dataTse, decimal, diasEntre, hojeTse } from '../pascal.js';
+import { agoraTse, dataTse, decimal, diasEntre, hojeTse, instanteTse } from '../pascal.js';
 import { exigirBearer } from '../plugin-bearer.js';
 
 /**
@@ -328,6 +328,141 @@ export function painelDoClienteRoutes(
       { idContrato },
     );
     return paginar(parcelas, paginaAtual);
+  });
+
+  // --- reserva (038): o que o cotista vê da própria utilização -----------------
+
+  app.get<{ Params: { idContrato: string } }>(
+    '/api/PainelDoCliente/HoteisDisponiveisUso/:idContrato',
+    async () =>
+      (
+        await opts.db.buscar<{ idedificiohotel: number; nome: string }>(
+          'SELECT idedificiohotel, nome FROM edificiohotel ORDER BY idedificiohotel',
+        )
+      ).map((h) => ({ IdEdificioHotel: h.idedificiohotel, Descricao: h.nome })),
+  );
+
+  app.get<{ Params: { idEdificioHotel: string } }>(
+    '/api/PainelDoCliente/TiposUnidadeHoteleira/:idEdificioHotel',
+    async (req) =>
+      (
+        await opts.db.buscar<{ idtipounidadehoteleira: number; nome: string }>(
+          `SELECT DISTINCT t.idtipounidadehoteleira, t.nome
+             FROM unidadehoteleira u
+             JOIN tse_sim.tipounidadehoteleira t ON t.capacidade = u.capacidade
+            WHERE u.idedificiohotel = :idEdificio
+            ORDER BY t.idtipounidadehoteleira`,
+          { idEdificio: Number(req.params.idEdificioHotel) },
+        )
+      ).map((t) => ({ IdTipoUnidadeHoteleira: t.idtipounidadehoteleira, Descricao: t.nome })),
+  );
+
+  /**
+   * `CriarSolicitacaoReserva` devolve **200 com corpo vazio** — é assim na
+   * coleção do fornecedor, e é exatamente por isso que a jornada da 038 NÃO usa
+   * esta rota: sem id não há como confirmar nem cancelar. Ela existe aqui para
+   * que o contrato fique documentado e ninguém tente este caminho de novo.
+   */
+  app.get('/api/PainelDoCliente/CriarSolicitacaoReserva', async (_req, reply) =>
+    reply.type('application/json; charset=utf-8').send('""'),
+  );
+
+  app.get('/api/PainelDoCliente/MinhasUtilizacoesContrato', async (req) => {
+    const { idContrato, paginaAtual } = ParamsContrato.parse(req.query);
+    const [contrato] = await opts.db.buscar<{ qtdpontos: number; titular: string }>(
+      `SELECT c.qtdpontos, p.nome AS titular FROM contrato c
+         JOIN pessoa p ON p.idpessoa = c.idpessoatitular
+        WHERE c.idcontrato = :idContrato`,
+      { idContrato },
+    );
+    const linhas = await opts.db.buscar<Record<string, unknown>>(
+      `SELECT u.idutilizacao, u.status, u.qtdpontosdebitados, u.qtdadultos, u.qtdcriancas,
+              u.qtdpagantes, u.idedificiohotel, u.idtipounidadehoteleira,
+              e.nome AS hotel, t.nome AS tipouh, o.nome AS operador,
+              to_char(u.datacheckin, 'YYYY-MM-DD')  AS checkin,
+              to_char(u.datacheckout, 'YYYY-MM-DD') AS checkout,
+              to_char(u.datacriacao AT TIME ZONE 'America/Sao_Paulo', 'YYYY-MM-DD"T"HH24:MI:SS') AS criada
+         FROM tse_sim.utilizacaocontrato u
+         LEFT JOIN edificiohotel e ON e.idedificiohotel = u.idedificiohotel
+         LEFT JOIN tse_sim.tipounidadehoteleira t ON t.idtipounidadehoteleira = u.idtipounidadehoteleira
+         LEFT JOIN tse_sim.operador o ON o.idoperador = u.idoperador
+        WHERE u.idcontrato = :idContrato
+        ORDER BY u.idutilizacao DESC`,
+      { idContrato },
+    );
+    const debitados = linhas
+      .filter((u) => u.status !== 'CANCELADA')
+      .reduce((acc, u) => acc + Number(u.qtdpontosdebitados), 0);
+    const pagina = linhas.slice((paginaAtual - 1) * POR_PAGINA, paginaAtual * POR_PAGINA);
+    const contratados = Number(contrato?.qtdpontos ?? 0);
+    return {
+      QtdPontosContratados: contratados,
+      PercentualIntegralizado: 0,
+      PercentualMinimoIntegralizadoExigido: 0,
+      QtdPontosDebitados: debitados,
+      QtdPontosUtilizados: debitados,
+      QtdPontosCompraAvulsa: 0,
+      QtdPontosLiberadoUso: contratados - debitados,
+      QtdPontosDebitarPorNaoUtilizacao: 0,
+      DataEfetivacaoDebitoPorNaoutilizacao: null,
+      TotalPaginas: Math.max(1, Math.ceil(linhas.length / POR_PAGINA)),
+      SaldoPontosGeral: contratados - debitados,
+      Utilizacoes: pagina.map((u) => ({
+        IdUtilizacaoContrato: u.idutilizacao,
+        DataCadastro: instanteTse(u.criada as string),
+        DataAlteracao: null,
+        IdContrato: idContrato,
+        IdContratoIntercambio: 0,
+        ContratoIntercambio: null,
+        DataSolicitacao: instanteTse(u.criada as string),
+        // o rastro que separa robô de humano: quem pediu a reserva
+        IdOperadorRespSolicitacao: 0,
+        OperadorRespSolicitacao: u.operador ?? null,
+        IdPessoaSolicitante: 0,
+        PessoaSolicitante: contrato?.titular ?? '',
+        NomeSolicitante: contrato?.titular ?? '',
+        DataCheckIn: dataTse(u.checkin as string),
+        DataCheckOut: dataTse(u.checkout as string),
+        NroNoites: diasEntre(u.checkin as string, u.checkout as string),
+        IdTipoUtilizacaoContrato: 1,
+        TipoUtilizacaoContrato: 'Reserva',
+        Convidados: null,
+        SemanaDoAno: 0,
+        IdHotelReserva: u.idedificiohotel,
+        HotelReserva: u.hotel ?? '',
+        IdUh: 0,
+        Uh: '',
+        Cortesia: false,
+        IdentificadorCortesia: '',
+        CustoPontos: Number(u.qtdpontosdebitados),
+        QtdPontosAcrescimo: 0,
+        QtdPontosDesconto: 0,
+        CustoTotalPontos: Number(u.qtdpontosdebitados),
+        PoderIntercambio: 0,
+        NroReserva: Number(u.idutilizacao),
+        QtdPagantes: Number(u.qtdpagantes),
+        IdTipoUhTarifas: u.idtipounidadehoteleira,
+        TipoUhTarifas: u.tipouh ?? '',
+        QtdAdultos: Number(u.qtdadultos),
+        QtdCriancas: Number(u.qtdcriancas),
+        QtdBebes: 0,
+        UtilizacaoConfirmada: u.status === 'CONFIRMADA',
+        DataConfirmacao: null,
+        IdRespConfirmacao: 0,
+        RespConfirmacao: null,
+        DataCancelamento: null,
+        IdRespCancelamento: 0,
+        RespCancelamento: null,
+        MotivoCancelamento: null,
+        Status: u.status,
+        Observacao: '',
+        IdOperadorCadastro: 0,
+        RespCadastro: (u.operador as string) ?? '',
+        IdOperadorAlteracao: 0,
+        RespAlteracao: '',
+        Hospedes: [],
+      })),
+    };
   });
 
   /**
