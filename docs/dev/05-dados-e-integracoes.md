@@ -91,6 +91,19 @@ as **mesmas views** (spec 018 valida isso contra o `bali_tse`).
 `03-grants.sql`: `erp_ro` tem `USAGE` no schema e `SELECT` só nas views; `REVOKE ALL` nas
 tabelas. Reservas, calendário e check-in não existem no ERP (o agente admite e escala).
 
+## Escrita no ERP (036) — `erp_escrita`
+
+O produto **lê** o ERP pelo catálogo e **escreve** por um port tipado (`ErpWriter`), nunca por
+YAML: leitura é superfície do agente, escrita é código com teste nomeado.
+
+`erp_escrita` é o razão dessas escritas — uma linha por operação, com `chave` determinística
+(`baixa:<pagamento.id>`) como PK. Ela sustenta as quatro camadas de idempotência (o TSE quase
+certamente não é idempotente) e é o que permite a conciliação da 014 virar **compensação**:
+enquanto a linha não está `confirmada`, o decorator ainda compensa a leitura; depois, a verdade é
+do ERP. `ERP_CONCILIACAO` escolhe: `auto` (default), `on` (comportamento anterior à 036) ou `off`.
+
+`conciliacao.ts` só é **apagado** na 041 — está registrado como dívida com data.
+
 ## Catálogo de queries (`catalog/**/*.yaml`)
 
 ```yaml
@@ -125,7 +138,7 @@ tool: { expose: true, name: titulos_atraso }
 | **LLM** (OpenAI-compatible) | agente, classificador, resumo, intérpretes, distiller | — | `/chat/completions` com tools; `/embeddings` (se `EMBEDDING_MODEL`) | `LLM_BASE_URL`, `LLM_API_KEY`, `LLM_MODEL`, preços por 1M para o custo estimado |
 | **Hugging Face** | modelo NER (`Xenova/distilbert-base-multilingual-cased-ner-hrl`) | — | download uma vez (`pnpm anonimizacao:modelo`); a imagem já traz | `ANONIMIZACAO_*` |
 | **Cloudflare quick tunnel** (dev) | expor o server local para o webhook da Meta | — | — | `tools/dev-whatsapp.sh` |
-| **API do TS Explorer** (035) | a segunda superfície do ERP: leitura financeira e **escrita** (baixa, reserva, venda) | — | OAuth2 `password` em `/token` + REST em PascalCase | dublê em `apps/tse-sim` (`TSE_SIM_*`); o TSE real é a 041. Ver [docs/tse-api-setup.md](../tse-api-setup.md) |
+| **API do TS Explorer** (035/036) | a segunda superfície do ERP: leitura financeira e **escrita** — a baixa do pagamento já vai por aqui | — | OAuth2 `password` em `/token` + REST em PascalCase; escrita tipada atrás do port `ErpWriter` (`packages/erp-api-tse`) | `TSE_BASE_URL`/`TSE_USERNAME`/`TSE_PASSWORD`; sem elas, writer simulado. Dublê em `apps/tse-sim` (`TSE_SIM_*`); o TSE real é a 041. Ver [docs/tse-api-setup.md](../tse-api-setup.md) |
 
 ## Variáveis de ambiente (`.env.example` é a lista completa; `env.ts` valida)
 
@@ -134,6 +147,7 @@ tool: { expose: true, name: titulos_atraso }
 | Processo | `NODE_ENV`, `PORT` (3001), `LOG_LEVEL` | em `production` o boot recusa os defaults de dev de `WA_VERIFY_TOKEN`, `WA_APP_SECRET`, `BETTER_AUTH_SECRET` e senhas de dev na `DATABASE_URL` |
 | Bancos | `DATABASE_URL`, `ERP_DATABASE_URL`, `ERP_MOCK_ADMIN_URL` (seed) | |
 | Simulador do TSE (035) | `TSE_SIM_PORT`, `TSE_SIM_DATABASE_URL`, `TSE_SIM_DB_PASSWORD`, `TSE_SIM_USERS`, `TSE_SIM_PAINEL_ESCOPO`, `TSE_SIM_LATENCIA_MS`, `TSE_SIM_FALHA_BPS` | serviço separado (`apps/tse-sim`), com env própria; em `production` recusa a senha e a credencial de exemplo |
+| Escrita no ERP (036) | `TSE_BASE_URL`, `TSE_USERNAME`, `TSE_PASSWORD`, `TSE_TIMEOUT_MS`, `ERP_CONCILIACAO` | sem `TSE_BASE_URL` o writer é simulado e a baixa fica local; credencial de OPERADOR (escreve baixa, reserva e venda) — em produção o boot recusa a de exemplo |
 | Instalação | `CLIENT_CONFIG_PATH`, `CATALOG_DIR`, `CONTATOS_PATH`, `SKILLS_SEED_DIR`, `KB_DIR` | caminhos relativos à raiz do monorepo |
 | Auth | `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL` | o console fala com o server pela mesma origem |
 | WhatsApp | `WA_VERIFY_TOKEN`, `WA_APP_SECRET`, `WA_ACCESS_TOKEN`, `WA_PHONE_NUMBER_ID`, `WA_WABA_ID`, `WA_DEBOUNCE_MS`, `WA_TEMPLATE_PAGAMENTO_CONFIRMADO`, `DEV_SIMULATOR` | |

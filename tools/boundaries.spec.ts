@@ -16,6 +16,18 @@ const config: any = require_('../.dependency-cruiser.cjs');
 const RULE_PACKAGES_APPS = 'packages-nao-importam-apps';
 const RULE_AGENT_CONNECTOR = 'agent-nao-importa-erp-connector';
 const RULE_COBRANCA_CONNECTOR = 'cobranca-nao-importa-erp-connector';
+/** 036: as duas fronteiras da escrita no ERP. */
+const RULE_AGENT_API = 'agent-nao-importa-erp-api';
+const RULE_API_FOLHA = 'erp-api-e-folha';
+
+/** Regra sem fixture é regra não provada — todas as que o spec cobre. */
+const REGRAS = [
+  RULE_PACKAGES_APPS,
+  RULE_AGENT_CONNECTOR,
+  RULE_COBRANCA_CONNECTOR,
+  RULE_AGENT_API,
+  RULE_API_FOLHA,
+];
 
 interface Violation {
   readonly rule: { readonly name: string };
@@ -36,9 +48,7 @@ describe('fronteiras arquiteturais (dependency-cruiser)', () => {
       baseDir: fileURLToPath(new URL('./fixtures', import.meta.url)),
     });
     const nomes = violationsOf(resultado).map((v) => v.rule.name);
-    expect(nomes).toContain(RULE_AGENT_CONNECTOR);
-    expect(nomes).toContain(RULE_COBRANCA_CONNECTOR);
-    expect(nomes).toContain(RULE_PACKAGES_APPS);
+    for (const regra of REGRAS) expect(nomes, `regra sem fixture: ${regra}`).toContain(regra);
   });
 
   it('a árvore real do repo não tem violação de fronteira', async () => {
@@ -46,9 +56,7 @@ describe('fronteiras arquiteturais (dependency-cruiser)', () => {
       ruleSet: config,
       validate: true,
     });
-    const relevantes = violationsOf(resultado).filter((v) =>
-      [RULE_PACKAGES_APPS, RULE_AGENT_CONNECTOR, RULE_COBRANCA_CONNECTOR].includes(v.rule.name),
-    );
+    const relevantes = violationsOf(resultado).filter((v) => REGRAS.includes(v.rule.name));
     expect(relevantes).toEqual([]);
   });
 });

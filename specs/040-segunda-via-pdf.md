@@ -20,7 +20,12 @@ frente inteira de mídia.
 - `apps/server/src/wa/outbox.ts` — `enqueueOutbound` com chave idempotente, worker com retry do
   pg-boss, sweeper de órfãs. O documento entra pelo **mesmo** caminho.
 - `packages/erp-api-tse` (036) — ganha `obterSegundaVia(contaFinanceiraId)` devolvendo bytes + mime.
-- `apps/tse-sim` (035) — a rota serve o PDF da fixture (118 KB de um boleto real do fornecedor).
+- `apps/tse-sim` (035) — a rota da 2ª via. **Atenção, decisão tomada na 035:** o PDF do fornecedor
+  **não está no repo**. São 118 KB de um boleto real, com cedente, CPF e código de barras de gente
+  de verdade, e nenhuma regra de sanitização alcança bytes de PDF; a fixture guarda `contentType`,
+  `bodyBytes` e o `sha256` como prova de procedência. Esta spec passa a incluir **gerar um boleto
+  sintético de uma página no simulador** — o que ela precisa do fornecedor é a FORMA (é PDF, vem com
+  `application/pdf`), não o documento.
 - `apps/server/src/pagamentos/candidatos.ts` — já sabe quais parcelas existem e quais têm boleto.
 
 ## Escopo

@@ -1,8 +1,19 @@
 # 036 — Port de escrita no ERP (`ErpWriter`) e baixa real do pagamento
 
-> **Pré-spec** (rascunho de 14/09/2026): ainda não executada. Segunda fatia da frente
-> **demo ponta a ponta**. Depende da **035** — mas só das fixtures (`apps/tse-sim/contrato/`), não
-> do simulador pronto. Tamanho **G**. Trilha B.
+> **Entregue em 16/09/2026.** Segunda fatia da frente **demo ponta a ponta**. O que saiu está em
+> [`docs/dev/04-modulos-entregues.md`](../docs/dev/04-modulos-entregues.md); o contrato da API em
+> [`docs/tse-api-setup.md`](../docs/tse-api-setup.md).
+>
+> **A descoberta que mudou a spec:** *não existe endpoint de baixa para PIX ou boleto*.
+> `TransacaoEletronica` é o único caminho das 90 rotas e o corpo dele é de cartão; nenhum request
+> da coleção tem campo de `DataPagamento`/`DataRecebimento`/liquidação. Como a plataforma cobra por
+> PIX e boleto (042/043), a fatia foi entregue sob **premissa registrada** — campos de cartão nulos
+> e o id do PSP em `CodigoAutorizacao` (§4b do guia). Ela não inventa endpoint nem campo, e se a
+> resposta do fornecedor for outra, muda `cliente.ts:registrarPagamento` e nada mais.
+>
+> Decisões que a spec deixou em aberto: `CodigoAutorizacao` leva o **id do PSP inteiro** (teto de
+> 40, com hash curto determinístico acima disso — o `pay_…` do Asaas tem 18); `ERP_CONCILIACAO`
+> default **`auto`**; nome do pacote **`@seta/erp-api-tse`**.
 
 ## Objetivo
 `apps/server/src/pagamentos/conciliacao.ts` existe porque o ERP é read-only, e diz isso no próprio

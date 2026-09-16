@@ -791,3 +791,35 @@ export const eventoEscalonamento = pgTable('evento_escalonamento', {
   }).notNull(),
   criadoEm: timestamp('criado_em', { withTimezone: true }).notNull().defaultNow(),
 });
+
+/**
+ * 036 — razão das ESCRITAS no ERP. Uma linha por operação, chave determinística
+ * (`baixa:<pagamento.id>`), e é ela que sustenta as quatro camadas de
+ * idempotência: `TransacaoEletronica` quase certamente não é idempotente no
+ * TSE, e o webhook do Asaas reentrega enquanto o pg-boss re-tenta.
+ *
+ * Também é o que faz a conciliação da 014 virar compensação: enquanto a linha
+ * não está `confirmada`, o decorator ainda compensa; depois, a verdade é do ERP.
+ */
+export const OPERACOES_ERP = ['baixa', 'reserva', 'lead', 'venda'] as const;
+export const ESTADOS_ERP_ESCRITA = ['pendente', 'confirmada', 'falha'] as const;
+
+export const erpEscrita = pgTable(
+  'erp_escrita',
+  {
+    /** `<operacao>:<id local>` — determinística, e é a PK: repetir não duplica. */
+    chave: text('chave').primaryKey(),
+    operacao: text('operacao', { enum: OPERACOES_ERP }).notNull(),
+    /** idcontafinanceira, idcontrato — o alvo no ERP, para auditoria e suporte. */
+    alvo: text('alvo').notNull(),
+    payload: jsonb('payload').notNull(),
+    estado: text('estado', { enum: ESTADOS_ERP_ESCRITA }).notNull().default('pendente'),
+    /** Id devolvido pelo TSE (a transação eletrônica), quando confirmada. */
+    erpId: text('erp_id'),
+    tentativas: integer('tentativas').notNull().default(0),
+    erro: text('erro'),
+    criadoEm: timestamp('criado_em', { withTimezone: true }).notNull().defaultNow(),
+    atualizadoEm: timestamp('atualizado_em', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('erp_escrita_estado_idx').on(t.estado, t.operacao)],
+);

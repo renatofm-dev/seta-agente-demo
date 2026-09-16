@@ -30,6 +30,9 @@
       "path": "../../packages/erp-connector"
     },
     {
+      "path": "../../packages/erp-api-tse"
+    },
+    {
       "path": "../../packages/observability"
     },
     {

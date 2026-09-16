@@ -1,5 +1,6 @@
 import { createOpenAICompatibleProvider } from '@seta/ai-provider';
 import { loadClientConfig } from '@seta/client-config';
+import { createErpSimulado, createTseErpApi, type ErpWriter } from '@seta/erp-api-tse';
 import { createPgConnector } from '@seta/erp-connector';
 import { createLogger } from '@seta/observability';
 import {
@@ -20,6 +21,7 @@ import { createAuth } from './auth.js';
 import { startBoss } from './boss.js';
 import { createDb } from './db/index.js';
 import { loadEnv } from './env.js';
+import { registerErpBaixaWorker } from './erp/baixa.js';
 import { createDrizzleObsEmitter } from './obs-emitter.js';
 import { createExecutorConciliado } from './pagamentos/conciliacao.js';
 import { registerCobrancaEmitirWorker } from './pagamentos/emitir.js';
@@ -49,21 +51,40 @@ const connector = createPgConnector({ url: env.ERP_DATABASE_URL });
 // 014: a conciliação faz as leituras financeiro.* refletirem as baixas
 // registradas aqui (o ERP é read-only); em produção o ERP faz a baixa e a
 // camada some — por isso fica atrás do port, transparente para todos
-const pagamentosRepo = createPagamentosRepo(db);
-const executor = createExecutorConciliado(
-  createExecutor({
-    catalog,
-    connector,
-    sink: createDrizzleQueryEventSink(db),
-    logger,
-  }),
-  pagamentosRepo,
-);
+const pagamentosRepo = createPagamentosRepo(db, env.ERP_CONCILIACAO);
+const executorCru = createExecutor({
+  catalog,
+  connector,
+  sink: createDrizzleQueryEventSink(db),
+  logger,
+});
+// 036: com `off` o executor nem é decorado — a leitura é crua do ERP. Com
+// `auto` (default) a conciliação compensa só o que ainda não chegou ao TSE.
+const executor =
+  env.ERP_CONCILIACAO === 'off'
+    ? executorCru
+    : createExecutorConciliado(executorCru, pagamentosRepo);
 
 // 014: PSP (ADR 0001) — sem chave, simulado; a base URL decide sandbox/produção
 const psp: PaymentProvider = env.ASAAS_API_KEY
   ? createAsaasProvider({ baseUrl: env.ASAAS_BASE_URL, apiKey: env.ASAAS_API_KEY })
   : createSimulatedPaymentProvider();
+
+// 036: escrita no ERP pela API do TSE — sem TSE_BASE_URL, o writer simulado
+// assume e a baixa vira registro local (mesmo desenho do PSP acima)
+const erpWriter: ErpWriter =
+  env.TSE_BASE_URL && env.TSE_USERNAME && env.TSE_PASSWORD
+    ? createTseErpApi({
+        baseUrl: env.TSE_BASE_URL,
+        username: env.TSE_USERNAME,
+        password: env.TSE_PASSWORD,
+        timeoutMs: env.TSE_TIMEOUT_MS,
+      })
+    : createErpSimulado();
+logger.info(
+  { erp: env.TSE_BASE_URL ? 'api-tse' : 'simulado', conciliacao: env.ERP_CONCILIACAO },
+  'escrita no ERP',
+);
 
 // provedor LLM (005): ausente ⇒ agente responde fallback honesto
 const providerBase =
@@ -154,6 +175,10 @@ await registerCobrancaEmitirWorker({
   pixRecebedor: clientConfig.pagamentos.pix ?? null, // 043
 });
 await registerCobrancaEventoWorker({ db, boss, repo: pagamentosRepo, gateway, env, logger });
+// 036: a baixa no ERP roda em fila PRÓPRIA — dentro do evento, um retry por
+// instabilidade do TSE reexecutaria `notificarPago` e o cotista receberia
+// "pagamento confirmado" de novo
+await registerErpBaixaWorker({ db, boss, writer: erpWriter, logger });
 
 const app = buildApp({
   env,

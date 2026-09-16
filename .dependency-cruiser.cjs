@@ -22,11 +22,21 @@ module.exports = {
       to: { path: ['^packages/erp-connector', '^@seta/erp-connector'] },
     },
     {
+      name: 'agent-nao-importa-erp-api',
+      comment: 'agent nunca escreve no ERP: escrita é do server, atrás do port ErpWriter',
+      severity: 'error',
+      from: { path: '^packages/agent' },
+      to: { path: ['^packages/erp-api-tse', '^@seta/erp-api-tse'] },
+    },
+    {
       name: 'cobranca-nao-importa-erp-connector',
-      comment: 'cobranca (014) recebe os títulos já lidos pelo catálogo; nunca fala com o ERP',
+      comment:
+        'cobranca (014) recebe os títulos já lidos pelo catálogo; nunca fala com o ERP, nem por SQL nem por HTTP',
       severity: 'error',
       from: { path: '^packages/cobranca' },
-      to: { path: ['^packages/erp-connector', '^@seta/erp-connector'] },
+      to: {
+        path: ['^packages/(erp-connector|erp-api-tse)', '^@seta/(erp-connector|erp-api-tse)'],
+      },
     },
     {
       name: 'sdr-nao-importa-erp-connector',
@@ -36,8 +46,8 @@ module.exports = {
       from: { path: '^packages/sdr' },
       to: {
         path: [
-          '^packages/(erp-connector|query-catalog|agent|guardrails|cobranca)',
-          '^@seta/(erp-connector|query-catalog|agent|guardrails|cobranca)',
+          '^packages/(erp-connector|erp-api-tse|query-catalog|agent|guardrails|cobranca)',
+          '^@seta/(erp-connector|erp-api-tse|query-catalog|agent|guardrails|cobranca)',
         ],
       },
     },
@@ -49,8 +59,21 @@ module.exports = {
       from: { path: '^packages/anonimizacao' },
       to: {
         path: [
-          '^packages/(erp-connector|query-catalog|agent|guardrails|cobranca|skills|rag|crm|wa-meta|payment-provider)',
-          '^@seta/(erp-connector|query-catalog|agent|guardrails|cobranca|skills|rag|crm|wa-meta|payment-provider)',
+          '^packages/(erp-connector|erp-api-tse|query-catalog|agent|guardrails|cobranca|skills|rag|crm|wa-meta|payment-provider)',
+          '^@seta/(erp-connector|erp-api-tse|query-catalog|agent|guardrails|cobranca|skills|rag|crm|wa-meta|payment-provider)',
+        ],
+      },
+    },
+    {
+      name: 'erp-api-e-folha',
+      comment:
+        'o cliente do TSE é folha: fala HTTP e devolve tipos, e não conhece agente, catálogo nem canal',
+      severity: 'error',
+      from: { path: '^packages/erp-api-tse' },
+      to: {
+        path: [
+          '^packages/(agent|query-catalog|cobranca|sdr|guardrails|crm|skills|rag|wa-meta)',
+          '^@seta/(agent|query-catalog|cobranca|sdr|guardrails|crm|skills|rag|wa-meta)',
         ],
       },
     },

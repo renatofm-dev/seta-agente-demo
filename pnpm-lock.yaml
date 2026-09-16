@@ -108,6 +108,9 @@ importers:
       '@seta/crm':
         specifier: workspace:*
         version: link:../../packages/crm
+      '@seta/erp-api-tse':
+        specifier: workspace:*
+        version: link:../../packages/erp-api-tse
       '@seta/erp-connector':
         specifier: workspace:*
         version: link:../../packages/erp-connector
@@ -253,6 +256,12 @@ importers:
         version: 4.4.3
 
   packages/domain-erp: {}
+
+  packages/erp-api-tse:
+    dependencies:
+      zod:
+        specifier: ^4.4.3
+        version: 4.4.3
 
   packages/erp-connector:
     dependencies:

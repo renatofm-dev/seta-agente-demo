@@ -42,7 +42,8 @@ autônomo sobre WhatsApp, rodando local (repo privado + homelab), fora da org se
 | 017 | Relatório analítico de campanhas | ✅ `main` (#63) |
 | 042 | Asaas de verdade no sandbox (PSP deixa de ser simulado) | ✅ `main` (#20) |
 | 043 | Template de pagamento com PIX (order_details no WhatsApp) | ✅ `main` (#21) |
-| 035 | Simulador da API do TS Explorer (`apps/tse-sim`) | ✅ 16/09/2026 — 30 das 89 rotas da coleção |
+| 035 | Simulador da API do TS Explorer (`apps/tse-sim`) | ✅ `main` (#24) — 30 das 89 rotas da coleção |
+| 036 | Escrita no ERP (`ErpWriter`) e baixa real do pagamento | ✅ 16/09/2026 — a baixa chega ao TSE; conciliação vira compensação |
 
 A ordem, o calendário e as decisões pendentes estão em **[`docs/roadmap.md`](../docs/roadmap.md)**;
 o mapa técnico do que cada spec entregou está em
@@ -76,11 +77,10 @@ executa em M2, antes de M4).
 | [032](032-configuracao-pela-interface.md) configuração pela interface | M5 | 021 |
 | [033](033-midia-no-whatsapp.md) mídia no WhatsApp | M5 | piloto |
 | [034](034-multi-instancia.md) multi-instância | M5 | 021 |
-| [036](036-erp-escrita-baixa.md) escrita no ERP e baixa real | **Demo** | ✅035 |
-| [037](037-catalogo-http.md) catálogo por HTTP (`source: api`) | **Demo** | ✅035, 036 |
-| [038](038-reserva-utilizacao.md) reserva de utilização pelo agente | **Demo** | ✅035, 036 |
-| [039](039-sdr-escreve-no-erp.md) SDR escreve lead e venda no ERP | **Demo** | 036, 015b |
-| [040](040-segunda-via-pdf.md) 2ª via de boleto em PDF | **Demo** | 036, 033 (fatia fina) |
+| [037](037-catalogo-http.md) catálogo por HTTP (`source: api`) | **Demo** | ✅035, ✅036, **D10** |
+| [038](038-reserva-utilizacao.md) reserva de utilização pelo agente | **Demo** | ✅035, ✅036 |
+| [039](039-sdr-escreve-no-erp.md) SDR escreve lead e venda no ERP | **Demo** | ✅036, 015b |
+| [040](040-segunda-via-pdf.md) 2ª via de boleto em PDF | **Demo** | ✅036, 033 (fatia fina) |
 | [041](041-tse-real-e-fim-da-conciliacao.md) TSE real e fim da conciliação | **Demo** | 037, ambiente do TSE |
 | [044](044-cobranca-proativa.md) cobrança proativa | **Pagamentos** | ✅042, ✅043 |
 
@@ -102,10 +102,20 @@ Duas coisas que valem para quem for executar:
   os dois mundos, e o teste mostra que `utilizacaocontrato/obtercontratos?cpf=` ignora o escopo,
   que é a saída se a resposta vier ruim.
 
-**A 035 foi entregue em 16/09/2026.** O simulador responde 30 das 89 rotas da coleção, escreve de
-verdade (a baixa aparece em `v_titulo` na leitura seguinte) e sobe com a demo no homelab, sem
-porta publicada. O placar do que falta está em `apps/tse-sim/test/pendentes.ts` e o teste de
-contrato garante que a lista só encolhe. **A 036 está destravada.**
+**035 e 036 foram entregues em 16/09/2026.** O simulador responde 30 das 89 rotas (placar em
+`apps/tse-sim/test/pendentes.ts`, e o teste de contrato garante que só encolhe) e sobe com a demo
+no homelab sem porta publicada; a baixa do pagamento **chega ao ERP de verdade** e a conciliação da
+014 virou compensação do que ainda está em voo. **038, 039 e 040 estão destravadas.**
+
+**Nada disso esperou o fornecedor, e nem deveria:** a demo roda contra o simulador, que é nosso. As
+cinco perguntas abertas (§6 do guia) bloqueiam a **041**, não a demo — cada uma virou premissa
+escrita e isolada, para que a resposta custe uma função. A 036 acrescentou a mais importante delas:
+**não existe endpoint de baixa para PIX ou boleto** na coleção.
+
+**Se o objetivo é liberar a demo**, a fila muda de ordem: 036 e 037 são encanamento invisível (a
+conversa responde igual antes e depois). O que APARECE na demo é a **038** (o agente reserva, em
+vez de mandar para a central), a **040** (o boleto em PDF chega no WhatsApp) e a **039** (o lead do
+SDR deixa de morrer na nossa tabela).
 
 ### A frente "pagamentos" (042–044)
 
@@ -124,7 +134,7 @@ corpo e o `order_details` no botão — validado no aparelho. Header de mídia c
 caracteres, o copia-e-cola do Asaas tem 180.
 
 ```
-035✅ ─► 036 ─┬─► 037 ─► 041
+035✅ ─► 036✅ ┬─► 037 ─► 041
               ├─► 038
               ├─► 039 ◄─ 015b
               └─► 040 ◄─ 033

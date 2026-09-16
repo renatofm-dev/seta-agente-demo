@@ -3,6 +3,7 @@
   "references": [
     { "path": "packages/domain-erp" },
     { "path": "packages/erp-connector" },
+    { "path": "packages/erp-api-tse" },
     { "path": "packages/query-catalog" },
     { "path": "packages/agent" },
     { "path": "packages/ai-provider" },
