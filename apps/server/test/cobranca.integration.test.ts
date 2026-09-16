@@ -464,6 +464,10 @@ describe('spec 014 — compra e cobrança pelo WhatsApp', () => {
       status: 'confirmado',
     });
     await aguardar(async () => (await ultimaSaida()).includes('Pagamento confirmado'));
+    // esperar o artefato que o assert lê: `notificarPago` enfileira o outbox de
+    // DENTRO de `marcarPaga`, e `concluir` só grava processado_em depois disso —
+    // aguardar pelo texto abre uma corrida (é o flake conhecido deste arquivo).
+    await aguardar(async () => (await db.select().from(eventoPsp))[0]?.processadoEm !== null);
     const [ev] = await db.select().from(eventoPsp);
     expect(ev?.processadoEm).not.toBeNull();
 
