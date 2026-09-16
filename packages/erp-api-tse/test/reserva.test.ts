@@ -102,9 +102,9 @@ describe('criarUtilizacao', () => {
       ],
     });
 
-    const enviado = fake.chamadas.at(-1)?.body as { ListaHospedes: unknown[] };
-    expect(enviado.ListaHospedes).toHaveLength(2);
-    expect(enviado.ListaHospedes[0]).toMatchObject({ Cpf: '00015278514', HospedePrincipal: true });
+    const enviado = fake.chamadas.at(-1)?.body as { ListaHospedes: unknown[] } | undefined;
+    expect(enviado?.ListaHospedes).toHaveLength(2);
+    expect(enviado?.ListaHospedes[0]).toMatchObject({ Cpf: '00015278514', HospedePrincipal: true });
     expect(u.id).toBe('26');
     expect(u.custoPontos).toBe(3000);
     expect(u.taxaCentavos).toBe(139_202);
@@ -120,9 +120,8 @@ describe('criarUtilizacao', () => {
       hospedes: [{ nome: 'FULANO' }],
     });
 
-    expect(
-      (fake.chamadas.at(-1)?.body as { ListaHospedes: unknown[] }).ListaHospedes[0],
-    ).toMatchObject({ Cpf: null, Sexo: null, Sobrenome: null });
+    const enviado = fake.chamadas.at(-1)?.body as { ListaHospedes: unknown[] } | undefined;
+    expect(enviado?.ListaHospedes[0]).toMatchObject({ Cpf: null, Sexo: null, Sobrenome: null });
   });
 });
 

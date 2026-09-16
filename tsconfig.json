@@ -16,6 +16,7 @@
     { "path": "packages/client-config" },
     { "path": "packages/payment-provider" },
     { "path": "packages/cobranca" },
+    { "path": "packages/reserva" },
     { "path": "packages/anonimizacao" },
     { "path": "packages/sdr" },
     { "path": "apps/server" },

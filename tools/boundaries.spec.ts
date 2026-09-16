@@ -19,6 +19,8 @@ const RULE_COBRANCA_CONNECTOR = 'cobranca-nao-importa-erp-connector';
 /** 036: as duas fronteiras da escrita no ERP. */
 const RULE_AGENT_API = 'agent-nao-importa-erp-api';
 const RULE_API_FOLHA = 'erp-api-e-folha';
+/** 038: o domínio da reserva é puro. */
+const RULE_RESERVA = 'reserva-nao-importa-erp';
 
 /** Regra sem fixture é regra não provada — todas as que o spec cobre. */
 const REGRAS = [
@@ -27,6 +29,7 @@ const REGRAS = [
   RULE_COBRANCA_CONNECTOR,
   RULE_AGENT_API,
   RULE_API_FOLHA,
+  RULE_RESERVA,
 ];
 
 interface Violation {
