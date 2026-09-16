@@ -55,9 +55,19 @@ LLM_PRECO_OUT_POR_1M=<preço por 1M tokens de saída>
 BETTER_AUTH_SECRET=<openssl rand -base64 32>
 BETTER_AUTH_URL=https://seta.outerlab.com.br
 
-# Simulador (plano B da demo) — EXIGE login do console em produção
+# Simulador de WhatsApp (plano B da demo) — EXIGE login do console em produção
 DEV_SIMULATOR=true
 NODE_ENV=production
+
+# Simulador da API do TS Explorer (035) — outro serviço, outro assunto:
+# é o dublê do ERP por HTTP, e SOBE COM A DEMO. Sem porta publicada e sem rota
+# no Caddy: só o server o alcança, em http://tse-sim:3010.
+# A senha é do papel `tse_sim` do erp_mock; o demo-seed.sh cria o papel com ela.
+TSE_SIM_DB_PASSWORD=<forte>
+# `login:senha:idPessoa` — o boot RECUSA a credencial de exemplo em produção
+TSE_SIM_USERS=<login>:<senha forte>:1
+# `qualquer` (default) ou `token` — ver D10 em docs/tse-api-setup.md §6
+TSE_SIM_PAINEL_ESCOPO=qualquer
 LOG_LEVEL=info
 ```
 
@@ -95,6 +105,28 @@ docker compose -f infra/compose.prod.yml --env-file .env.prod \
 Webhook Meta: apontar para `https://seta.outerlab.com.br/webhook` com o
 `WA_VERIFY_TOKEN` acima (o GET do handshake responde na hora); smoke = mensagem
 real do celular de teste → resposta no WhatsApp.
+
+### O simulador do TSE (035) sobe junto — e não aparece na internet
+
+`apps/tse-sim` é o dublê da API do TS Explorer: responde no contrato do fornecedor sobre o mesmo
+`erp_mock`, e **escreve** (baixa de pagamento, e mais tarde reserva e venda). Sem ele implantado,
+tudo que a frente demo constrói existiria só na máquina de quem programou.
+
+O serviço **não tem `ports:`** — igual ao `db`, vive só na rede interna do compose — e o Caddy não
+ganha rota para ele. Confirmar depois do deploy:
+
+```bash
+# de dentro: responde
+docker compose -f infra/compose.prod.yml --env-file .env.prod exec -T tse-sim \
+  node -e 'fetch("http://localhost:3010/healthz").then(r=>r.text()).then(console.log)'
+
+# de fora: não alcança nada (ambos devem falhar)
+curl -sS --max-time 5 https://seta.outerlab.com.br/token ; curl -sS --max-time 5 http://<IP>:3010/healthz
+```
+
+O papel `tse_sim` do banco é criado pelo **seed** (`demo-seed.sh` → `04-sim-role.sql`), com a
+senha de `TSE_SIM_DB_PASSWORD`. Rodar o seed **antes** de esperar o simulador funcionar: até lá
+ele sobe, mas não conecta (o pool é preguiçoso; o `restart: unless-stopped` cobre o resto).
 
 ## Backup e restore (testar UMA vez antes da demo)
 

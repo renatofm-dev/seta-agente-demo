@@ -42,6 +42,7 @@ autônomo sobre WhatsApp, rodando local (repo privado + homelab), fora da org se
 | 017 | Relatório analítico de campanhas | ✅ `main` (#63) |
 | 042 | Asaas de verdade no sandbox (PSP deixa de ser simulado) | ✅ `main` (#20) |
 | 043 | Template de pagamento com PIX (order_details no WhatsApp) | ✅ `main` (#21) |
+| 035 | Simulador da API do TS Explorer (`apps/tse-sim`) | ✅ 16/09/2026 — 30 das 89 rotas da coleção |
 
 A ordem, o calendário e as decisões pendentes estão em **[`docs/roadmap.md`](../docs/roadmap.md)**;
 o mapa técnico do que cada spec entregou está em
@@ -75,10 +76,9 @@ executa em M2, antes de M4).
 | [032](032-configuracao-pela-interface.md) configuração pela interface | M5 | 021 |
 | [033](033-midia-no-whatsapp.md) mídia no WhatsApp | M5 | piloto |
 | [034](034-multi-instancia.md) multi-instância | M5 | 021 |
-| [035](035-tse-api-simulada.md) simulador da API do TSE | **Demo** | — |
-| [036](036-erp-escrita-baixa.md) escrita no ERP e baixa real | **Demo** | 035 |
-| [037](037-catalogo-http.md) catálogo por HTTP (`source: api`) | **Demo** | 035, 036 |
-| [038](038-reserva-utilizacao.md) reserva de utilização pelo agente | **Demo** | 035, 036 |
+| [036](036-erp-escrita-baixa.md) escrita no ERP e baixa real | **Demo** | ✅035 |
+| [037](037-catalogo-http.md) catálogo por HTTP (`source: api`) | **Demo** | ✅035, 036 |
+| [038](038-reserva-utilizacao.md) reserva de utilização pelo agente | **Demo** | ✅035, 036 |
 | [039](039-sdr-escreve-no-erp.md) SDR escreve lead e venda no ERP | **Demo** | 036, 015b |
 | [040](040-segunda-via-pdf.md) 2ª via de boleto em PDF | **Demo** | 036, 033 (fatia fina) |
 | [041](041-tse-real-e-fim-da-conciliacao.md) TSE real e fim da conciliação | **Demo** | 037, ambiente do TSE |
@@ -98,7 +98,14 @@ Duas coisas que valem para quem for executar:
   endpoint** na coleção do fornecedor. A [018](018-espelho-real.md) segue necessária.
 - **Premissa aberta e bloqueante da 037:** `PainelDoCliente/*` pode resolver escopo pelo dono do
   token, e o agente atende N cotistas com uma credencial. Resolver com o fornecedor antes de
-  começar a 037.
+  começar a 037. A **035 não resolveu — exercitou**: `TSE_SIM_PAINEL_ESCOPO=token|qualquer` roda
+  os dois mundos, e o teste mostra que `utilizacaocontrato/obtercontratos?cpf=` ignora o escopo,
+  que é a saída se a resposta vier ruim.
+
+**A 035 foi entregue em 16/09/2026.** O simulador responde 30 das 89 rotas da coleção, escreve de
+verdade (a baixa aparece em `v_titulo` na leitura seguinte) e sobe com a demo no homelab, sem
+porta publicada. O placar do que falta está em `apps/tse-sim/test/pendentes.ts` e o teste de
+contrato garante que a lista só encolhe. **A 036 está destravada.**
 
 ### A frente "pagamentos" (042–044)
 
@@ -117,10 +124,10 @@ corpo e o `order_details` no botão — validado no aparelho. Header de mídia c
 caracteres, o copia-e-cola do Asaas tem 180.
 
 ```
-035 ─► 036 ─┬─► 037 ─► 041
-            ├─► 038
-            ├─► 039 ◄─ 015b
-            └─► 040 ◄─ 033
+035✅ ─► 036 ─┬─► 037 ─► 041
+              ├─► 038
+              ├─► 039 ◄─ 015b
+              └─► 040 ◄─ 033
 
 042✅ ─► 043✅ ─► 044        (042 ─► 027 ◄─ D1)
 

@@ -17,7 +17,7 @@ pnpm test 2>&1 | grep "Tests  "                                                 
 CLAUDE.md            regras do projeto (stack travada, escopo, fronteiras, segurança, git)
 README.md            atalho para docs/README.md e os dois comandos de dev
 package.json         scripts do monorepo (dev, test, lint, build, db:*, kb:ingest…)
-pnpm-workspace.yaml  apps/* e packages/*; onlyBuiltDependencies (onnxruntime, sharp…)
+pnpm-workspace.yaml  apps/* (server, console, tse-sim) e packages/*; onlyBuiltDependencies (onnxruntime, sharp…)
 tsconfig*.json       project references (tsc -b compila tudo)
 biome.json           lint + format
 vitest.config.ts     um runner para tudo; integração é serial (banco compartilhado)
@@ -81,6 +81,15 @@ skills/             registry, distiller, sinais-job
 
 Testes em `apps/server/test/`: um `*.integration.test.ts` por spec (sobem o app inteiro com
 fakes contra o Postgres dev) e alguns unitários (`env`, `conciliacao`, `janela-adaptativa`).
+
+## `apps/tse-sim` — dublê da API do TS Explorer (035)
+
+Fastify separado do server, em `:3010`. Responde no contrato do fornecedor sobre o mesmo
+`erp_mock`, pelo papel `tse_sim` (escreve nas tabelas físicas, cego para as views canônicas).
+`src/rotas/` tem uma pasta da coleção por arquivo; `contrato/` guarda a coleção Postman
+sanitizada, os 89 exemplos de resposta e o `sha256` do original — é o oráculo de
+`test/contrato.test.ts`. Regenerar com `pnpm tse:fixtures`. Nunca calcula regra de negócio
+nossa: é fiel ao TSE, ponto. Ver [docs/tse-api-setup.md](../tse-api-setup.md).
 
 ## `apps/console` — Next.js
 
