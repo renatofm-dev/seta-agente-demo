@@ -43,7 +43,8 @@ autônomo sobre WhatsApp, rodando local (repo privado + homelab), fora da org se
 | 042 | Asaas de verdade no sandbox (PSP deixa de ser simulado) | ✅ `main` (#20) |
 | 043 | Template de pagamento com PIX (order_details no WhatsApp) | ✅ `main` (#21) |
 | 035 | Simulador da API do TS Explorer (`apps/tse-sim`) | ✅ `main` (#24) — 30 das 89 rotas da coleção |
-| 036 | Escrita no ERP (`ErpWriter`) e baixa real do pagamento | ✅ 16/09/2026 — a baixa chega ao TSE; conciliação vira compensação |
+| 036 | Escrita no ERP (`ErpWriter`) e baixa real do pagamento | ✅ `main` (#25) — a baixa chega ao TSE; conciliação vira compensação |
+| 038 | Reserva de utilização de contrato pelo agente | ✅ 16/09/2026 — o agente reserva a semana e a utilização existe no ERP |
 
 A ordem, o calendário e as decisões pendentes estão em **[`docs/roadmap.md`](../docs/roadmap.md)**;
 o mapa técnico do que cada spec entregou está em
@@ -78,7 +79,6 @@ executa em M2, antes de M4).
 | [033](033-midia-no-whatsapp.md) mídia no WhatsApp | M5 | piloto |
 | [034](034-multi-instancia.md) multi-instância | M5 | 021 |
 | [037](037-catalogo-http.md) catálogo por HTTP (`source: api`) | **Demo** | ✅035, ✅036, **D10** |
-| [038](038-reserva-utilizacao.md) reserva de utilização pelo agente | **Demo** | ✅035, ✅036 |
 | [039](039-sdr-escreve-no-erp.md) SDR escreve lead e venda no ERP | **Demo** | ✅036, 015b |
 | [040](040-segunda-via-pdf.md) 2ª via de boleto em PDF | **Demo** | ✅036, 033 (fatia fina) |
 | [041](041-tse-real-e-fim-da-conciliacao.md) TSE real e fim da conciliação | **Demo** | 037, ambiente do TSE |
@@ -113,9 +113,13 @@ escrita e isolada, para que a resposta custe uma função. A 036 acrescentou a m
 **não existe endpoint de baixa para PIX ou boleto** na coleção.
 
 **Se o objetivo é liberar a demo**, a fila muda de ordem: 036 e 037 são encanamento invisível (a
-conversa responde igual antes e depois). O que APARECE na demo é a **038** (o agente reserva, em
-vez de mandar para a central), a **040** (o boleto em PDF chega no WhatsApp) e a **039** (o lead do
-SDR deixa de morrer na nossa tabela).
+conversa responde igual antes e depois). O que APARECE na demo é a 038 (entregue), a **040** (o
+boleto em PDF chega no WhatsApp) e a **039** (o lead do SDR deixa de morrer na nossa tabela).
+
+**A 038 foi entregue em 16/09/2026** e trocou o ato mais honesto da demo pelo mais forte: o que era
+*"o agente admite não saber reservar"* virou *"o agente reserva, e a utilização existe no ERP com o
+nome do operador dele"*. A prova de honestidade não sumiu — mudou de âncora para troca de data e
+calendário de temporada, que seguem com a central.
 
 ### A frente "pagamentos" (042–044)
 
@@ -135,7 +139,7 @@ caracteres, o copia-e-cola do Asaas tem 180.
 
 ```
 035✅ ─► 036✅ ┬─► 037 ─► 041
-              ├─► 038
+              ├─► 038✅
               ├─► 039 ◄─ 015b
               └─► 040 ◄─ 033
 

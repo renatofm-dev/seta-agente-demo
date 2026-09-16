@@ -1,8 +1,28 @@
 # 038 — Reserva de utilização de contrato pelo agente
 
-> **Pré-spec** (rascunho de 14/09/2026): ainda não executada. Quarta fatia da frente
-> **demo ponta a ponta**. Depende da **035** e da **036** (037 é opcional). Tamanho **G**.
-> Trilha A.
+> **Entregue em 16/09/2026.** Quarta fatia da frente **demo ponta a ponta**. O que saiu está em
+> [`docs/dev/04-modulos-entregues.md`](../docs/dev/04-modulos-entregues.md); o ato novo em
+> [`docs/roteiro-demo.md`](../docs/roteiro-demo.md).
+>
+> **Decisões do Renato, registradas antes de começar:** escopo completo **com tela própria no
+> console**; o agente age como **operador dedicado** (`TSE_RESERVA_USERNAME`), porque o TSE grava
+> `IdOperadorRespSolicitacao` e é isso que separa robô de humano na auditoria; e **teto de HITL
+> próprio** (`RESERVA_TETO_TAXA_SEM_HITL_CENTAVOS`), porque aqui a aprovação não segura dinheiro
+> nosso, segura o compromisso do cotista com uma taxa que o ERP vai faturar.
+>
+> **O que mudou em relação ao desenho da spec:**
+>
+> 1. **A escrita é 1 chamada, não 1+N.** `CriarUtilizacaoContrato` aceita `ListaHospedes` inline —
+>    `AdicionarHospede` saiu do caminho feliz, e com ele a maior fonte de não-idempotência.
+> 2. **A simulação acontece em `pagantes`, antes dos hóspedes.** Se viesse no fim, o cotista
+>    entregaria o CPF de quatro pessoas para ouvir "não tem pontos". Os dois encerramentos que vêm
+>    do ERP acontecem sem nenhum dado pessoal coletado.
+> 3. **O hóspede principal é o titular**, com o CPF que a plataforma já tinha (014) — o que reduz a
+>    superfície do CPF a zero na maioria das reservas.
+> 4. **Inadimplência não bloqueia reserva**: quem decide isso é o TSE
+>    (`PercentualMinimoIntegralizadoExigido`); bloquear por conta própria seria regra nossa.
+>    Pergunta em aberto ao fornecedor.
+> 5. **`Sexo` do hóspede vai nulo** — o TSE pede e o espelho não tem o dado. Outra pergunta.
 
 ## Objetivo
 A persona em `configs/demo/client.yaml` diz, hoje, que reserva e calendário "são com a central de

@@ -104,6 +104,18 @@ do ERP. `ERP_CONCILIACAO` escolhe: `auto` (default), `on` (comportamento anterio
 
 `conciliacao.ts` só é **apagado** na 041 — está registrado como dívida com data.
 
+### Reserva (038)
+
+`fluxo_reserva` guarda a conversa (uma ativa por conversa, índice único parcial) e `reserva` guarda
+o pedido: período, hotel, tipo de UH, hóspedes, pontos e taxa **como o ERP simulou**, e o
+`erp_utilizacao_id` quando a utilização passa a existir no TSE. `reserva.status` tem um estado que
+pede atenção — **`criada`**: a utilização existe no ERP segurando pontos do cotista e ainda não foi
+confirmada; ele aparece no console com aviso, e o worker nunca cancela sozinho.
+
+Um índice único parcial sobre `(contrato, check-in, check-out, hotel, tipo de UH)` impede duas
+conversas de reservarem a mesma semana — é a rede de baixo da chave natural que o worker usa para
+reconhecer a própria escrita quando a resposta do TSE se perde.
+
 ## Catálogo de queries (`catalog/**/*.yaml`)
 
 ```yaml
@@ -147,6 +159,7 @@ tool: { expose: true, name: titulos_atraso }
 | Processo | `NODE_ENV`, `PORT` (3001), `LOG_LEVEL` | em `production` o boot recusa os defaults de dev de `WA_VERIFY_TOKEN`, `WA_APP_SECRET`, `BETTER_AUTH_SECRET` e senhas de dev na `DATABASE_URL` |
 | Bancos | `DATABASE_URL`, `ERP_DATABASE_URL`, `ERP_MOCK_ADMIN_URL` (seed) | |
 | Simulador do TSE (035) | `TSE_SIM_PORT`, `TSE_SIM_DATABASE_URL`, `TSE_SIM_DB_PASSWORD`, `TSE_SIM_USERS`, `TSE_SIM_PAINEL_ESCOPO`, `TSE_SIM_LATENCIA_MS`, `TSE_SIM_FALHA_BPS` | serviço separado (`apps/tse-sim`), com env própria; em `production` recusa a senha e a credencial de exemplo |
+| Reserva (038) | `RESERVA_TETO_TAXA_SEM_HITL_CENTAVOS`, `RESERVA_FLUXO_EXPIRA_MIN`, `TSE_RESERVA_USERNAME`, `TSE_RESERVA_PASSWORD` | teto PRÓPRIO (não o de pagamento); credencial de operador dedicada ao agente — o TSE grava quem pediu, e é assim que a auditoria separa robô de humano |
 | Escrita no ERP (036) | `TSE_BASE_URL`, `TSE_USERNAME`, `TSE_PASSWORD`, `TSE_TIMEOUT_MS`, `ERP_CONCILIACAO` | sem `TSE_BASE_URL` o writer é simulado e a baixa fica local; credencial de OPERADOR (escreve baixa, reserva e venda) — em produção o boot recusa a de exemplo |
 | Instalação | `CLIENT_CONFIG_PATH`, `CATALOG_DIR`, `CONTATOS_PATH`, `SKILLS_SEED_DIR`, `KB_DIR` | caminhos relativos à raiz do monorepo |
 | Auth | `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL` | o console fala com o server pela mesma origem |
