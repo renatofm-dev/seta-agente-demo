@@ -1,0 +1,30 @@
+{
+  "nome": "system-operator__get-user-group-by-id",
+  "pasta": "System Operator",
+  "method": "GET",
+  "path": "/api/OperadorSistema/GrupoPorId/{{idGrupoOperador}}",
+  "pathParams": [
+    "idGrupoOperador"
+  ],
+  "query": [
+    ""
+  ],
+  "requestBody": null,
+  "status": 200,
+  "contentType": "application/json; charset=utf-8",
+  "body": {
+    "idgrupooperadoressistema": 1,
+    "descricao": "RECEPÇÃO",
+    "ativo": true,
+    "idrespcadastro": 1,
+    "respcadastronome": "SUPORTE",
+    "idrespalteracao": 1,
+    "respalteracaonome": "SUPORTE",
+    "datacadastro": "2019-05-31T17:57:00-03:00",
+    "dataalteracao": null,
+    "iddepartamento": null,
+    "departamentodescricao": null,
+    "operadores": null,
+    "permissoes": null
+  }
+}

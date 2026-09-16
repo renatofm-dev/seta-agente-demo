@@ -1,0 +1,12 @@
+{
+  "nome": "lookups__get-all-employees",
+  "pasta": "Lookups",
+  "method": "GET",
+  "path": "/api/Lookup/ConsultarNumeroVersao",
+  "pathParams": [],
+  "query": [],
+  "requestBody": null,
+  "status": 200,
+  "contentType": "application/json; charset=utf-8",
+  "body": "17.8.24.2003"
+}

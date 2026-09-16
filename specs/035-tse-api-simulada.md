@@ -1,8 +1,22 @@
 # 035 — Simulador da API do TSE (`apps/tse-sim`) e contrato a partir da coleção
 
-> **Pré-spec** (rascunho de 14/09/2026): ainda não executada. Primeira fatia da frente
-> **demo ponta a ponta**. Não depende de decisão externa — a coleção Postman do fornecedor é
-> tudo que precisamos. Tamanho **G**. Trilha A.
+> **Entregue em 16/09/2026.** Primeira fatia da frente **demo ponta a ponta**. O que saiu está em
+> [`docs/dev/04-modulos-entregues.md`](../docs/dev/04-modulos-entregues.md) e o guia de uso em
+> [`docs/tse-api-setup.md`](../docs/tse-api-setup.md). Três desvios, decididos na execução e
+> registrados no PR:
+>
+> 1. **O PDF da 2ª via não foi commitado.** `SegundaViaBoleto` devolve um boleto real (cedente,
+>    CPF, código de barras) e nenhuma regra de sanitização alcança bytes de PDF; a fixture guarda
+>    `contentType`, `bodyBytes` e `sha256`, que é a forma de que a 040 precisa.
+> 2. **O critério `grep -rE '[0-9]{11}'` não serve como prova** — casa com os CPFs fictícios que
+>    a própria sanitização gera e com pedaços de código de barras. No lugar dele, todo CPF do
+>    `contrato/` tem **prefixo `000`** e DV válido, e `contrato.test.ts` reprova qualquer outro.
+> 3. **`GET /token` lê a query string, não o corpo.** A coleção o mostra como GET com body; o
+>    `fetch` do Node recusa isso, e não há como um GET carregar credenciais de outro jeito.
+>
+> Decisões que a spec deixou em aberto: porta **3010**, `pnpm dev` sobe o simulador **por
+> default**, papel **`tse_sim`**, e `TSE_SIM_LATENCIA_MS`/`TSE_SIM_FALHA_BPS` **entraram já**
+> (default 0, desligados).
 
 ## Objetivo
 Hoje o "ERP simulado" é um banco Postgres lido por SQL (7 views sobre `erp_mock`). O TS Explorer

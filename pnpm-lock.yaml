@@ -167,6 +167,25 @@ importers:
         specifier: ^0.31.10
         version: 0.31.10
 
+  apps/tse-sim:
+    dependencies:
+      '@seta/erp-connector':
+        specifier: workspace:*
+        version: link:../../packages/erp-connector
+      fastify:
+        specifier: ^5.12.1
+        version: 5.12.1
+      pg:
+        specifier: ^8.23.0
+        version: 8.23.0
+      zod:
+        specifier: ^4.4.3
+        version: 4.4.3
+    devDependencies:
+      '@types/pg':
+        specifier: ^8.23.1
+        version: 8.23.1
+
   packages/agent:
     dependencies:
       '@langchain/core':

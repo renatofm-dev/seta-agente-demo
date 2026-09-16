@@ -1,0 +1,14 @@
+{
+  "nome": "reports__get-data-zip-report",
+  "pasta": "Reports",
+  "method": "GET",
+  "path": "/api/Relatorios/ObterBinarioDadosRelatorio",
+  "pathParams": [],
+  "query": [
+    "idRelatorio"
+  ],
+  "requestBody": null,
+  "status": 200,
+  "contentType": "application/json; charset=utf-8",
+  "body": "SCRUBBED"
+}

@@ -30,6 +30,8 @@ jobs:
             dockerfile: infra/docker/server.Dockerfile
           - nome: console
             dockerfile: infra/docker/console.Dockerfile
+          - nome: tse-sim
+            dockerfile: infra/docker/tse-sim.Dockerfile
     steps:
       - uses: actions/checkout@v4
         with:

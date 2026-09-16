@@ -1,0 +1,145 @@
+{
+  "nome": "lookups__getting-quotas-by-product",
+  "pasta": "Lookups",
+  "method": "GET",
+  "path": "/api/Lookup/CotasByProduto",
+  "pathParams": [],
+  "query": [
+    "produtoId"
+  ],
+  "requestBody": null,
+  "status": 200,
+  "contentType": "application/json; charset=utf-8",
+  "body": [
+    {
+      "IdCotaUh": 1327,
+      "IdentificadorUnicoCota": "TORRE 1-TORRE 01-01-101A-DIAMANTE-A",
+      "IdModeloCota": 2,
+      "ModeloCota": "A",
+      "IdGrupoCota": 1,
+      "GrupoCota": "DIAMANTE",
+      "ValorUnitario": 84484,
+      "Status": "DISPONIVEL"
+    },
+    {
+      "IdCotaUh": 1328,
+      "IdentificadorUnicoCota": "TORRE 1-TORRE 01-01-101A-DIAMANTE-B",
+      "IdModeloCota": 3,
+      "ModeloCota": "B",
+      "IdGrupoCota": 1,
+      "GrupoCota": "DIAMANTE",
+      "ValorUnitario": 84484,
+      "Status": "DISPONIVEL"
+    },
+    {
+      "IdCotaUh": 1329,
+      "IdentificadorUnicoCota": "TORRE 1-TORRE 01-01-101A-DIAMANTE-C",
+      "IdModeloCota": 4,
+      "ModeloCota": "C",
+      "IdGrupoCota": 1,
+      "GrupoCota": "DIAMANTE",
+      "ValorUnitario": 84484,
+      "Status": "DISPONIVEL"
+    },
+    {
+      "IdCotaUh": 1330,
+      "IdentificadorUnicoCota": "TORRE 1-TORRE 01-01-101A-DIAMANTE-D",
+      "IdModeloCota": 5,
+      "ModeloCota": "D",
+      "IdGrupoCota": 1,
+      "GrupoCota": "DIAMANTE",
+      "ValorUnitario": 84484,
+      "Status": "VENDIDA"
+    },
+    {
+      "IdCotaUh": 1331,
+      "IdentificadorUnicoCota": "TORRE 1-TORRE 01-01-101A-DIAMANTE-E",
+      "IdModeloCota": 6,
+      "ModeloCota": "E",
+      "IdGrupoCota": 1,
+      "GrupoCota": "DIAMANTE",
+      "ValorUnitario": 84484,
+      "Status": "DISPONIVEL"
+    },
+    {
+      "IdCotaUh": 1332,
+      "IdentificadorUnicoCota": "TORRE 1-TORRE 01-01-101A-DIAMANTE-F",
+      "IdModeloCota": 7,
+      "ModeloCota": "F",
+      "IdGrupoCota": 1,
+      "GrupoCota": "DIAMANTE",
+      "ValorUnitario": 84484,
+      "Status": "DISPONIVEL"
+    },
+    {
+      "IdCotaUh": 1333,
+      "IdentificadorUnicoCota": "TORRE 1-TORRE 01-01-101A-DIAMANTE-G",
+      "IdModeloCota": 8,
+      "ModeloCota": "G",
+      "IdGrupoCota": 1,
+      "GrupoCota": "DIAMANTE",
+      "ValorUnitario": 84484,
+      "Status": "VENDIDA"
+    },
+    {
+      "IdCotaUh": 1334,
+      "IdentificadorUnicoCota": "TORRE 1-TORRE 01-01-101A-DIAMANTE-H",
+      "IdModeloCota": 9,
+      "ModeloCota": "H",
+      "IdGrupoCota": 1,
+      "GrupoCota": "DIAMANTE",
+      "ValorUnitario": 84484,
+      "Status": "VENDIDA"
+    },
+    {
+      "IdCotaUh": 1335,
+      "IdentificadorUnicoCota": "TORRE 1-TORRE 01-01-101A-DIAMANTE-I",
+      "IdModeloCota": 10,
+      "ModeloCota": "I",
+      "IdGrupoCota": 1,
+      "GrupoCota": "DIAMANTE",
+      "ValorUnitario": 84484,
+      "Status": "DISPONIVEL"
+    },
+    {
+      "IdCotaUh": 1336,
+      "IdentificadorUnicoCota": "TORRE 1-TORRE 01-01-101A-DIAMANTE-J",
+      "IdModeloCota": 11,
+      "ModeloCota": "J",
+      "IdGrupoCota": 1,
+      "GrupoCota": "DIAMANTE",
+      "ValorUnitario": 84484,
+      "Status": "DISPONIVEL"
+    },
+    {
+      "IdCotaUh": 1337,
+      "IdentificadorUnicoCota": "TORRE 1-TORRE 01-01-101A-DIAMANTE-K",
+      "IdModeloCota": 12,
+      "ModeloCota": "K",
+      "IdGrupoCota": 1,
+      "GrupoCota": "DIAMANTE",
+      "ValorUnitario": 84484,
+      "Status": "VENDIDA"
+    },
+    {
+      "IdCotaUh": 1338,
+      "IdentificadorUnicoCota": "TORRE 1-TORRE 01-01-101A-DIAMANTE-L",
+      "IdModeloCota": 13,
+      "ModeloCota": "L",
+      "IdGrupoCota": 1,
+      "GrupoCota": "DIAMANTE",
+      "ValorUnitario": 84484,
+      "Status": "DISPONIVEL"
+    },
+    {
+      "IdCotaUh": 1339,
+      "IdentificadorUnicoCota": "TORRE 1-TORRE 01-01-101A-DIAMANTE-M",
+      "IdModeloCota": 14,
+      "ModeloCota": "M",
+      "IdGrupoCota": 1,
+      "GrupoCota": "DIAMANTE",
+      "ValorUnitario": 84484,
+      "Status": "DISPONIVEL"
+    }
+  ]
+}

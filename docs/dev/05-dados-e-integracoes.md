@@ -1,11 +1,27 @@
 # 05 — Dados e integrações
 
-## Dois bancos, dois papéis
+## Dois bancos, três papéis
 
 | Banco | Dono | O que guarda | Quem escreve |
 |---|---|---|---|
 | `app` (Postgres 17 + pgvector) | `app_owner` | tudo da plataforma: conversas, tickets, cobranças, leads, skills, KB, auth, traces; schema `pgboss` das filas | o server (Drizzle) |
 | espelho do ERP (`erp_mock` em dev; `bali_tse` no piloto) | `erp_ro` | a estrutura do TS Explorer, exposta **só** por 7 views canônicas | ninguém — read-only por `GRANT` |
+
+O ERP simulado tem **três** papéis, e a distância entre eles é a fronteira (035):
+
+| Papel | Enxerga | Quem usa |
+|---|---|---|
+| `postgres` | tudo | `pnpm db:seed:erp` |
+| `erp_ro` | só as 7 views canônicas | o produto (`ERP_DATABASE_URL`) |
+| `tse_sim` | `SELECT/INSERT/UPDATE` nas tabelas físicas e no schema `tse_sim`; **zero** nas views | o simulador da API (`TSE_SIM_DATABASE_URL`) |
+
+O simulador **escreve** — é o que destrava baixa de pagamento, reserva e venda — e mesmo assim
+não enxerga as views: quem lê o ERP pelo produto é o `erp_ro`, e as duas superfícies não se
+misturam. `04-sim-role.sql` cria o papel (senha por bind, nunca literal no `.sql`),
+`05-sim-schema.sql` põe no schema `tse_sim` o que a API tem e o mock não tinha
+(`utilizacaocontrato`, `hospede`, `casal`, `transacaoeletronica`…) — **fora do `public`**, para
+não poluir a superfície que a 018 vai replicar do espelho real — e `06-sim-sequences.sql`
+transforma as PKs em `IDENTITY`, sem o que nenhum `INSERT` da API funcionaria.
 
 Em dev os dois vivem no mesmo Postgres do `infra/compose.dev.yml`; os testes usam
 `app_test` para não colidir com o `pnpm dev`.
@@ -109,6 +125,7 @@ tool: { expose: true, name: titulos_atraso }
 | **LLM** (OpenAI-compatible) | agente, classificador, resumo, intérpretes, distiller | — | `/chat/completions` com tools; `/embeddings` (se `EMBEDDING_MODEL`) | `LLM_BASE_URL`, `LLM_API_KEY`, `LLM_MODEL`, preços por 1M para o custo estimado |
 | **Hugging Face** | modelo NER (`Xenova/distilbert-base-multilingual-cased-ner-hrl`) | — | download uma vez (`pnpm anonimizacao:modelo`); a imagem já traz | `ANONIMIZACAO_*` |
 | **Cloudflare quick tunnel** (dev) | expor o server local para o webhook da Meta | — | — | `tools/dev-whatsapp.sh` |
+| **API do TS Explorer** (035) | a segunda superfície do ERP: leitura financeira e **escrita** (baixa, reserva, venda) | — | OAuth2 `password` em `/token` + REST em PascalCase | dublê em `apps/tse-sim` (`TSE_SIM_*`); o TSE real é a 041. Ver [docs/tse-api-setup.md](../tse-api-setup.md) |
 
 ## Variáveis de ambiente (`.env.example` é a lista completa; `env.ts` valida)
 
@@ -116,6 +133,7 @@ tool: { expose: true, name: titulos_atraso }
 |---|---|---|
 | Processo | `NODE_ENV`, `PORT` (3001), `LOG_LEVEL` | em `production` o boot recusa os defaults de dev de `WA_VERIFY_TOKEN`, `WA_APP_SECRET`, `BETTER_AUTH_SECRET` e senhas de dev na `DATABASE_URL` |
 | Bancos | `DATABASE_URL`, `ERP_DATABASE_URL`, `ERP_MOCK_ADMIN_URL` (seed) | |
+| Simulador do TSE (035) | `TSE_SIM_PORT`, `TSE_SIM_DATABASE_URL`, `TSE_SIM_DB_PASSWORD`, `TSE_SIM_USERS`, `TSE_SIM_PAINEL_ESCOPO`, `TSE_SIM_LATENCIA_MS`, `TSE_SIM_FALHA_BPS` | serviço separado (`apps/tse-sim`), com env própria; em `production` recusa a senha e a credencial de exemplo |
 | Instalação | `CLIENT_CONFIG_PATH`, `CATALOG_DIR`, `CONTATOS_PATH`, `SKILLS_SEED_DIR`, `KB_DIR` | caminhos relativos à raiz do monorepo |
 | Auth | `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL` | o console fala com o server pela mesma origem |
 | WhatsApp | `WA_VERIFY_TOKEN`, `WA_APP_SECRET`, `WA_ACCESS_TOKEN`, `WA_PHONE_NUMBER_ID`, `WA_WABA_ID`, `WA_DEBOUNCE_MS`, `WA_TEMPLATE_PAGAMENTO_CONFIRMADO`, `DEV_SIMULATOR` | |

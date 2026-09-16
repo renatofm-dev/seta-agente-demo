@@ -1,0 +1,21 @@
+{
+  "nome": "lookups__getting-person-linked-credit-card",
+  "pasta": "Lookups",
+  "method": "GET",
+  "path": "/api/Lookup/CartaoVinculadoPessoa/{{idPessoa}}",
+  "pathParams": [
+    "idPessoa"
+  ],
+  "query": [],
+  "requestBody": null,
+  "status": 200,
+  "contentType": "application/json; charset=utf-8",
+  "body": [
+    {
+      "IdCartaoVinculadoPessoa": 415,
+      "NumeroMascarado": "1111 **** **** **** 1111",
+      "NomeNoCartao": "TITULAR DO CARTAO",
+      "Bandeira": "MASTER"
+    }
+  ]
+}

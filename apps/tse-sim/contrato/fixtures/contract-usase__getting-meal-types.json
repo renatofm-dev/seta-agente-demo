@@ -1,0 +1,31 @@
+{
+  "nome": "contract-usase__getting-meal-types",
+  "pasta": "Contract Usase",
+  "method": "GET",
+  "path": "/api/utilizacaocontrato/ObterTiposPensao",
+  "pathParams": [],
+  "query": [],
+  "requestBody": null,
+  "status": 200,
+  "contentType": "application/json; charset=utf-8",
+  "body": [
+    {
+      "IdTipoPensaoUtilizacaoContratoTs": 1,
+      "Descricao": "TESTE-1",
+      "ValorAdt": 152,
+      "ValorCh1": 61,
+      "ValorCh2": 0,
+      "ValorIds": 0,
+      "PercentualValorPensaoPagamentoEmPontos": 0
+    },
+    {
+      "IdTipoPensaoUtilizacaoContratoTs": 2,
+      "Descricao": "TESTE-2",
+      "ValorAdt": 120,
+      "ValorCh1": 48,
+      "ValorCh2": 12,
+      "ValorIds": 120,
+      "PercentualValorPensaoPagamentoEmPontos": 5
+    }
+  ]
+}

@@ -9,6 +9,14 @@ ver [dev/05](dev/05-dados-e-integracoes.md)). A decisão de adotá-la está no
 `apps/tse-sim`, que responde no mesmo contrato. Quando houver um ambiente real, só muda
 `TSE_BASE_URL` (spec 041).
 
+> **Estado (035 entregue):** o simulador responde **30 das 89** rotas da coleção — `/token`,
+> `PainelDoCliente/*` de leitura, `utilizacaocontrato/obtercontratos`, `cadastros/GetPessoa*`,
+> os 17 `Lookup/*` e as três escritas de `financeiro/*`. O placar do que falta está em
+> `apps/tse-sim/test/pendentes.ts`, e o teste de contrato garante que a lista **só encolhe**.
+> As 59 restantes têm dono: reserva na [038](../specs/038-reserva-utilizacao.md), lead e venda
+> na [039](../specs/039-sdr-escreve-no-erp.md), 2ª via na
+> [040](../specs/040-segunda-via-pdf.md); `OperadorSistema/*` e `Relatorios/*` não têm.
+
 ## 1. A fonte: a coleção Postman
 
 O fornecedor entregou uma coleção com **90 requests em 10 pastas** e **89 exemplos de resposta
@@ -23,6 +31,17 @@ responde como o TSE, e o adapter prova que entende o que o TSE responde.
 
 > **Armadilha:** dois bodies da coleção (`CriarUtilizacaoContrato`, `AdicionarHospede`) têm
 > comentários `//` dentro do JSON. `JSON.parse` quebra — o extrator remove comentários antes.
+
+Como conferir que a sanitização pegou tudo: **todo CPF no `contrato/` começa com `000`** e tem DV
+válido — é um CPF gerado, e o prefixo prova a origem. `grep -rE '[0-9]{11}' contrato` não serve
+como teste (casa com as substituições e com pedaços de código de barras); quem faz essa conferência
+é `contrato.test.ts`, que reprova qualquer CPF sem o prefixo, qualquer `timesharesolucoes` e
+qualquer `Bearer` que não seja `SCRUBBED`.
+
+**O PDF da 2ª via é a exceção que não vai para o repo.** `SegundaViaBoleto` devolve um boleto
+real — cedente, CPF, código de barras de gente de verdade — e nenhuma regra de sanitização alcança
+bytes de PDF. A fixture guarda `contentType`, `bodyBytes` e o `sha256` do exemplo, que é a FORMA de
+que a [040](../specs/040-segunda-via-pdf.md) precisa; o documento fica fora.
 
 ## 2. Autenticação
 
@@ -87,6 +106,11 @@ O adapter extrai o id por regex estrita e lança `ErpBusinessError` quando não 
 
 E `PainelDoCliente/SegundaViaBoleto/{id}` devolve **PDF binário**, não JSON.
 
+Há ainda uma quarta: `Lookup/ConsultarNumeroVersao` devolve `"17.8.24.2003"` — uma **string JSON**
+com `content-type: application/json`. Parece bobagem e não é: quem devolve string por engano num
+framework que serializa string como `text/plain` quebra o adapter no ponto em que ele menos espera.
+O simulador força o content-type nas quatro.
+
 ## 6. A pergunta aberta ao fornecedor
 
 **`PainelDoCliente/*` resolve o escopo pelo dono do token, ou aceita `idContrato` de qualquer
@@ -97,7 +121,10 @@ contrato cujo cessionário é "INTEGRAÇÃO TSE". Se o painel é por token, **o 
 financeira por API não serve**: o nosso agente atende N cotistas com uma credencial de integração.
 
 Enquanto a resposta não vem, o simulador exercita os dois comportamentos:
-`TSE_SIM_PAINEL_ESCOPO=token|qualquer`. Plano B mapeado:
+`TSE_SIM_PAINEL_ESCOPO=token|qualquer` (default `qualquer`), e
+`apps/tse-sim/test/divergencias.integration.test.ts` prova os dois lado a lado. O teste também
+registra a saída de emergência: **`utilizacaocontrato/obtercontratos?cpf=` ignora o escopo** —
+se a D10 vier ruim, é por ali que o agente ainda acha o contrato certo. Plano B mapeado:
 `Relatorios/ObterJsonDadosRelatorioComParametros`. Registrado como **D10** no
 [roadmap](roadmap.md) e como decisão externa na
 [spec 041](../specs/041-tse-real-e-fim-da-conciliacao.md).
@@ -138,12 +165,21 @@ curl -s 'localhost:3010/api/PainelDoCliente/FinanceiroContrato?idContrato=10002&
 
 Variáveis (todas em `.env.example`):
 
+Do **simulador** (035, já valem):
+
 | Var | Para que |
 |---|---|
 | `TSE_SIM_PORT` | porta do simulador (3010) |
 | `TSE_SIM_DATABASE_URL` | papel `tse_sim` no banco `erp_mock` — **não** o `erp_ro`, que é só-leitura, nem o admin |
-| `TSE_SIM_USERS` | usuários aceitos pelo `/token` do simulador |
+| `TSE_SIM_DB_PASSWORD` | senha desse papel, aplicada por `pnpm db:seed:erp` (o `04-sim-role.sql` a lê por bind). Em produção o boot recusa a senha de dev |
+| `TSE_SIM_USERS` | `login:senha:idPessoa`, separados por vírgula — o `idPessoa` é quem o token representa no painel |
 | `TSE_SIM_PAINEL_ESCOPO` | `token` ou `qualquer` (ver §6) |
+| `TSE_SIM_LATENCIA_MS` / `TSE_SIM_FALHA_BPS` | caos controlado: atraso fixo e falhas 500 em basis points, para exercitar timeout e retry do adapter |
+
+Do **produto** (036/037 — ainda não existem):
+
+| Var | Para que |
+|---|---|
 | `TSE_BASE_URL` | o que o **produto** chama: `http://localhost:3010` em dev, `http://tse-sim:3010` no homelab (rede interna do compose, sem porta publicada), o TSE real na 041 |
 | `TSE_USERNAME` / `TSE_PASSWORD` | credencial de operador — **poder de escrita financeira e de venda**; cofre e rotação, nunca `.env` commitado |
 | `ERP_LEITURA` | `sql` (default) ou `api` |

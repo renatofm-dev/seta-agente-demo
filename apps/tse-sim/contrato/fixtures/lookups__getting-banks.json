@@ -1,0 +1,17 @@
+{
+  "nome": "lookups__getting-banks",
+  "pasta": "Lookups",
+  "method": "GET",
+  "path": "/api/Lookup/Bancos",
+  "pathParams": [],
+  "query": [],
+  "requestBody": null,
+  "status": 200,
+  "contentType": "application/json; charset=utf-8",
+  "body": [
+    {
+      "Value": 1,
+      "Descricao": "Banco do Brasil "
+    }
+  ]
+}

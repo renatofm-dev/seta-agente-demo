@@ -1,0 +1,20 @@
+{
+  "nome": "contract-usase__add-instalments",
+  "pasta": "Contract Usase",
+  "method": "POST",
+  "path": "/api/utilizacaocontrato/AdicionarTaxaManutencao",
+  "pathParams": [],
+  "query": [],
+  "requestBody": {
+    "IdUtilizacaoContrato": 25,
+    "IdMeioPagamento": 4,
+    "IdTipoLancamento": 2,
+    "IdBandeiraCartao": 1,
+    "IdContaMovimentacaoBancaria": 2,
+    "ValorTaxa": 1200,
+    "DataVencimento": "2021-05-21"
+  },
+  "status": 200,
+  "contentType": "application/json; charset=utf-8",
+  "body": "Taxa adicionada com sucesso"
+}

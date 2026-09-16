@@ -1,0 +1,15 @@
+{
+  "nome": "contract-usase__cancel-contract-usage",
+  "pasta": "Contract Usase",
+  "method": "POST",
+  "path": "/api/utilizacaocontrato/CancelarUtilizacaoContrato",
+  "pathParams": [],
+  "query": [],
+  "requestBody": {
+    "IdUtilizacaoContrato": 22,
+    "MotivoCancelamento": "Cancelamento via API"
+  },
+  "status": 200,
+  "contentType": "application/json; charset=utf-8",
+  "body": "Utilização cancelada com sucesso"
+}

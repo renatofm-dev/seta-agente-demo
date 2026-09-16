@@ -1,0 +1,23 @@
+{
+  "nome": "contract-usase__getting-hotels",
+  "pasta": "Contract Usase",
+  "method": "GET",
+  "path": "/api/utilizacaocontrato/ObterHoteis/{{idContrato}}",
+  "pathParams": [
+    "idContrato"
+  ],
+  "query": [],
+  "requestBody": null,
+  "status": 200,
+  "contentType": "application/json; charset=utf-8",
+  "body": [
+    {
+      "IdHotelNegocio": 1,
+      "Descricao": "Hotel 1"
+    },
+    {
+      "IdHotelNegocio": 2,
+      "Descricao": "Hotel 2"
+    }
+  ]
+}

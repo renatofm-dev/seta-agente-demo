@@ -1,0 +1,73 @@
+{
+  "nome": "contract-usase__getting-credit-card-brands",
+  "pasta": "Contract Usase",
+  "method": "GET",
+  "path": "/api/utilizacaocontrato/ObterBandeirasDeCartao",
+  "pathParams": [],
+  "query": [],
+  "requestBody": null,
+  "status": 200,
+  "contentType": "application/json; charset=utf-8",
+  "body": [
+    {
+      "IdBandeira": 5,
+      "Descricao": "AGIPLAN"
+    },
+    {
+      "IdBandeira": 3,
+      "Descricao": "AMEX"
+    },
+    {
+      "IdBandeira": 15,
+      "Descricao": "BANESCARD"
+    },
+    {
+      "IdBandeira": 14,
+      "Descricao": "BANRICOMPRAS"
+    },
+    {
+      "IdBandeira": 6,
+      "Descricao": "CABAL"
+    },
+    {
+      "IdBandeira": 7,
+      "Descricao": "CREDSYSTEM"
+    },
+    {
+      "IdBandeira": 8,
+      "Descricao": "CREDZ"
+    },
+    {
+      "IdBandeira": 4,
+      "Descricao": "DINERS"
+    },
+    {
+      "IdBandeira": 10,
+      "Descricao": "ELO"
+    },
+    {
+      "IdBandeira": 11,
+      "Descricao": "HIPERCARD"
+    },
+    {
+      "IdBandeira": 2,
+      "Descricao": "MASTER"
+    },
+    {
+      "IdBandeira": 12,
+      "Descricao": "REDESHOP"
+    },
+    {
+      "IdBandeira": 13,
+      "Descricao": "SICREDI"
+    },
+    {
+      "IdBandeira": 9,
+      "Descricao": "SOROCRED"
+    },
+    {
+      "IdBandeira": 1,
+      "Descricao": "VISA"
+    }
+  ]
+}

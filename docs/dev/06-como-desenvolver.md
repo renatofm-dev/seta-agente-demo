@@ -12,7 +12,7 @@
 ```sh
 pnpm install
 cp .env.example .env        # sem editar já funciona: agente responde o fallback honesto
-pnpm dev                    # Postgres (Docker) → tsc -b → migrações → server :3001 + console :3000 + tsc watch
+pnpm dev                    # Postgres (Docker) → tsc -b → migrações → server :3001 + console :3000 + simulador do TSE :3010 + tsc watch
 pnpm demo:seed              # ERP mock + usuários + vínculos + skills seed + KB (idempotente)
 ```
 
@@ -52,6 +52,7 @@ descubra o dono com `lsof -nP -iTCP:3000 -sTCP:LISTEN` antes de subir.
 | `pnpm typecheck` | `tsc -b` + typecheck do console |
 | `pnpm build` | `tsc -b` + `next build` |
 | `pnpm db:migrate` | aplica `apps/server/drizzle/` |
+| `pnpm tse:fixtures` | regenera o contrato da API do TSE a partir da coleção do fornecedor (`TSE_COLLECTION_PATH`); ver [tse-api-setup](../tse-api-setup.md) |
 | `pnpm db:seed` / `pnpm demo:seed` | ERP mock + app; `demo:seed` também ingere a KB |
 | `pnpm kb:ingest` | reingere `kb/*.md` no VectorStore (remove documento cujo arquivo sumiu) |
 | `pnpm anonimizacao:modelo` | baixa o modelo NER para `.modelos/` (testes de NER e produção) |

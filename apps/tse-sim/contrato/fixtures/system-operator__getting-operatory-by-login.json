@@ -1,0 +1,18 @@
+{
+  "nome": "system-operator__getting-operatory-by-login",
+  "pasta": "System Operator",
+  "method": "GET",
+  "path": "/api/operadorsistema/GetByLogin/{{username}}",
+  "pathParams": [
+    "username"
+  ],
+  "query": [],
+  "requestBody": null,
+  "status": 200,
+  "contentType": "application/json; charset=utf-8",
+  "body": {
+    "IdOperador": 305,
+    "NomeOperador": "INTEGRAÇÃO",
+    "Login": "TSE.INTEGRACAO"
+  }
+}

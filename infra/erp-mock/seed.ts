@@ -200,8 +200,21 @@ export async function applySchema(pool: pg.Pool): Promise<void> {
   const arquivos = readdirSync(DIR)
     .filter((f) => f.endsWith('.sql'))
     .sort();
-  for (const arquivo of arquivos) {
-    await pool.query(readFileSync(join(DIR, arquivo), 'utf-8'));
+  // uma única conexão: o 04-sim-role.sql lê a senha do papel tse_sim de um GUC
+  // de sessão, e um GUC não atravessa conexões do pool
+  const client = await pool.connect();
+  try {
+    // 035: senha do simulador por BIND — arquivo .sql versionado nunca carrega
+    // segredo, e valor em SQL nunca entra por interpolação
+    await client.query('SELECT set_config($1, $2, false)', [
+      'seta.tse_sim_password',
+      process.env.TSE_SIM_DB_PASSWORD ?? '',
+    ]);
+    for (const arquivo of arquivos) {
+      await client.query(readFileSync(join(DIR, arquivo), 'utf-8'));
+    }
+  } finally {
+    client.release();
   }
 }
 
@@ -618,7 +631,11 @@ export async function seedData(pool: pg.Pool): Promise<SeedResumo> {
     await client.query(
       'TRUNCATE contafinanceira, cancelamento, ocorrenciaatendimentots, contrato, cotauh, ' +
         'tabelapreco, pessoa, unidadehoteleira, edificiohotel, grupocota, modelocota, ' +
-        'tipoorigemcontafinanceira, meiopagamento, motivocancelamentocontrato, motivocontato',
+        'tipoorigemcontafinanceira, meiopagamento, motivocancelamentocontrato, motivocontato, ' +
+        // 035: o que o simulador escreveu aponta para contratos e parcelas que
+        // estão sendo recriados — recarregar o ERP zera o TSE junto
+        'tse_sim.transacaoeletronica, tse_sim.hospede, tse_sim.utilizacaocontrato, ' +
+        'tse_sim.casal, tse_sim.tipopensao, tse_sim.operador',
     );
     await inserirLote(client, 'edificiohotel', ['idedificiohotel', 'nome'], edificios);
     await inserirLote(
@@ -719,6 +736,9 @@ export async function seedData(pool: pg.Pool): Promise<SeedResumo> {
       ],
       chamados,
     );
+    // 035: as PKs são IDENTITY e este seed grava id explícito — sem ressincronizar,
+    // o próximo INSERT do simulador (ou o seed seguinte) colide com a PK
+    await client.query('SELECT tse_sim.ressincronizar_sequences()');
     await client.query('COMMIT');
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {});

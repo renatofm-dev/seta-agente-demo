@@ -1,0 +1,21 @@
+{
+  "nome": "contract-usase__get-market-code",
+  "pasta": "Contract Usase",
+  "method": "GET",
+  "path": "/api/utilizacaocontrato/ObterMarketCode",
+  "pathParams": [],
+  "query": [
+    "idEmpresa"
+  ],
+  "requestBody": null,
+  "status": 200,
+  "contentType": "application/json; charset=utf-8",
+  "body": [
+    {
+      "IdMarketCode": 1,
+      "Descricao": "TESTE",
+      "Sigla": "TSE",
+      "Ativo": true
+    }
+  ]
+}

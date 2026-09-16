@@ -1,0 +1,17 @@
+{
+  "nome": "system-operator__revoke-access-to-companies",
+  "pasta": "System Operator",
+  "method": "POST",
+  "path": "/api/operadorsistema/RemoverEmpresasOperadorSistema",
+  "pathParams": [],
+  "query": [],
+  "requestBody": {
+    "IdOperador": 305,
+    "ListaIdEmpresas": [
+      2
+    ]
+  },
+  "status": 200,
+  "contentType": "application/json; charset=utf-8",
+  "body": "Empresas removidas com sucesso"
+}

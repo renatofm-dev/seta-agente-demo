@@ -1,0 +1,45 @@
+{
+  "nome": "lookups__getting-sales-source",
+  "pasta": "Lookups",
+  "method": "GET",
+  "path": "/api/Lookup/OrigensVenda",
+  "pathParams": [],
+  "query": [],
+  "requestBody": null,
+  "status": 200,
+  "contentType": "application/json; charset=utf-8",
+  "body": [
+    {
+      "Value": 2,
+      "Descricao": "BeBack"
+    },
+    {
+      "Value": 7,
+      "Descricao": "Downgrade"
+    },
+    {
+      "Value": 4,
+      "Descricao": "Permuta Comissionada"
+    },
+    {
+      "Value": 5,
+      "Descricao": "Permuta Não-Comissionada"
+    },
+    {
+      "Value": 3,
+      "Descricao": "Renovação de contrato"
+    },
+    {
+      "Value": 8,
+      "Descricao": "Revenda/Renovação de contrato"
+    },
+    {
+      "Value": 6,
+      "Descricao": "Upgrade"
+    },
+    {
+      "Value": 1,
+      "Descricao": "Venda no dia do atendimento"
+    }
+  ]
+}

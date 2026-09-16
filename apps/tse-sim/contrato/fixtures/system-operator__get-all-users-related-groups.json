@@ -1,0 +1,67 @@
+{
+  "nome": "system-operator__get-all-users-related-groups",
+  "pasta": "System Operator",
+  "method": "GET",
+  "path": "/api/OperadorSistema/ListarTodosUsuariosVinculadoGrupo/{{idGrupoOperador}}",
+  "pathParams": [
+    "idGrupoOperador"
+  ],
+  "query": [],
+  "requestBody": null,
+  "status": 200,
+  "contentType": "application/json; charset=utf-8",
+  "body": [
+    {
+      "IdOperadorSistema": 3,
+      "Nome": "FABIANA",
+      "Habilitado": false,
+      "Login": "FABIANA",
+      "Email": "integracao@exemplo.com.br",
+      "TipoOperador": null,
+      "Idioma": null,
+      "DataValidade": null,
+      "GrupoOperadores": [],
+      "Empresas": [],
+      "GuidPermissoes": []
+    },
+    {
+      "IdOperadorSistema": 303,
+      "Nome": "Brunno",
+      "Habilitado": true,
+      "Login": "BRUNNO.HENRIQUE.INACIO",
+      "Email": "integracao@exemplo.com.br",
+      "TipoOperador": null,
+      "Idioma": null,
+      "DataValidade": null,
+      "GrupoOperadores": [],
+      "Empresas": [],
+      "GuidPermissoes": []
+    },
+    {
+      "IdOperadorSistema": 304,
+      "Nome": "Brunno",
+      "Habilitado": true,
+      "Login": "BRUNNO.INACIO",
+      "Email": "integracao@exemplo.com.br",
+      "TipoOperador": null,
+      "Idioma": null,
+      "DataValidade": null,
+      "GrupoOperadores": [],
+      "Empresas": [],
+      "GuidPermissoes": []
+    },
+    {
+      "IdOperadorSistema": 305,
+      "Nome": "INTEGRAÇÃO",
+      "Habilitado": true,
+      "Login": "TSE.INTEGRACAO",
+      "Email": "integracao@exemplo.com.br",
+      "TipoOperador": null,
+      "Idioma": "pt-BR",
+      "DataValidade": null,
+      "GrupoOperadores": [],
+      "Empresas": [],
+      "GuidPermissoes": []
+    }
+  ]
+}

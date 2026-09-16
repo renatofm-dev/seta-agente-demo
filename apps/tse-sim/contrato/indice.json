@@ -1,0 +1,1084 @@
+[
+  {
+    "nome": "authentication__getting-authentication-token",
+    "pasta": "Authentication",
+    "method": "GET",
+    "path": "/token",
+    "pathParams": [],
+    "query": [],
+    "status": 200,
+    "contentType": "application/json;charset=UTF-8",
+    "arquivo": "fixtures/authentication__getting-authentication-token.json"
+  },
+  {
+    "nome": "client-area__my-contracts",
+    "pasta": "Client Area",
+    "method": "GET",
+    "path": "/api/PainelDoCliente/MeusContratos",
+    "pathParams": [],
+    "query": [],
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "arquivo": "fixtures/client-area__my-contracts.json"
+  },
+  {
+    "nome": "client-area__my-cadastral-data",
+    "pasta": "Client Area",
+    "method": "GET",
+    "path": "/api/PainelDoCliente/MeusDadosCadastrais",
+    "pathParams": [],
+    "query": [],
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "arquivo": "fixtures/client-area__my-cadastral-data.json"
+  },
+  {
+    "nome": "client-area__my-contract-usages",
+    "pasta": "Client Area",
+    "method": "GET",
+    "path": "/api/PainelDoCliente/MinhasUtilizacoesContrato",
+    "pathParams": [],
+    "query": [
+      "idContrato",
+      "paginaAtual"
+    ],
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "arquivo": "fixtures/client-area__my-contract-usages.json"
+  },
+  {
+    "nome": "client-area__contract-installments",
+    "pasta": "Client Area",
+    "method": "GET",
+    "path": "/api/PainelDoCliente/FinanceiroContrato",
+    "pathParams": [],
+    "query": [
+      "idContrato",
+      "paginaAtual"
+    ],
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "arquivo": "fixtures/client-area__contract-installments.json"
+  },
+  {
+    "nome": "client-area__my-tickets",
+    "pasta": "Client Area",
+    "method": "GET",
+    "path": "/api/PainelDoCliente/MeusBoletos",
+    "pathParams": [],
+    "query": [
+      "idContrato",
+      "paginaAtual"
+    ],
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "arquivo": "fixtures/client-area__my-tickets.json"
+  },
+  {
+    "nome": "client-area__second-ticket",
+    "pasta": "Client Area",
+    "method": "GET",
+    "path": "/api/PainelDoCliente/SegundaViaBoleto/{{idContaFinanceira}}",
+    "pathParams": [
+      "idContaFinanceira"
+    ],
+    "query": [],
+    "status": 200,
+    "contentType": "application/pdf",
+    "arquivo": "fixtures/client-area__second-ticket.json"
+  },
+  {
+    "nome": "client-area__hotels-available-for-use",
+    "pasta": "Client Area",
+    "method": "GET",
+    "path": "/api/PainelDoCliente/HoteisDisponiveisUso/{{idContrato}}",
+    "pathParams": [
+      "idContrato"
+    ],
+    "query": [],
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "arquivo": "fixtures/client-area__hotels-available-for-use.json"
+  },
+  {
+    "nome": "client-area__hotel-unit-types",
+    "pasta": "Client Area",
+    "method": "GET",
+    "path": "/api/PainelDoCliente/TiposUnidadeHoteleira/{{idEdificioHotel}}",
+    "pathParams": [
+      "idEdificioHotel"
+    ],
+    "query": [],
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "arquivo": "fixtures/client-area__hotel-unit-types.json"
+  },
+  {
+    "nome": "client-area__simulate-contract-usage",
+    "pasta": "Client Area",
+    "method": "GET",
+    "path": "/api/PainelDoCliente/SimularUtilizacaoContrato",
+    "pathParams": [],
+    "query": [
+      "idGrupoTabelaPontos",
+      "qtdPagantes",
+      "dataInicial",
+      "dataFinal",
+      "tipoUnidadeHoteleiraId",
+      "idHotel",
+      "idContrato"
+    ],
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "arquivo": "fixtures/client-area__simulate-contract-usage.json"
+  },
+  {
+    "nome": "client-area__create-contract-usage-request",
+    "pasta": "Client Area",
+    "method": "GET",
+    "path": "/api/PainelDoCliente/CriarSolicitacaoReserva",
+    "pathParams": [],
+    "query": [
+      "idGrupoTabelaPontos",
+      "qtdPagantes",
+      "dataInicial",
+      "dataFinal",
+      "tipoUnidadeHoteleiraId",
+      "idHotel",
+      "idContrato"
+    ],
+    "status": 200,
+    "contentType": "application/json",
+    "arquivo": "fixtures/client-area__create-contract-usage-request.json"
+  },
+  {
+    "nome": "client-area__get-tax-dpnu-contract",
+    "pasta": "Client Area",
+    "method": "GET",
+    "path": "/api/PainelDoCliente/ObterTaxasDPNU/{{idContrato}}",
+    "pathParams": [
+      "idContrato"
+    ],
+    "query": [],
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "arquivo": "fixtures/client-area__get-tax-dpnu-contract.json"
+  },
+  {
+    "nome": "system-operator__getting-person-by-cpf",
+    "pasta": "System Operator",
+    "method": "GET",
+    "path": "/api/cadastros/GetPessoaCpf/{{cpfCnpj}}",
+    "pathParams": [
+      "cpfCnpj"
+    ],
+    "query": [],
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "arquivo": "fixtures/system-operator__getting-person-by-cpf.json"
+  },
+  {
+    "nome": "system-operator__getting-operatory-by-login",
+    "pasta": "System Operator",
+    "method": "GET",
+    "path": "/api/operadorsistema/GetByLogin/{{username}}",
+    "pathParams": [
+      "username"
+    ],
+    "query": [],
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "arquivo": "fixtures/system-operator__getting-operatory-by-login.json"
+  },
+  {
+    "nome": "system-operator__getting-permissions-groups",
+    "pasta": "System Operator",
+    "method": "GET",
+    "path": "/api/operadorsistema/GetGruposOperadores",
+    "pathParams": [],
+    "query": [],
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "arquivo": "fixtures/system-operator__getting-permissions-groups.json"
+  },
+  {
+    "nome": "system-operator__get-all-users",
+    "pasta": "System Operator",
+    "method": "GET",
+    "path": "/api/OperadorSistema/ListarTodosUsuarios",
+    "pathParams": [],
+    "query": [],
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "arquivo": "fixtures/system-operator__get-all-users.json"
+  },
+  {
+    "nome": "system-operator__get-all-peoples-related-employes",
+    "pasta": "System Operator",
+    "method": "GET",
+    "path": "/api/OperadorSistema/ListarTodasPessoas",
+    "pathParams": [],
+    "query": [],
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "arquivo": "fixtures/system-operator__get-all-peoples-related-employes.json"
+  },
+  {
+    "nome": "system-operator__get-user-group-by-id",
+    "pasta": "System Operator",
+    "method": "GET",
+    "path": "/api/OperadorSistema/GrupoPorId/{{idGrupoOperador}}",
+    "pathParams": [
+      "idGrupoOperador"
+    ],
+    "query": [
+      ""
+    ],
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "arquivo": "fixtures/system-operator__get-user-group-by-id.json"
+  },
+  {
+    "nome": "system-operator__get-all-groups-with-users",
+    "pasta": "System Operator",
+    "method": "GET",
+    "path": "/api/OperadorSistema/ListarTodosGruposVinculadoUsuario/{{idOperador}}",
+    "pathParams": [
+      "idOperador"
+    ],
+    "query": [],
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "arquivo": "fixtures/system-operator__get-all-groups-with-users.json"
+  },
+  {
+    "nome": "system-operator__get-all-users-related-groups",
+    "pasta": "System Operator",
+    "method": "GET",
+    "path": "/api/OperadorSistema/ListarTodosUsuariosVinculadoGrupo/{{idGrupoOperador}}",
+    "pathParams": [
+      "idGrupoOperador"
+    ],
+    "query": [],
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "arquivo": "fixtures/system-operator__get-all-users-related-groups.json"
+  },
+  {
+    "nome": "system-operator__get-all-permissions-with-groups-of-users",
+    "pasta": "System Operator",
+    "method": "GET",
+    "path": "/api/OperadorSistema/ListarTodasPermissoesGrupoUsuario/{{idGrupoOperador}}",
+    "pathParams": [
+      "idGrupoOperador"
+    ],
+    "query": [],
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "arquivo": "fixtures/system-operator__get-all-permissions-with-groups-of-users.json"
+  },
+  {
+    "nome": "system-operator__get-system-operator-by-id",
+    "pasta": "System Operator",
+    "method": "GET",
+    "path": "/api/OperadorSistema/ObterOperadorSistema/{{idOperador}}",
+    "pathParams": [
+      "idOperador"
+    ],
+    "query": [],
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "arquivo": "fixtures/system-operator__get-system-operator-by-id.json"
+  },
+  {
+    "nome": "system-operator__change-company",
+    "pasta": "System Operator",
+    "method": "POST",
+    "path": "/api/OperadorSistema/SetEmpresaSel/{{idEmpresa}}",
+    "pathParams": [
+      "idEmpresa"
+    ],
+    "query": [],
+    "status": 200,
+    "contentType": "application/json",
+    "arquivo": "fixtures/system-operator__change-company.json"
+  },
+  {
+    "nome": "system-operator__change-password",
+    "pasta": "System Operator",
+    "method": "POST",
+    "path": "/api/operadorsistema/AlterarSenha",
+    "pathParams": [],
+    "query": [],
+    "status": 200,
+    "contentType": "application/json",
+    "arquivo": "fixtures/system-operator__change-password.json"
+  },
+  {
+    "nome": "system-operator__create-new-system-operator",
+    "pasta": "System Operator",
+    "method": "POST",
+    "path": "/api/operadorsistema/SetOperadorSistema",
+    "pathParams": [],
+    "query": [],
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "arquivo": "fixtures/system-operator__create-new-system-operator.json"
+  },
+  {
+    "nome": "system-operator__assign-permissions-group",
+    "pasta": "System Operator",
+    "method": "POST",
+    "path": "/api/operadorsistema/SetPermissoesOperadorSistema",
+    "pathParams": [],
+    "query": [],
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "arquivo": "fixtures/system-operator__assign-permissions-group.json"
+  },
+  {
+    "nome": "system-operator__grant-access-to-companies",
+    "pasta": "System Operator",
+    "method": "POST",
+    "path": "/api/operadorsistema/SetEmpresasOperadorSistema",
+    "pathParams": [],
+    "query": [],
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "arquivo": "fixtures/system-operator__grant-access-to-companies.json"
+  },
+  {
+    "nome": "system-operator__revoke-access-to-companies",
+    "pasta": "System Operator",
+    "method": "POST",
+    "path": "/api/operadorsistema/RemoverEmpresasOperadorSistema",
+    "pathParams": [],
+    "query": [],
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "arquivo": "fixtures/system-operator__revoke-access-to-companies.json"
+  },
+  {
+    "nome": "system-operator__reset-password",
+    "pasta": "System Operator",
+    "method": "POST",
+    "path": "/api/operadorsistema/ResetarSenha/{{idOperador}}",
+    "pathParams": [
+      "idOperador"
+    ],
+    "query": [],
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "arquivo": "fixtures/system-operator__reset-password.json"
+  },
+  {
+    "nome": "system-operator__change-business-unit",
+    "pasta": "System Operator",
+    "method": "POST",
+    "path": "/api/OperadorSistema/SetUnidadeNegocioSel/{{idUnidadeNegocio}}",
+    "pathParams": [
+      "idUnidadeNegocio"
+    ],
+    "query": [],
+    "status": 200,
+    "contentType": "application/json",
+    "arquivo": "fixtures/system-operator__change-business-unit.json"
+  },
+  {
+    "nome": "system-operator__change-user",
+    "pasta": "System Operator",
+    "method": "POST",
+    "path": "/api/OperadorSistema/AlterarInformacoesUsuario",
+    "pathParams": [],
+    "query": [],
+    "status": 200,
+    "contentType": "application/json",
+    "arquivo": "fixtures/system-operator__change-user.json"
+  },
+  {
+    "nome": "system-operator__active-or-inactive-operator",
+    "pasta": "System Operator",
+    "method": "POST",
+    "path": "/api/OperadorSistema/AtivarInativarUsuario/{{idOperador}}",
+    "pathParams": [
+      "idOperador"
+    ],
+    "query": [],
+    "status": 200,
+    "contentType": "application/json",
+    "arquivo": "fixtures/system-operator__active-or-inactive-operator.json"
+  },
+  {
+    "nome": "system-operator__remove-groups-permissions-of-operator",
+    "pasta": "System Operator",
+    "method": "POST",
+    "path": "/api/OperadorSistema/RemoverUsuarioGrupoPermissao",
+    "pathParams": [],
+    "query": [],
+    "status": 200,
+    "contentType": "application/json",
+    "arquivo": "fixtures/system-operator__remove-groups-permissions-of-operator.json"
+  },
+  {
+    "nome": "contract-usase__getting-contracts-by-cpf",
+    "pasta": "Contract Usase",
+    "method": "GET",
+    "path": "/api/utilizacaocontrato/obtercontratos",
+    "pathParams": [],
+    "query": [
+      "cpf"
+    ],
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "arquivo": "fixtures/contract-usase__getting-contracts-by-cpf.json"
+  },
+  {
+    "nome": "contract-usase__get-company",
+    "pasta": "Contract Usase",
+    "method": "GET",
+    "path": "/api/utilizacaocontrato/ObterEmpresa",
+    "pathParams": [],
+    "query": [
+      "idContrato"
+    ],
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "arquivo": "fixtures/contract-usase__get-company.json"
+  },
+  {
+    "nome": "contract-usase__getting-interchange-contracts",
+    "pasta": "Contract Usase",
+    "method": "GET",
+    "path": "/api/utilizacaocontrato/ObterContratosIntercambio/{{idContrato}}",
+    "pathParams": [
+      "idContrato"
+    ],
+    "query": [],
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "arquivo": "fixtures/contract-usase__getting-interchange-contracts.json"
+  },
+  {
+    "nome": "contract-usase__getting-hotels",
+    "pasta": "Contract Usase",
+    "method": "GET",
+    "path": "/api/utilizacaocontrato/ObterHoteis/{{idContrato}}",
+    "pathParams": [
+      "idContrato"
+    ],
+    "query": [],
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "arquivo": "fixtures/contract-usase__getting-hotels.json"
+  },
+  {
+    "nome": "contract-usase__getting-hotel-unit-types",
+    "pasta": "Contract Usase",
+    "method": "GET",
+    "path": "/api/utilizacaocontrato/ObterTiposUnidadeHoteleira/{{idEdificioHotel}}",
+    "pathParams": [
+      "idEdificioHotel"
+    ],
+    "query": [],
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "arquivo": "fixtures/contract-usase__getting-hotel-unit-types.json"
+  },
+  {
+    "nome": "contract-usase__getting-meal-types",
+    "pasta": "Contract Usase",
+    "method": "GET",
+    "path": "/api/utilizacaocontrato/ObterTiposPensao",
+    "pathParams": [],
+    "query": [],
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "arquivo": "fixtures/contract-usase__getting-meal-types.json"
+  },
+  {
+    "nome": "contract-usase__getting-age-group-types",
+    "pasta": "Contract Usase",
+    "method": "GET",
+    "path": "/api/utilizacaocontrato/ObterTiposFaixaEtaria",
+    "pathParams": [],
+    "query": [],
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "arquivo": "fixtures/contract-usase__getting-age-group-types.json"
+  },
+  {
+    "nome": "contract-usase__getting-contract-usage-of-fractionation-credit",
+    "pasta": "Contract Usase",
+    "method": "GET",
+    "path": "/api/utilizacaocontrato/ObterUtilizacaoCreditoFracionamento",
+    "pathParams": [],
+    "query": [
+      "idContrato",
+      "dataCheckIn"
+    ],
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "arquivo": "fixtures/contract-usase__getting-contract-usage-of-fractionation-credit.json"
+  },
+  {
+    "nome": "contract-usase__getting-contract-usage-information",
+    "pasta": "Contract Usase",
+    "method": "GET",
+    "path": "/api/utilizacaocontrato/ObterDadosUtilizacaoContrato/{{idUtilizacao}}",
+    "pathParams": [
+      "idUtilizacao"
+    ],
+    "query": [],
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "arquivo": "fixtures/contract-usase__getting-contract-usage-information.json"
+  },
+  {
+    "nome": "contract-usase__getting-guests",
+    "pasta": "Contract Usase",
+    "method": "GET",
+    "path": "/api/utilizacaocontrato/ObterHospedes/{{idUtilizacao}}",
+    "pathParams": [
+      "idUtilizacao"
+    ],
+    "query": [],
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "arquivo": "fixtures/contract-usase__getting-guests.json"
+  },
+  {
+    "nome": "contract-usase__getting-payment-types",
+    "pasta": "Contract Usase",
+    "method": "GET",
+    "path": "/api/utilizacaocontrato/ObterMeiosDePagamento",
+    "pathParams": [],
+    "query": [],
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "arquivo": "fixtures/contract-usase__getting-payment-types.json"
+  },
+  {
+    "nome": "contract-usase__getting-installments-types",
+    "pasta": "Contract Usase",
+    "method": "GET",
+    "path": "/api/utilizacaocontrato/ObterTiposDeLancamento",
+    "pathParams": [],
+    "query": [],
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "arquivo": "fixtures/contract-usase__getting-installments-types.json"
+  },
+  {
+    "nome": "contract-usase__getting-credit-card-brands",
+    "pasta": "Contract Usase",
+    "method": "GET",
+    "path": "/api/utilizacaocontrato/ObterBandeirasDeCartao",
+    "pathParams": [],
+    "query": [],
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "arquivo": "fixtures/contract-usase__getting-credit-card-brands.json"
+  },
+  {
+    "nome": "contract-usase__getting-total-receivable-by-contract-usage-id",
+    "pasta": "Contract Usase",
+    "method": "GET",
+    "path": "/api/utilizacaocontrato/ObterTotalReceberPorTipo",
+    "pathParams": [],
+    "query": [
+      "idUtilizacao"
+    ],
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "arquivo": "fixtures/contract-usase__getting-total-receivable-by-contract-usage-id.json"
+  },
+  {
+    "nome": "contract-usase__simulate-contract-usage",
+    "pasta": "Contract Usase",
+    "method": "GET",
+    "path": "/api/utilizacaocontrato/SimularUtilizacaoContrato",
+    "pathParams": [],
+    "query": [],
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "arquivo": "fixtures/contract-usase__simulate-contract-usage.json"
+  },
+  {
+    "nome": "contract-usase__get-market-code",
+    "pasta": "Contract Usase",
+    "method": "GET",
+    "path": "/api/utilizacaocontrato/ObterMarketCode",
+    "pathParams": [],
+    "query": [
+      "idEmpresa"
+    ],
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "arquivo": "fixtures/contract-usase__get-market-code.json"
+  },
+  {
+    "nome": "contract-usase__get-block-code",
+    "pasta": "Contract Usase",
+    "method": "GET",
+    "path": "/api/utilizacaocontrato/ObterBlockCode",
+    "pathParams": [],
+    "query": [
+      "idEmpresa"
+    ],
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "arquivo": "fixtures/contract-usase__get-block-code.json"
+  },
+  {
+    "nome": "contract-usase__create-contract-usage",
+    "pasta": "Contract Usase",
+    "method": "POST",
+    "path": "/api/utilizacaocontrato/CriarUtilizacaoContrato",
+    "pathParams": [],
+    "query": [],
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "arquivo": "fixtures/contract-usase__create-contract-usage.json"
+  },
+  {
+    "nome": "contract-usase__add-meal-type",
+    "pasta": "Contract Usase",
+    "method": "POST",
+    "path": "/api/utilizacaocontrato/AdicionarTipoPensao",
+    "pathParams": [],
+    "query": [],
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "arquivo": "fixtures/contract-usase__add-meal-type.json"
+  },
+  {
+    "nome": "contract-usase__add-guest",
+    "pasta": "Contract Usase",
+    "method": "POST",
+    "path": "/api/utilizacaocontrato/AdicionarHospede",
+    "pathParams": [],
+    "query": [],
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "arquivo": "fixtures/contract-usase__add-guest.json"
+  },
+  {
+    "nome": "contract-usase__remove-guest",
+    "pasta": "Contract Usase",
+    "method": "POST",
+    "path": "/api/utilizacaocontrato/RemoverHospede",
+    "pathParams": [],
+    "query": [],
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "arquivo": "fixtures/contract-usase__remove-guest.json"
+  },
+  {
+    "nome": "contract-usase__add-instalments",
+    "pasta": "Contract Usase",
+    "method": "POST",
+    "path": "/api/utilizacaocontrato/AdicionarTaxaManutencao",
+    "pathParams": [],
+    "query": [],
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "arquivo": "fixtures/contract-usase__add-instalments.json"
+  },
+  {
+    "nome": "contract-usase__confirm-contract-usage",
+    "pasta": "Contract Usase",
+    "method": "POST",
+    "path": "/api/utilizacaocontrato/ConfirmarUtilizacaoContrato/22",
+    "pathParams": [],
+    "query": [],
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "arquivo": "fixtures/contract-usase__confirm-contract-usage.json"
+  },
+  {
+    "nome": "contract-usase__cancel-contract-usage",
+    "pasta": "Contract Usase",
+    "method": "POST",
+    "path": "/api/utilizacaocontrato/CancelarUtilizacaoContrato",
+    "pathParams": [],
+    "query": [],
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "arquivo": "fixtures/contract-usase__cancel-contract-usage.json"
+  },
+  {
+    "nome": "contract-usase__perform-instalments-payment",
+    "pasta": "Contract Usase",
+    "method": "POST",
+    "path": "/api/utilizacaocontrato/EfetuarPagamentoCartaoCredito",
+    "pathParams": [],
+    "query": [],
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "arquivo": "fixtures/contract-usase__perform-instalments-payment.json"
+  },
+  {
+    "nome": "contract-usase__create-cancellation-fee",
+    "pasta": "Contract Usase",
+    "method": "POST",
+    "path": "/api/utilizacaocontrato/CriarTaxaCancelamento",
+    "pathParams": [],
+    "query": [],
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "arquivo": "fixtures/contract-usase__create-cancellation-fee.json"
+  },
+  {
+    "nome": "aproach-control__getting-lead",
+    "pasta": "Aproach Control",
+    "method": "GET",
+    "path": "/api/recepcaots/GetCasal/{{idCasal}}",
+    "pathParams": [
+      "idCasal"
+    ],
+    "query": [],
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "arquivo": "fixtures/aproach-control__getting-lead.json"
+  },
+  {
+    "nome": "aproach-control__getting-leads-by-period",
+    "pasta": "Aproach Control",
+    "method": "GET",
+    "path": "/api/recepcaots/GetCasaisPorPeriodo",
+    "pathParams": [],
+    "query": [
+      "dataInicial",
+      "dataFinal",
+      "idUnidadeNegocio",
+      "somenteAgendados"
+    ],
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "arquivo": "fixtures/aproach-control__getting-leads-by-period.json"
+  },
+  {
+    "nome": "aproach-control__create-lead",
+    "pasta": "Aproach Control",
+    "method": "POST",
+    "path": "/api/recepcaots/setcasal/0",
+    "pathParams": [],
+    "query": [],
+    "status": 200,
+    "contentType": "application/json",
+    "arquivo": "fixtures/aproach-control__create-lead.json"
+  },
+  {
+    "nome": "general-registers__getting-person-by-id",
+    "pasta": "General Registers",
+    "method": "GET",
+    "path": "/api/cadastros/GetPessoa/{{idPessoa}}",
+    "pathParams": [
+      "idPessoa"
+    ],
+    "query": [],
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "arquivo": "fixtures/general-registers__getting-person-by-id.json"
+  },
+  {
+    "nome": "general-registers__getting-person-by-cpf",
+    "pasta": "General Registers",
+    "method": "GET",
+    "path": "/api/cadastros/GetPessoaCpf/{{cpfCnpj}}",
+    "pathParams": [
+      "cpfCnpj"
+    ],
+    "query": [],
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "arquivo": "fixtures/general-registers__getting-person-by-cpf.json"
+  },
+  {
+    "nome": "general-registers__create-person",
+    "pasta": "General Registers",
+    "method": "POST",
+    "path": "/api/cadastros/SetPessoa/0",
+    "pathParams": [],
+    "query": [],
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "arquivo": "fixtures/general-registers__create-person.json"
+  },
+  {
+    "nome": "lookups__getting-sales-source",
+    "pasta": "Lookups",
+    "method": "GET",
+    "path": "/api/Lookup/OrigensVenda",
+    "pathParams": [],
+    "query": [],
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "arquivo": "fixtures/lookups__getting-sales-source.json"
+  },
+  {
+    "nome": "lookups__getting-relationship-types",
+    "pasta": "Lookups",
+    "method": "GET",
+    "path": "/api/Lookup/TiposRelacionamento",
+    "pathParams": [],
+    "query": [],
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "arquivo": "fixtures/lookups__getting-relationship-types.json"
+  },
+  {
+    "nome": "lookups__getting-products",
+    "pasta": "Lookups",
+    "method": "GET",
+    "path": "/api/Lookup/Produtos",
+    "pathParams": [],
+    "query": [],
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "arquivo": "fixtures/lookups__getting-products.json"
+  },
+  {
+    "nome": "lookups__getting-quotas-by-product",
+    "pasta": "Lookups",
+    "method": "GET",
+    "path": "/api/Lookup/CotasByProduto",
+    "pathParams": [],
+    "query": [
+      "produtoId"
+    ],
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "arquivo": "fixtures/lookups__getting-quotas-by-product.json"
+  },
+  {
+    "nome": "lookups__getting-installments-types",
+    "pasta": "Lookups",
+    "method": "GET",
+    "path": "/api/Lookup/OrigensContaFinanceiraReceber",
+    "pathParams": [],
+    "query": [],
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "arquivo": "fixtures/lookups__getting-installments-types.json"
+  },
+  {
+    "nome": "lookups__getting-payment-types",
+    "pasta": "Lookups",
+    "method": "GET",
+    "path": "/api/Lookup/MeiosPagamentoContasReceber",
+    "pathParams": [],
+    "query": [],
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "arquivo": "fixtures/lookups__getting-payment-types.json"
+  },
+  {
+    "nome": "lookups__getting-credit-card-brands",
+    "pasta": "Lookups",
+    "method": "GET",
+    "path": "/api/Lookup/BandeirasCartao",
+    "pathParams": [],
+    "query": [],
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "arquivo": "fixtures/lookups__getting-credit-card-brands.json"
+  },
+  {
+    "nome": "lookups__getting-monetary-indexers",
+    "pasta": "Lookups",
+    "method": "GET",
+    "path": "/api/Lookup/Indexadores",
+    "pathParams": [],
+    "query": [],
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "arquivo": "fixtures/lookups__getting-monetary-indexers.json"
+  },
+  {
+    "nome": "lookups__get-all-permissions",
+    "pasta": "Lookups",
+    "method": "GET",
+    "path": "/api/Lookup/PermissoesSistema",
+    "pathParams": [],
+    "query": [],
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "arquivo": "fixtures/lookups__get-all-permissions.json"
+  },
+  {
+    "nome": "lookups__get-all-employees",
+    "pasta": "Lookups",
+    "method": "GET",
+    "path": "/api/Lookup/ConsultarNumeroVersao",
+    "pathParams": [],
+    "query": [],
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "arquivo": "fixtures/lookups__get-all-employees.json"
+  },
+  {
+    "nome": "lookups__getting-tax-credit-card",
+    "pasta": "Lookups",
+    "method": "GET",
+    "path": "/api/Lookup/TaxasCartao/{{idBandeira}}",
+    "pathParams": [
+      "idBandeira"
+    ],
+    "query": [],
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "arquivo": "fixtures/lookups__getting-tax-credit-card.json"
+  },
+  {
+    "nome": "lookups__getting-banks",
+    "pasta": "Lookups",
+    "method": "GET",
+    "path": "/api/Lookup/Bancos",
+    "pathParams": [],
+    "query": [],
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "arquivo": "fixtures/lookups__getting-banks.json"
+  },
+  {
+    "nome": "lookups__getting-person-linked-credit-card",
+    "pasta": "Lookups",
+    "method": "GET",
+    "path": "/api/Lookup/CartaoVinculadoPessoa/{{idPessoa}}",
+    "pathParams": [
+      "idPessoa"
+    ],
+    "query": [],
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "arquivo": "fixtures/lookups__getting-person-linked-credit-card.json"
+  },
+  {
+    "nome": "lookups__getting-bill-portfolio",
+    "pasta": "Lookups",
+    "method": "GET",
+    "path": "/api/Lookup/CarteiraBoleto",
+    "pathParams": [],
+    "query": [],
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "arquivo": "fixtures/lookups__getting-bill-portfolio.json"
+  },
+  {
+    "nome": "lookups__getting-indexers-plan",
+    "pasta": "Lookups",
+    "method": "GET",
+    "path": "/api/Lookup/PlanosIndexadores",
+    "pathParams": [],
+    "query": [],
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "arquivo": "fixtures/lookups__getting-indexers-plan.json"
+  },
+  {
+    "nome": "lookups__getting-banking-movement-account",
+    "pasta": "Lookups",
+    "method": "GET",
+    "path": "/api/Lookup/ContaMovimentacaoBancaria",
+    "pathParams": [],
+    "query": [],
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "arquivo": "fixtures/lookups__getting-banking-movement-account.json"
+  },
+  {
+    "nome": "lookups__getting-cost-center",
+    "pasta": "Lookups",
+    "method": "GET",
+    "path": "/api/Lookup/CentroCusto",
+    "pathParams": [],
+    "query": [],
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "arquivo": "fixtures/lookups__getting-cost-center.json"
+  },
+  {
+    "nome": "sales__create-new-sale",
+    "pasta": "Sales",
+    "method": "POST",
+    "path": "/api/vendats/SetVenda/0",
+    "pathParams": [],
+    "query": [],
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "arquivo": "fixtures/sales__create-new-sale.json"
+  },
+  {
+    "nome": "reports__get-data-json-report",
+    "pasta": "Reports",
+    "method": "GET",
+    "path": "/api/Relatorios/ObterJsonDadosRelatorio",
+    "pathParams": [],
+    "query": [
+      "idRelatorio"
+    ],
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "arquivo": "fixtures/reports__get-data-json-report.json"
+  },
+  {
+    "nome": "reports__get-data-zip-report",
+    "pasta": "Reports",
+    "method": "GET",
+    "path": "/api/Relatorios/ObterBinarioDadosRelatorio",
+    "pathParams": [],
+    "query": [
+      "idRelatorio"
+    ],
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "arquivo": "fixtures/reports__get-data-zip-report.json"
+  },
+  {
+    "nome": "reports__get-data-json-report-whit-parameters",
+    "pasta": "Reports",
+    "method": "POST",
+    "path": "/api/Relatorios/ObterJsonDadosRelatorioComParametros/{{idRelatorio}}",
+    "pathParams": [
+      "idRelatorio"
+    ],
+    "query": [],
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "arquivo": "fixtures/reports__get-data-json-report-whit-parameters.json"
+  },
+  {
+    "nome": "financial__post-eletronic-transaction",
+    "pasta": "Financial",
+    "method": "POST",
+    "path": "/api/financeiro/TransacaoEletronica",
+    "pathParams": [],
+    "query": [],
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "arquivo": "fixtures/financial__post-eletronic-transaction.json"
+  },
+  {
+    "nome": "financial__create-installment",
+    "pasta": "Financial",
+    "method": "POST",
+    "path": "/api/financeiro/ContaFinanceira/",
+    "pathParams": [],
+    "query": [],
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "arquivo": "fixtures/financial__create-installment.json"
+  },
+  {
+    "nome": "financial__alter-installment",
+    "pasta": "Financial",
+    "method": "PUT",
+    "path": "/api/financeiro/ContaFinanceira/276259",
+    "pathParams": [],
+    "query": [],
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "arquivo": "fixtures/financial__alter-installment.json"
+  }
+]

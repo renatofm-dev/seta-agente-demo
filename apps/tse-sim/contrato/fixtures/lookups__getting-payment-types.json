@@ -1,0 +1,58 @@
+{
+  "nome": "lookups__getting-payment-types",
+  "pasta": "Lookups",
+  "method": "GET",
+  "path": "/api/Lookup/MeiosPagamentoContasReceber",
+  "pathParams": [],
+  "query": [],
+  "requestBody": null,
+  "status": 200,
+  "contentType": "application/json; charset=utf-8",
+  "body": [
+    {
+      "Value": 4,
+      "Descricao": "BOLETO BANCÁRIO",
+      "Codigo": "BOLETO"
+    },
+    {
+      "Value": 3,
+      "Descricao": "CARTÃO DE CRÉDITO/DÉBITO",
+      "Codigo": "CARTAO"
+    },
+    {
+      "Value": 8,
+      "Descricao": "CARTÃO RECORRENTE",
+      "Codigo": "CARTAORECORRENTE"
+    },
+    {
+      "Value": 2,
+      "Descricao": "CHEQUE",
+      "Codigo": "CHEQUE"
+    },
+    {
+      "Value": 11,
+      "Descricao": "CREDITO PARA LINK",
+      "Codigo": "CARTAO"
+    },
+    {
+      "Value": 7,
+      "Descricao": "DÉBITO AUTOMATICO",
+      "Codigo": "DEBITOAUTOMATICO"
+    },
+    {
+      "Value": 6,
+      "Descricao": "DEPOSITO EM CONTA CORRENTE",
+      "Codigo": "DEPOSITOCONTACORRENTE"
+    },
+    {
+      "Value": 1,
+      "Descricao": "DINHEIRO",
+      "Codigo": "DINHEIRO"
+    },
+    {
+      "Value": 5,
+      "Descricao": "TRANSFERÊNCIA BANCÁRIA",
+      "Codigo": "TRANSFERENCIA"
+    }
+  ]
+}

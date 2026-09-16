@@ -1,0 +1,95 @@
+{
+  "nome": "contract-usase__create-contract-usage",
+  "pasta": "Contract Usase",
+  "method": "POST",
+  "path": "/api/utilizacaocontrato/CriarUtilizacaoContrato",
+  "pathParams": [],
+  "query": [],
+  "requestBody": {
+    "DataInicial": "2021-05-06T00:00:00",
+    "DataFinal": "2021-05-09T00:00:00",
+    "IdTipoUh": 1,
+    "IdHotel": 2,
+    "IdContrato": 273,
+    "IdBrindeUtilizacao": 0,
+    "TipoUtilizacao": "RESERVA",
+    "QtdAdultos": 2,
+    "QtdCriancas": 0,
+    "QtdTotalPontosPgtoPensao": 0,
+    "ValorPensaoCashALancar": 1392.02,
+    "Cortesia": false,
+    "IdentificadorCortesia": 0,
+    "GerarCreditoFracionamento": false,
+    "UtilizarCreditoFracionamento": false,
+    "IdMarketCode": 0,
+    "IdBlockCode": 0,
+    "ListaTiposPensao": [
+      {
+        "IdTipoPensao": 1,
+        "IdTipoLancamentoPensao": 2
+      }
+    ],
+    "ListaHospedes": [
+      {
+        "IdFaixaEtaria": 1,
+        "Nome": "ACOMPANHANTE",
+        "Sobrenome": "TSE",
+        "Cpf": "00029865310",
+        "HospedePrincipal": true,
+        "Sexo": "MASCULINO"
+      },
+      {
+        "IdFaixaEtaria": 1,
+        "Nome": "INTEGRAÇÃO",
+        "Sobrenome": "TSE",
+        "Cpf": "00038947110",
+        "HospedePrincipal": false,
+        "Sexo": "FEMININO"
+      }
+    ],
+    "TaxasContasFinanceiras": [
+      {
+        "IdContaMovimento": 6,
+        "IdBandeiraCartao": 1,
+        "IdTipoLancamentoTaxa": 2,
+        "DataVencimentoTaxa": "2021-05-17T11:16:59.211519-03:00",
+        "ValorTaxa": 1392.02,
+        "IdMeioPagamento": 3,
+        "TipoOperacaoCartao": "CREDPARC",
+        "QuantidadeParcelas": 1
+      }
+    ]
+  },
+  "status": 200,
+  "contentType": "application/json; charset=utf-8",
+  "body": {
+    "IdUtilizacaoContrato": 26,
+    "CreditoFracionamento": false,
+    "DebitoFracionamento": false,
+    "Cortesia": false,
+    "DataCheckIn": "2021-05-06T00:00:00-03:00",
+    "DataCheckOut": "2021-05-09T00:00:00-03:00",
+    "HotelReservaDescricao": "Hotel 1",
+    "TipoUhDescricao": "MASTER",
+    "Status": "ATIVO",
+    "QtdAdultos": 2,
+    "QtdCriancas": 0,
+    "QtdHospedes": 0,
+    "CustoTotalPontos": 3000,
+    "DescricaoTipoPensao1": null,
+    "DescricaoTipoPensao2": null,
+    "DescricaoTipoPensao3": null,
+    "ValorTotalPensao": 0,
+    "QtdTotalPontosPagamentoPensao": 0,
+    "ValorTotalPontosPagamentoPensao": 0,
+    "ValorTotalPensaoPagamentoCach": 0,
+    "ValorTotalTaxaManutencao": 1392.02,
+    "ValorTaxaCancelamento": 0,
+    "TaxasManutencao": null,
+    "TaxasPensao": null,
+    "IdBlockCode": null,
+    "DescricaoBlockCode": null,
+    "IdMarketCode": null,
+    "DescricaoMarketCode": null
+  }
+}

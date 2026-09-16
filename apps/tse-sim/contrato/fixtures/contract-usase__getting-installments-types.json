@@ -1,0 +1,29 @@
+{
+  "nome": "contract-usase__getting-installments-types",
+  "pasta": "Contract Usase",
+  "method": "GET",
+  "path": "/api/utilizacaocontrato/ObterTiposDeLancamento",
+  "pathParams": [],
+  "query": [],
+  "requestBody": null,
+  "status": 200,
+  "contentType": "application/json; charset=utf-8",
+  "body": [
+    {
+      "IdTipoLancamento": 2,
+      "CodigoTipoLancamento": "TXMANUT",
+      "Descricao": "TAXA DE MANUTENÇÃO",
+      "TipoTaxaUnica": true,
+      "TipoTaxaPensao": false,
+      "ObrigaBaixaParaConfirmarUtilizacao": false
+    },
+    {
+      "IdTipoLancamento": 9,
+      "CodigoTipoLancamento": "TXMANUT",
+      "Descricao": "IMPOSTO",
+      "TipoTaxaUnica": false,
+      "TipoTaxaPensao": false,
+      "ObrigaBaixaParaConfirmarUtilizacao": false
+    }
+  ]
+}

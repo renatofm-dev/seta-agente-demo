@@ -17,6 +17,7 @@ import { createDb, type Db } from '../src/db/index.ts';
 import {
   chunk,
   conversa,
+  conversaLeitura,
   documento,
   eventoQuery,
   eventoTicket,
@@ -164,6 +165,7 @@ beforeEach(async () => {
       await db.delete(outbox);
       await db.delete(mensagem);
       await db.delete(turno);
+      await db.delete(conversaLeitura);
       await db.delete(conversa);
       break;
     } catch (err) {

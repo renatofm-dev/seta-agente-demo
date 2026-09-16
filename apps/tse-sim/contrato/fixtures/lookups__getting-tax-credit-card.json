@@ -1,0 +1,19 @@
+{
+  "nome": "lookups__getting-tax-credit-card",
+  "pasta": "Lookups",
+  "method": "GET",
+  "path": "/api/Lookup/TaxasCartao/{{idBandeira}}",
+  "pathParams": [
+    "idBandeira"
+  ],
+  "query": [],
+  "requestBody": null,
+  "status": 200,
+  "contentType": "application/json; charset=utf-8",
+  "body": [
+    {
+      "Value": 6,
+      "Descricao": "2 - CREDPARC (4.10000)(Cielo)(Qtd. Parc. Inicial - 1)(Qtd. Parc. Final - 12)"
+    }
+  ]
+}

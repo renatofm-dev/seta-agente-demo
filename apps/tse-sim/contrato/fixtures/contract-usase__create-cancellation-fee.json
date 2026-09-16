@@ -1,0 +1,22 @@
+{
+  "nome": "contract-usase__create-cancellation-fee",
+  "pasta": "Contract Usase",
+  "method": "POST",
+  "path": "/api/utilizacaocontrato/CriarTaxaCancelamento",
+  "pathParams": [],
+  "query": [],
+  "requestBody": {
+    "idUtilizacaoContrato": 279725,
+    "idMeioPagamento": 3,
+    "idBandeiraCartao": 2,
+    "dataVencimento": "2021-03-18T00:00:00"
+  },
+  "status": 200,
+  "contentType": "application/json; charset=utf-8",
+  "body": [
+    {
+      "IdTaxa": 4727924,
+      "Valor": 196.7
+    }
+  ]
+}

@@ -1,0 +1,45 @@
+{
+  "nome": "contract-usase__simulate-contract-usage",
+  "pasta": "Contract Usase",
+  "method": "GET",
+  "path": "/api/utilizacaocontrato/SimularUtilizacaoContrato",
+  "pathParams": [],
+  "query": [],
+  "requestBody": {
+    "DataInicial": "2021-04-29T00:00:00",
+    "DataFinal": "2021-05-02T00:00:00",
+    "IdTipoUh": 1,
+    "IdHotel": 2,
+    "IdContrato": 273,
+    "qtdpagantespontos": 2,
+    "cortesia": "",
+    "identificadorcortesia": "",
+    "blockcode": "",
+    "marketcode": ""
+  },
+  "status": 200,
+  "contentType": "application/json; charset=utf-8",
+  "body": [
+    {
+      "DataDiaria": "2021-04-29T00:00:00-03:00",
+      "Bloqueado": false,
+      "DescricaoPeriodo": "PADRÃO",
+      "CustoPorDiaria": 1000,
+      "ValorTaxaPeriodo": 100
+    },
+    {
+      "DataDiaria": "2021-04-30T00:00:00-03:00",
+      "Bloqueado": false,
+      "DescricaoPeriodo": "PADRÃO",
+      "CustoPorDiaria": 1000,
+      "ValorTaxaPeriodo": 100
+    },
+    {
+      "DataDiaria": "2021-05-01T00:00:00-03:00",
+      "Bloqueado": false,
+      "DescricaoPeriodo": "PADRÃO",
+      "CustoPorDiaria": 1000,
+      "ValorTaxaPeriodo": 100
+    }
+  ]
+}

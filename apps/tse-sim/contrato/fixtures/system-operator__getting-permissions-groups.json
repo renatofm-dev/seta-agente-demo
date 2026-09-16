@@ -1,0 +1,65 @@
+{
+  "nome": "system-operator__getting-permissions-groups",
+  "pasta": "System Operator",
+  "method": "GET",
+  "path": "/api/operadorsistema/GetGruposOperadores",
+  "pathParams": [],
+  "query": [],
+  "requestBody": null,
+  "status": 200,
+  "contentType": "application/json; charset=utf-8",
+  "body": [
+    {
+      "IdGrupo": 1,
+      "Descricao": "RECEPÇÃO"
+    },
+    {
+      "IdGrupo": 2,
+      "Descricao": "GERENTE DE SALA"
+    },
+    {
+      "IdGrupo": 7,
+      "Descricao": "FINANCEIRO"
+    },
+    {
+      "IdGrupo": 3,
+      "Descricao": "GERENTE DE POS VENDA"
+    },
+    {
+      "IdGrupo": 6,
+      "Descricao": "POS VENDA - NEGOCIADOR"
+    },
+    {
+      "IdGrupo": 4,
+      "Descricao": "ADMINISTRATIVO CONTRATOS"
+    },
+    {
+      "IdGrupo": 9,
+      "Descricao": "TESTE - ALTERADO"
+    },
+    {
+      "IdGrupo": 10,
+      "Descricao": "TESTE"
+    },
+    {
+      "IdGrupo": 8,
+      "Descricao": "ADMINISTRADORES"
+    },
+    {
+      "IdGrupo": 5,
+      "Descricao": "POS VENDA - COBRANCA"
+    },
+    {
+      "IdGrupo": 13,
+      "Descricao": "ADMINISTRADORES"
+    },
+    {
+      "IdGrupo": 11,
+      "Descricao": "TESTE"
+    },
+    {
+      "IdGrupo": 12,
+      "Descricao": "TESTE M"
+    }
+  ]
+}

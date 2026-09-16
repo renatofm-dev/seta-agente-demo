@@ -1,0 +1,84 @@
+{
+  "nome": "general-registers__getting-person-by-id",
+  "pasta": "General Registers",
+  "method": "GET",
+  "path": "/api/cadastros/GetPessoa/{{idPessoa}}",
+  "pathParams": [
+    "idPessoa"
+  ],
+  "query": [],
+  "requestBody": null,
+  "status": 200,
+  "contentType": "application/json; charset=utf-8",
+  "body": {
+    "EnderecosPessoa": [
+      {
+        "IdEnderecoPessoa": 300,
+        "DescricaoEndereco": null,
+        "IdTipoEndereco": 2,
+        "TipoEndereco": "Comercial",
+        "IdTipoLogradouro": 1,
+        "TipoLogradouro": "Avenida",
+        "Logradouro": "Avenida C",
+        "Numero": "",
+        "Complemento": "QD. 45 LT. 17-A",
+        "Bairro": "Estância Itaguaí",
+        "IdPais": 30,
+        "Country": "Brasil",
+        "IdCidade": 6801,
+        "Cidade": "Caldas Novas",
+        "Uf": "GO",
+        "IdUf": 27,
+        "Cep": "75682096",
+        "UsarCorrespondencia": false
+      }
+    ],
+    "EnderecosEmail": [
+      {
+        "IdEnderecoEmail": 251,
+        "DescricaoObs": "",
+        "Email": "integracao@exemplo.com.br"
+      }
+    ],
+    "ContatosTelefonicos": [
+      {
+        "IdContatoTelefonico": 534,
+        "IdTipo": 0,
+        "Tipo": "Móvel",
+        "Ddi": 0,
+        "Ddd": 64,
+        "Numero": 999999999,
+        "Ramal": 0,
+        "DescricaoObs": "",
+        "ContemWhatsApp": false
+      }
+    ],
+    "CartoesVinculados": [],
+    "IdPessoa": 356,
+    "DataCadastro": "2021-04-20T10:25:00-03:00",
+    "RespCadNome": "INTEGRACAO TSE",
+    "DataAlteracao": null,
+    "RespAltNome": null,
+    "IdTipoPessoa": 0,
+    "RazaoSocial": "INTEGRACAO TSE",
+    "NomeFantasia": "INTEGRACAO TSE",
+    "DataNascimento": "1990-05-06T00:00:00-03:00",
+    "CpfCnpj": "00015278514",
+    "RgNumero": "",
+    "RgOrgaoExpedidor": "",
+    "RgUf": "",
+    "RgDataEmissao": null,
+    "PisPasep": "",
+    "TituloEleitor": "",
+    "Ctps": "",
+    "InscricaoEstadual": "",
+    "InscricaoMunicipal": "",
+    "IdProfissao": 609,
+    "IdSexo": 0,
+    "IdEstadoCivil": 1,
+    "IdRegimeCasamento": 3,
+    "IdNacionalidade": 30,
+    "IdIdioma": 6,
+    "IdTipoDocumentoPessoa": 0
+  }
+}

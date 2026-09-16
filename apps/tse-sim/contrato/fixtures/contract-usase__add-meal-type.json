@@ -1,0 +1,20 @@
+{
+  "nome": "contract-usase__add-meal-type",
+  "pasta": "Contract Usase",
+  "method": "POST",
+  "path": "/api/utilizacaocontrato/AdicionarTipoPensao",
+  "pathParams": [],
+  "query": [],
+  "requestBody": {
+    "IdUtilizacaoContrato": 25,
+    "IdTipoPensao": 2,
+    "QtdPontosPagamentoPensao": 0,
+    "IdContaMovimentacaoBancaria": 2,
+    "IdTipoLancamento": 2,
+    "IdBandeiraCartao": 1,
+    "dataVencimento": "2021-05-20"
+  },
+  "status": 200,
+  "contentType": "application/json; charset=utf-8",
+  "body": "Pensão inserida com sucesso!"
+}

@@ -1,0 +1,23 @@
+{
+  "nome": "contract-usase__getting-hotel-unit-types",
+  "pasta": "Contract Usase",
+  "method": "GET",
+  "path": "/api/utilizacaocontrato/ObterTiposUnidadeHoteleira/{{idEdificioHotel}}",
+  "pathParams": [
+    "idEdificioHotel"
+  ],
+  "query": [],
+  "requestBody": null,
+  "status": 200,
+  "contentType": "application/json; charset=utf-8",
+  "body": [
+    {
+      "IdTipoUnidadeHoteleira": 1,
+      "Descricao": "MASTER"
+    },
+    {
+      "IdTipoUnidadeHoteleira": 2,
+      "Descricao": "CLASSIC"
+    }
+  ]
+}

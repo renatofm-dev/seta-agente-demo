@@ -1,0 +1,33 @@
+{
+  "nome": "contract-usase__getting-guests",
+  "pasta": "Contract Usase",
+  "method": "GET",
+  "path": "/api/utilizacaocontrato/ObterHospedes/{{idUtilizacao}}",
+  "pathParams": [
+    "idUtilizacao"
+  ],
+  "query": [],
+  "requestBody": null,
+  "status": 200,
+  "contentType": "application/json; charset=utf-8",
+  "body": [
+    {
+      "IdHospede": 13,
+      "Nome": "PESSOA 2",
+      "Sobrenome": "INTEGRAÇÃO",
+      "Cpf": "",
+      "HospedePrincipal": false,
+      "Sexo": "MASCULINO",
+      "FaixaEtaria": "Adulto"
+    },
+    {
+      "IdHospede": 12,
+      "Nome": "PESSOA 1",
+      "Sobrenome": "INTEGRAÇÃO",
+      "Cpf": "SCRUBBED",
+      "HospedePrincipal": true,
+      "Sexo": "MASCULINO",
+      "FaixaEtaria": "Adulto"
+    }
+  ]
+}

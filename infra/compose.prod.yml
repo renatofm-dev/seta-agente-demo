@@ -48,6 +48,9 @@ services:
       DATABASE_URL: postgres://app_owner:${APP_OWNER_PASSWORD}@db:5432/app
       ERP_DATABASE_URL: postgres://erp_ro:${ERP_RO_PASSWORD}@db:5432/erp_mock
       ERP_MOCK_ADMIN_URL: postgres://postgres:${POSTGRES_PASSWORD}@db:5432/erp_mock
+      # 035: o demo-seed.sh cria o papel do simulador com esta senha (o
+      # 04-sim-role.sql a lê por bind) — a mesma que o tse-sim usa para conectar
+      TSE_SIM_DB_PASSWORD: ${TSE_SIM_DB_PASSWORD:?defina no .env.prod}
       # paths absolutos dentro da imagem
       CLIENT_CONFIG_PATH: /app/configs/demo/client.yaml
       CONTATOS_PATH: /app/configs/demo/contatos.yaml
@@ -56,6 +59,37 @@ services:
       KB_DIR: /app/kb
     ports:
       - '127.0.0.1:3001:3001' # só o Caddy do host enxerga
+    logging: *logging
+
+  # 035: dublê da API do TS Explorer. Sem `ports:` de propósito — igual ao db,
+  # só na rede interna; o server o alcança em http://tse-sim:3010 e a internet
+  # não o alcança de jeito nenhum (o Caddy não tem rota para ele).
+  tse-sim:
+    image: ghcr.io/renatofm-dev/seta-agente-demo-tse-sim:${TAG:-latest}
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      NODE_OPTIONS: --max-old-space-size=256
+      TSE_SIM_PORT: '3010'
+      TSE_SIM_DATABASE_URL: postgres://tse_sim:${TSE_SIM_DB_PASSWORD:?defina no .env.prod}@db:5432/erp_mock
+      # `login:senha:idPessoa` — o boot recusa a credencial de exemplo
+      TSE_SIM_USERS: ${TSE_SIM_USERS:?defina no .env.prod}
+      TSE_SIM_PAINEL_ESCOPO: ${TSE_SIM_PAINEL_ESCOPO:-qualquer}
+    # a imagem é node:24-slim, sem curl — o healthcheck usa o próprio node
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          'fetch("http://localhost:3010/healthz").then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))',
+        ]
+      interval: 10s
+      timeout: 3s
+      retries: 6
     logging: *logging
 
   console:

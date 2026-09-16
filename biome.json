@@ -11,7 +11,8 @@
       "!**/next-env.d.ts",
       "!pnpm-lock.yaml",
       "!apps/console/app/globals.css",
-      "!apps/server/drizzle"
+      "!apps/server/drizzle",
+      "!apps/tse-sim/contrato"
     ]
   },
   "formatter": {

@@ -1,0 +1,20 @@
+{
+  "nome": "financial__post-eletronic-transaction",
+  "pasta": "Financial",
+  "method": "POST",
+  "path": "/api/financeiro/TransacaoEletronica",
+  "pathParams": [],
+  "query": [],
+  "requestBody": {
+    "IdContaFinanceira": 276264,
+    "Valor": 4,
+    "QuatroPrimeirosDigitosCartao": "4563",
+    "QuatroUltimosDigitosCartao": "0254",
+    "CodigoAutorizacao": "254631",
+    "QuantidadeParcelas": 3,
+    "NomePessoa": "INTEGRACAO TSE"
+  },
+  "status": 200,
+  "contentType": "application/json; charset=utf-8",
+  "body": "Transação inserida com sucesso, sob id: 1"
+}

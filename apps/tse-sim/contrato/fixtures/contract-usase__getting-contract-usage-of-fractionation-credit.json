@@ -1,0 +1,31 @@
+{
+  "nome": "contract-usase__getting-contract-usage-of-fractionation-credit",
+  "pasta": "Contract Usase",
+  "method": "GET",
+  "path": "/api/utilizacaocontrato/ObterUtilizacaoCreditoFracionamento",
+  "pathParams": [],
+  "query": [
+    "idContrato",
+    "dataCheckIn"
+  ],
+  "requestBody": null,
+  "status": 200,
+  "contentType": "application/json; charset=utf-8",
+  "body": [
+    {
+      "IdUtilizacaoContrato": 25,
+      "DataSolicitacao": "2021-04-22T14:10:55-03:00",
+      "QtdPontosContrato": 3000,
+      "IdTipoUh": 1,
+      "TipoUhDescricao": "MASTER",
+      "TipoUhSigla": "MASTER",
+      "DataCheckIn": "2021-04-29T00:00:00-03:00",
+      "DataCheckOut": "2021-05-02T00:00:00-03:00",
+      "QtdPagantes": 2,
+      "DebitoDiarias": 0,
+      "SaldoDiarias": 1,
+      "SaldoRestante": 2,
+      "QtdPontosDia": 1000
+    }
+  ]
+}

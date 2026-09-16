@@ -254,3 +254,36 @@ aqui é o mapa.
 - **Ficou de fora:** header de mídia (033); cadastrar template com botão pela plataforma e
   trazer `components` do remoto (023); variável por destinatário e opt-out (044); dinheiro
   de verdade (027).
+
+## 035 — Simulador da API do TS Explorer (`apps/tse-sim`)
+- **Entrega:** o ERP simulado ganha a segunda superfície — uma API HTTP que responde **como o
+  fornecedor** (OAuth2 `password` no `/token`, PascalCase, datas com `-03:00`) sobre o **mesmo**
+  `erp_mock` que o produto lê por SQL. E que **escreve**: `POST financeiro/TransacaoEletronica`
+  grava `contafinanceira.datarecebimento` e a parcela aparece `pago` em `v_titulo` na leitura
+  seguinte — é o que a 036 usa para enterrar a conciliação fingida da 014. São **30 das 89**
+  rotas da coleção: `/token`, `PainelDoCliente/{MeusContratos, MeusDadosCadastrais,
+  FinanceiroContrato, MeusBoletos, ObterTaxasDPNU}`, `utilizacaocontrato/obtercontratos`,
+  `cadastros/{GetPessoa, GetPessoaCpf}`, os 17 `Lookup/*` e as três escritas de `financeiro/*`.
+- **O contrato veio da coleção Postman do fornecedor**, sanitizada e commitada
+  (`apps/tse-sim/contrato/`): `pnpm tse:fixtures` confere o `sha256` do original, troca tokens,
+  e-mails, CPFs e telefones por versões fictícias e extrai os 89 exemplos de resposta. Sem
+  ambiente do TSE, essa coleção **é** o contrato — e o teste compara **forma**, não valor.
+- **Onde está:** `apps/tse-sim/` (workspace novo: `app.ts`, `auth.ts`, `db.ts`, `pascal.ts`,
+  `plugin-bearer.ts`, `rotas/`), `tools/tse-fixtures.ts`, `infra/erp-mock/{04-sim-role,
+  05-sim-schema,06-sim-sequences}.sql`, `infra/erp-mock/seed.ts` (senha por bind e
+  ressincronização das sequências), `infra/docker/tse-sim.Dockerfile`, `infra/compose.prod.yml`,
+  `.github/workflows/release.yml`.
+- **Fronteira nova:** terceiro papel no `erp_mock`. `tse_sim` escreve nas tabelas físicas e é
+  **cego para as 7 views canônicas** — quem lê o ERP pelo produto continua sendo o `erp_ro`, e as
+  duas superfícies não se misturam (`escrita.integration.test.ts` prova os dois lados).
+- **Como exercitar:** `pnpm dev` sobe o simulador em `:3010`; receitas em
+  `docs/tse-api-setup.md` §7. Testes: `contrato.test.ts` (30 rotas contra as fixtures +
+  procedência da sanitização), `escrita.integration.test.ts` (a baixa chega ao `v_titulo`; o
+  `INSERT` sem id funciona depois de um seed com id explícito), `divergencias.integration.test.ts`
+  (o `/token` salvo como GET com body; **D10** nos dois modos de escopo) e `env.test.ts`.
+- **No homelab:** o serviço sobe com a demo, **sem porta publicada e sem rota no Caddy** — só o
+  server o alcança, em `http://tse-sim:3010`. Ver `docs/deploy-homelab.md`.
+- **Ficou de fora:** o adapter HTTP e qualquer mudança no `apps/server` (036/037), reserva (038),
+  lead e venda (039), 2ª via em PDF (040), o TSE real (041) e as 59 rotas ainda não respondidas
+  (placar em `apps/tse-sim/test/pendentes.ts`). `OperadorSistema/*` e `Relatorios/*` não têm dono:
+  nenhuma jornada da demo as usa.

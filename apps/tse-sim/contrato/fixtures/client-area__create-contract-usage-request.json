@@ -1,0 +1,20 @@
+{
+  "nome": "client-area__create-contract-usage-request",
+  "pasta": "Client Area",
+  "method": "GET",
+  "path": "/api/PainelDoCliente/CriarSolicitacaoReserva",
+  "pathParams": [],
+  "query": [
+    "idGrupoTabelaPontos",
+    "qtdPagantes",
+    "dataInicial",
+    "dataFinal",
+    "tipoUnidadeHoteleiraId",
+    "idHotel",
+    "idContrato"
+  ],
+  "requestBody": null,
+  "status": 200,
+  "contentType": "application/json",
+  "body": ""
+}

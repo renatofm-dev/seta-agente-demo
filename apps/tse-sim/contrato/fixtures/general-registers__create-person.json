@@ -1,0 +1,64 @@
+{
+  "nome": "general-registers__create-person",
+  "pasta": "General Registers",
+  "method": "POST",
+  "path": "/api/cadastros/SetPessoa/0",
+  "pathParams": [],
+  "query": [],
+  "requestBody": {
+    "DataCadastro": "2021-05-01",
+    "IdTipoPessoa": 0,
+    "RazaoSocial": "INTEGRACAO TSE",
+    "NomeFantasia": "INTEGRACAO TSE",
+    "DataNascimento": "1990-04-20",
+    "CpfCnpj": "00005429706",
+    "RgNumero": "12345",
+    "RgOrgaoExpedidor": "SSPGO",
+    "RgUf": "GO",
+    "IdProfissao": 34,
+    "IdSexo": 1,
+    "IdEstadoCivil": 1,
+    "IdRegimeCasamento": 1,
+    "IdNacionalidade": 1,
+    "IdIdioma": 1,
+    "EnderecosPessoa": [
+      {
+        "DescricaoEndereco": "Endereço da empresa",
+        "IdTipoEndereco": 1,
+        "TipoEndereco": "Teste",
+        "IdTipoLogradouro": 1,
+        "TipoLogradouro": "Rua",
+        "Logradouro": "Rua da praça",
+        "Complemento": "Qd 10 Lt 15",
+        "Bairro": "Centro",
+        "Numero": "127",
+        "IdPais": 23,
+        "IdCidade": 16,
+        "Cidade": "Caldas Novas",
+        "IdUf": 30,
+        "Cep": 75690000,
+        "UsarCorrespondencia": true
+      }
+    ],
+    "EnderecosEmail": [
+      {
+        "Email": "integracao@exemplo.com.br",
+        "DescricaoObs": ""
+      }
+    ],
+    "ContatosTelefonicos": [
+      {
+        "IdTipo": 1,
+        "Ddi": 55,
+        "Ddd": 64,
+        "Numero": 992965399,
+        "Ramal": 0,
+        "DescricaoObs": "",
+        "ContemWhatsApp": true
+      }
+    ]
+  },
+  "status": 200,
+  "contentType": "application/json; charset=utf-8",
+  "body": 358
+}

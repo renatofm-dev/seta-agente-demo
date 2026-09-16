@@ -1,0 +1,29 @@
+{
+  "nome": "client-area__get-tax-dpnu-contract",
+  "pasta": "Client Area",
+  "method": "GET",
+  "path": "/api/PainelDoCliente/ObterTaxasDPNU/{{idContrato}}",
+  "pathParams": [
+    "idContrato"
+  ],
+  "query": [],
+  "requestBody": null,
+  "status": 200,
+  "contentType": "application/json; charset=utf-8",
+  "body": [
+    {
+      "IdContrato": 273,
+      "DataLancamento": "2021-04-20T17:01:34-03:00",
+      "DataVencimento": "2021-05-20T00:00:00-03:00",
+      "TipoParcelaDescricao": "TAXA NÃO UTILIZAÇÃO",
+      "Pago": false,
+      "ValorParcela": 0,
+      "ValorTaxa": 0,
+      "DestinoContaFinanceira": null,
+      "StatusParcela": null,
+      "DataPagamento": null,
+      "DataLiquidacao": null,
+      "MeioPagamentoDescricao": "BOLETO"
+    }
+  ]
+}

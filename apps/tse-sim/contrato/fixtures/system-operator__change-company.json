@@ -1,0 +1,14 @@
+{
+  "nome": "system-operator__change-company",
+  "pasta": "System Operator",
+  "method": "POST",
+  "path": "/api/OperadorSistema/SetEmpresaSel/{{idEmpresa}}",
+  "pathParams": [
+    "idEmpresa"
+  ],
+  "query": [],
+  "requestBody": null,
+  "status": 200,
+  "contentType": "application/json",
+  "body": ""
+}

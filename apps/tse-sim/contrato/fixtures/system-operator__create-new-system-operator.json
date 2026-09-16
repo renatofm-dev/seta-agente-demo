@@ -1,0 +1,29 @@
+{
+  "nome": "system-operator__create-new-system-operator",
+  "pasta": "System Operator",
+  "method": "POST",
+  "path": "/api/operadorsistema/SetOperadorSistema",
+  "pathParams": [],
+  "query": [],
+  "requestBody": {
+    "Nome": "TSE-SUPORTE",
+    "Login": "tse.suporte",
+    "Email": "integracao@exemplo.com.br",
+    "TipoOperador": 0,
+    "ListaIdEmpresasPermitidas": [
+      1,
+      2
+    ],
+    "IdPessoaVincular": 0,
+    "ListaIdGruposOperador": [
+      2
+    ]
+  },
+  "status": 200,
+  "contentType": "application/json; charset=utf-8",
+  "body": {
+    "IdOperador": 306,
+    "NomeOperador": "TSE-SUPORTE",
+    "Login": "TSE.SUPORTE"
+  }
+}
