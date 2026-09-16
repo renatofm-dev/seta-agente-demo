@@ -22,7 +22,10 @@ hospedagem vigente no check-in.
 
 ## Agendamento de períodos
 
-A marcação de períodos de uso, troca de datas e calendário de temporada são
-tratados exclusivamente pela central de atendimento do resort, por telefone ou
-presencialmente — o assistente do WhatsApp não realiza, altera nem consulta
-reservas. Solicitações desse tipo são encaminhadas para um atendente humano.
+A marcação de períodos de uso pode ser feita pelo assistente do WhatsApp: ele
+consulta a disponibilidade, mostra quantos pontos o período custa e qual é a
+taxa de manutenção, e registra a reserva depois da confirmação do cotista.
+
+Troca de datas de uma reserva já confirmada, cancelamento e calendário de
+temporada seguem com a central de atendimento do resort, por telefone ou
+presencialmente — essas solicitações são encaminhadas para um atendente humano.

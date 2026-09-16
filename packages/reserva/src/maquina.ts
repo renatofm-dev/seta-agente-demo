@@ -226,7 +226,7 @@ export function apresentarSimulacao(
    * risco do CPF para os acompanhantes, e na maioria das reservas para zero.
    */
   const comTitular: readonly HospedeReserva[] =
-    ctx.titular.nome.length > 0
+    ctx.titular.nome.length > 0 && ctx.titular.cpf
       ? [{ nome: ctx.titular.nome, sobrenome: null, cpf: ctx.titular.cpf, principal: true }]
       : [];
   const pendente: EstadoFluxo = {

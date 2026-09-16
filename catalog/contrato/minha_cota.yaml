@@ -4,8 +4,8 @@ description: >-
   Localização física da cota do contrato da sessão: código da cota, bloco
   (torre), andar, número da unidade hoteleira e capacidade de hóspedes. Use
   quando o cotista perguntar qual é o apartamento, a torre, o andar ou quantas
-  pessoas a unidade acomoda. NÃO responde sobre reservas ou datas de uso —
-  isso não tem caminho de dado.
+  pessoas a unidade acomoda. NÃO responde sobre reservas: para reservar ou
+  consultar o que já foi reservado, use iniciar_reserva e minhas_reservas.
 entities: [contrato, cota]
 modules: [contrato]
 params:

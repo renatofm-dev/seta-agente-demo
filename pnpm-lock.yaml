@@ -129,6 +129,9 @@ importers:
       '@seta/rag':
         specifier: workspace:*
         version: link:../../packages/rag
+      '@seta/reserva':
+        specifier: workspace:*
+        version: link:../../packages/reserva
       '@seta/sdr':
         specifier: workspace:*
         version: link:../../packages/sdr
