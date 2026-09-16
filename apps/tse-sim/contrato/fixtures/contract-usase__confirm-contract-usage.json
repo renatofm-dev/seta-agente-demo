@@ -1,0 +1,12 @@
+{
+  "nome": "contract-usase__confirm-contract-usage",
+  "pasta": "Contract Usase",
+  "method": "POST",
+  "path": "/api/utilizacaocontrato/ConfirmarUtilizacaoContrato/22",
+  "pathParams": [],
+  "query": [],
+  "requestBody": null,
+  "status": 200,
+  "contentType": "application/json; charset=utf-8",
+  "body": "Utilização confirmada com sucesso!"
+}

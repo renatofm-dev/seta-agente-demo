@@ -1,0 +1,23 @@
+{
+  "nome": "contract-usase__getting-payment-types",
+  "pasta": "Contract Usase",
+  "method": "GET",
+  "path": "/api/utilizacaocontrato/ObterMeiosDePagamento",
+  "pathParams": [],
+  "query": [],
+  "requestBody": null,
+  "status": 200,
+  "contentType": "application/json; charset=utf-8",
+  "body": [
+    {
+      "IdMeioPagamento": 3,
+      "CodigoMeioPagamento": "CARTAO",
+      "Descricao": "CARTÃO DE CRÉDITO/DÉBITO"
+    },
+    {
+      "IdMeioPagamento": 11,
+      "CodigoMeioPagamento": "CARTAO",
+      "Descricao": "CREDITO PARA LINK"
+    }
+  ]
+}

@@ -1,0 +1,27 @@
+{
+  "nome": "lookups__getting-cost-center",
+  "pasta": "Lookups",
+  "method": "GET",
+  "path": "/api/Lookup/CentroCusto",
+  "pathParams": [],
+  "query": [],
+  "requestBody": null,
+  "status": 200,
+  "contentType": "application/json; charset=utf-8",
+  "body": [
+    {
+      "IdCentroCusto": 125,
+      "Codigo": "08.01",
+      "Descricao": "LEVANTAMENTO TOPOGRÁFICO/ PLANIALTIMÉTRICO",
+      "TipoCentroCustoDescricao": "Analítico",
+      "CodigoDescricao": "08.01 - LEVANTAMENTO TOPOGRÁFICO/ PLANIALTIMÉTRICO"
+    },
+    {
+      "IdCentroCusto": 75,
+      "Codigo": "05.01.01",
+      "Descricao": "ALUGUEL, CONDOMÍNIO, INTERNET/TEL, MAT DE LIMP E ESCRIT. ",
+      "TipoCentroCustoDescricao": "Analítico",
+      "CodigoDescricao": "05.01.01 - ALUGUEL, CONDOMÍNIO, INTERNET/TEL, MAT DE LIMP E ESCRIT. "
+    }
+  ]
+}

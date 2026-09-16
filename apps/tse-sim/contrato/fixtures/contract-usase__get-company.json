@@ -1,0 +1,17 @@
+{
+  "nome": "contract-usase__get-company",
+  "pasta": "Contract Usase",
+  "method": "GET",
+  "path": "/api/utilizacaocontrato/ObterEmpresa",
+  "pathParams": [],
+  "query": [
+    "idContrato"
+  ],
+  "requestBody": null,
+  "status": 200,
+  "contentType": "application/json; charset=utf-8",
+  "body": {
+    "IdEmpresa": 1,
+    "Descricao": "EMP1"
+  }
+}

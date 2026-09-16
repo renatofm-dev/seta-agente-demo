@@ -1,0 +1,19 @@
+{
+  "nome": "contract-usase__remove-guest",
+  "pasta": "Contract Usase",
+  "method": "POST",
+  "path": "/api/utilizacaocontrato/RemoverHospede",
+  "pathParams": [],
+  "query": [],
+  "requestBody": {
+    "IdUtilizacaoContrato": 25,
+    "IdHospedeRemover": 18,
+    "IdMeioPagamento": 4,
+    "IdBandeiraCartao": 1,
+    "IdContaMovimentacaoBancaria": 2,
+    "DataVencimento": "2021-05-20T00:00:00.000Z"
+  },
+  "status": 200,
+  "contentType": "application/json; charset=utf-8",
+  "body": "Hóspede removido com sucesso"
+}

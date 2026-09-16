@@ -1,0 +1,19 @@
+{
+  "nome": "client-area__hotels-available-for-use",
+  "pasta": "Client Area",
+  "method": "GET",
+  "path": "/api/PainelDoCliente/HoteisDisponiveisUso/{{idContrato}}",
+  "pathParams": [
+    "idContrato"
+  ],
+  "query": [],
+  "requestBody": null,
+  "status": 200,
+  "contentType": "application/json; charset=utf-8",
+  "body": [
+    {
+      "IdEdificioHotel": 2,
+      "Descricao": "Hotel 1"
+    }
+  ]
+}

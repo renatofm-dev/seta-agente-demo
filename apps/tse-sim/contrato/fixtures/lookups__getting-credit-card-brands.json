@@ -1,0 +1,103 @@
+{
+  "nome": "lookups__getting-credit-card-brands",
+  "pasta": "Lookups",
+  "method": "GET",
+  "path": "/api/Lookup/BandeirasCartao",
+  "pathParams": [],
+  "query": [],
+  "requestBody": null,
+  "status": 200,
+  "contentType": "application/json; charset=utf-8",
+  "body": [
+    {
+      "Id": 5,
+      "Value": 5,
+      "Descricao": "AGIPLAN",
+      "Ativo": true
+    },
+    {
+      "Id": 3,
+      "Value": 3,
+      "Descricao": "AMEX",
+      "Ativo": true
+    },
+    {
+      "Id": 15,
+      "Value": 15,
+      "Descricao": "BANESCARD",
+      "Ativo": true
+    },
+    {
+      "Id": 14,
+      "Value": 14,
+      "Descricao": "BANRICOMPRAS",
+      "Ativo": true
+    },
+    {
+      "Id": 6,
+      "Value": 6,
+      "Descricao": "CABAL",
+      "Ativo": true
+    },
+    {
+      "Id": 7,
+      "Value": 7,
+      "Descricao": "CREDSYSTEM",
+      "Ativo": true
+    },
+    {
+      "Id": 8,
+      "Value": 8,
+      "Descricao": "CREDZ",
+      "Ativo": true
+    },
+    {
+      "Id": 4,
+      "Value": 4,
+      "Descricao": "DINERS",
+      "Ativo": true
+    },
+    {
+      "Id": 10,
+      "Value": 10,
+      "Descricao": "ELO",
+      "Ativo": true
+    },
+    {
+      "Id": 11,
+      "Value": 11,
+      "Descricao": "HIPERCARD",
+      "Ativo": true
+    },
+    {
+      "Id": 2,
+      "Value": 2,
+      "Descricao": "MASTER",
+      "Ativo": true
+    },
+    {
+      "Id": 12,
+      "Value": 12,
+      "Descricao": "REDESHOP",
+      "Ativo": true
+    },
+    {
+      "Id": 13,
+      "Value": 13,
+      "Descricao": "SICREDI",
+      "Ativo": true
+    },
+    {
+      "Id": 9,
+      "Value": 9,
+      "Descricao": "SOROCRED",
+      "Ativo": true
+    },
+    {
+      "Id": 1,
+      "Value": 1,
+      "Descricao": "VISA",
+      "Ativo": true
+    }
+  ]
+}

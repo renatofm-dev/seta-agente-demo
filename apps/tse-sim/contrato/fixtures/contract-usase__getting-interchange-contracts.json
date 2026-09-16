@@ -1,0 +1,19 @@
+{
+  "nome": "contract-usase__getting-interchange-contracts",
+  "pasta": "Contract Usase",
+  "method": "GET",
+  "path": "/api/utilizacaocontrato/ObterContratosIntercambio/{{idContrato}}",
+  "pathParams": [
+    "idContrato"
+  ],
+  "query": [],
+  "requestBody": null,
+  "status": 200,
+  "contentType": "application/json; charset=utf-8",
+  "body": [
+    {
+      "IdContratoIntercambio": 5,
+      "DescricaoIntercambiadora": "RCI"
+    }
+  ]
+}

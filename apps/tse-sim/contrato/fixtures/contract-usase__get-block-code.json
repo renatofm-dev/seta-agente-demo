@@ -1,0 +1,21 @@
+{
+  "nome": "contract-usase__get-block-code",
+  "pasta": "Contract Usase",
+  "method": "GET",
+  "path": "/api/utilizacaocontrato/ObterBlockCode",
+  "pathParams": [],
+  "query": [
+    "idEmpresa"
+  ],
+  "requestBody": null,
+  "status": 200,
+  "contentType": "application/json; charset=utf-8",
+  "body": [
+    {
+      "IdBlockCode": 1,
+      "Descricao": "TESTE",
+      "Sigla": "TSE",
+      "Ativo": true
+    }
+  ]
+}

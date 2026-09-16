@@ -1,0 +1,31 @@
+{
+  "nome": "contract-usase__getting-age-group-types",
+  "pasta": "Contract Usase",
+  "method": "GET",
+  "path": "/api/utilizacaocontrato/ObterTiposFaixaEtaria",
+  "pathParams": [],
+  "query": [],
+  "requestBody": null,
+  "status": 200,
+  "contentType": "application/json; charset=utf-8",
+  "body": [
+    {
+      "IdFaixaEtaria": 1,
+      "Descricao": "Adulto",
+      "Sigla": "ADT",
+      "Pagante": true
+    },
+    {
+      "IdFaixaEtaria": 2,
+      "Descricao": "Idoso",
+      "Sigla": "IDS",
+      "Pagante": false
+    },
+    {
+      "IdFaixaEtaria": 3,
+      "Descricao": "Criança",
+      "Sigla": "IDS",
+      "Pagante": false
+    }
+  ]
+}

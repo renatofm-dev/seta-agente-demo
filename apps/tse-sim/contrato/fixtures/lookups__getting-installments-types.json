@@ -1,0 +1,33 @@
+{
+  "nome": "lookups__getting-installments-types",
+  "pasta": "Lookups",
+  "method": "GET",
+  "path": "/api/Lookup/OrigensContaFinanceiraReceber",
+  "pathParams": [],
+  "query": [],
+  "requestBody": null,
+  "status": 200,
+  "contentType": "application/json; charset=utf-8",
+  "body": [
+    {
+      "Value": 3,
+      "Descricao": "ENTRADA",
+      "SysId": "ENTRADA"
+    },
+    {
+      "Value": 7,
+      "Descricao": "CARNE",
+      "SysId": "PARC"
+    },
+    {
+      "Value": 1,
+      "Descricao": "SALDO",
+      "SysId": "PARC"
+    },
+    {
+      "Value": 5,
+      "Descricao": "INTERMEDIÁRIA",
+      "SysId": "INTERMEDIARIA"
+    }
+  ]
+}

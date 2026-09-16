@@ -1,0 +1,89 @@
+{
+  "nome": "client-area__my-cadastral-data",
+  "pasta": "Client Area",
+  "method": "GET",
+  "path": "/api/PainelDoCliente/MeusDadosCadastrais",
+  "pathParams": [],
+  "query": [],
+  "requestBody": null,
+  "status": 200,
+  "contentType": "application/json; charset=utf-8",
+  "body": {
+    "DataCadastro": "2021-04-20T10:25:00-03:00",
+    "DataAlteracao": null,
+    "TipoPessoa": 0,
+    "RazaoSocial": "INTEGRACAO TSE",
+    "NomeFantasia": "INTEGRACAO TSE",
+    "DataNascimento": "1990-05-06T00:00:00-03:00",
+    "CpfCnpj": "00015278514",
+    "RgInscricaoEstadual": "",
+    "InscricaoEstadual": "",
+    "InscricaoMunicipal": "",
+    "OrgaoExpedidorCi": "",
+    "UfCi": "",
+    "DataEmissaoCi": null,
+    "PisPasep": "",
+    "TituloEleitor": "",
+    "Ctps": "",
+    "IdProfissao": 609,
+    "Profissao": "Programador(a)",
+    "Sexo": 0,
+    "EstadoCivilId": 1,
+    "EstadoCivilDescricao": "Solteiro(a)",
+    "RegimeCasamentoId": 3,
+    "RegimeCasamentoDescricao": "Separação total de bens",
+    "ContatosTelefonicos": [
+      {
+        "IdContatoTelefonico": 534,
+        "DescricaoContato": "",
+        "DataCadastro": "0001-01-01T00:00:00-02:00",
+        "DataAlteracao": null,
+        "TipoContatoTelefonico": 0,
+        "TipoContatoTelefonicoId": 0,
+        "TipoContatoTelefonicoValor": "Móvel",
+        "Ddi": "",
+        "Ddd": "64",
+        "Numero": "999999999",
+        "NumeroCompleto": "999999999",
+        "Ramal": "",
+        "ContemAutorizaWhatsApp": false
+      }
+    ],
+    "EnderecosEmail": [
+      {
+        "IdEnderecoEmail": 251,
+        "Descricao": "",
+        "Email": "integracao@exemplo.com.br"
+      }
+    ],
+    "EnderecosCorrespondencia": [
+      {
+        "IdEnderecoPessoa": 300,
+        "DataCadastro": "0001-01-01T00:00:00-02:00",
+        "DataAlteracao": null,
+        "DescricaoEndereco": null,
+        "IdTipoEndereco": 2,
+        "TipoEndereco": "Comercial",
+        "IdTipoLogradouro": 1,
+        "TipoLogradouro": "Avenida",
+        "Logradouro": "75682096",
+        "Numero": "",
+        "Complemento": "QD. 45 LT. 17-A",
+        "Bairro": "Estância Itaguaí",
+        "IdCountry": 0,
+        "Country": "Goiás",
+        "IdCidade": 6801,
+        "Cidade": "Caldas Novas",
+        "Uf": "",
+        "Cep": "75682096",
+        "EnderecoParaCorrespondencia": false
+      }
+    ],
+    "CpfCnpjFormatado": "00015278514",
+    "IdIdioma": 6,
+    "Idioma": "PT",
+    "IdNacionalidade": 30,
+    "Nacionalidade": "Brasil",
+    "SiglaNacionalidade": "BRA"
+  }
+}

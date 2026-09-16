@@ -1,0 +1,14 @@
+{
+  "nome": "system-operator__change-business-unit",
+  "pasta": "System Operator",
+  "method": "POST",
+  "path": "/api/OperadorSistema/SetUnidadeNegocioSel/{{idUnidadeNegocio}}",
+  "pathParams": [
+    "idUnidadeNegocio"
+  ],
+  "query": [],
+  "requestBody": null,
+  "status": 200,
+  "contentType": "application/json",
+  "body": ""
+}

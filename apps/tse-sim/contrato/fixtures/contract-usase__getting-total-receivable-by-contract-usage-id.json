@@ -1,0 +1,18 @@
+{
+  "nome": "contract-usase__getting-total-receivable-by-contract-usage-id",
+  "pasta": "Contract Usase",
+  "method": "GET",
+  "path": "/api/utilizacaocontrato/ObterTotalReceberPorTipo",
+  "pathParams": [],
+  "query": [
+    "idUtilizacao"
+  ],
+  "requestBody": null,
+  "status": 200,
+  "contentType": "application/json; charset=utf-8",
+  "body": {
+    "TAXAPENSAO": 0,
+    "TAXAUNICA": 396,
+    "TAXAMANUTENCAO": 396
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "nome": "system-operator__remove-groups-permissions-of-operator",
+  "pasta": "System Operator",
+  "method": "POST",
+  "path": "/api/OperadorSistema/RemoverUsuarioGrupoPermissao",
+  "pathParams": [],
+  "query": [],
+  "requestBody": {
+    "idOperadorSistema": 305,
+    "grupoOperadores": [
+      {
+        "idgrupooperadoressistema": 1
+      },
+      {
+        "idgrupooperadoressistema": 2
+      }
+    ]
+  },
+  "status": 200,
+  "contentType": "application/json",
+  "body": ""
+}

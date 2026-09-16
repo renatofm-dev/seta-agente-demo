@@ -1,0 +1,23 @@
+{
+  "nome": "client-area__hotel-unit-types",
+  "pasta": "Client Area",
+  "method": "GET",
+  "path": "/api/PainelDoCliente/TiposUnidadeHoteleira/{{idEdificioHotel}}",
+  "pathParams": [
+    "idEdificioHotel"
+  ],
+  "query": [],
+  "requestBody": null,
+  "status": 200,
+  "contentType": "application/json; charset=utf-8",
+  "body": [
+    {
+      "IdTipoUnidadeHoteleira": 2,
+      "Descricao": "CLASSIC"
+    },
+    {
+      "IdTipoUnidadeHoteleira": 1,
+      "Descricao": "MASTER"
+    }
+  ]
+}

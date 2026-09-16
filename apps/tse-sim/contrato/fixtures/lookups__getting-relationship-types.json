@@ -1,0 +1,73 @@
+{
+  "nome": "lookups__getting-relationship-types",
+  "pasta": "Lookups",
+  "method": "GET",
+  "path": "/api/Lookup/TiposRelacionamento",
+  "pathParams": [],
+  "query": [],
+  "requestBody": null,
+  "status": 200,
+  "contentType": "application/json; charset=utf-8",
+  "body": [
+    {
+      "Id": 8,
+      "Descricao": "Amizade",
+      "DataAlteracao": "2020-07-02T11:53:27-03:00",
+      "SysID": "AMIZADE"
+    },
+    {
+      "Id": 4,
+      "Descricao": "Casados",
+      "DataAlteracao": null,
+      "SysID": "CASADO"
+    },
+    {
+      "Id": 10,
+      "Descricao": "Lua de Mel",
+      "DataAlteracao": "2020-01-20T09:25:34-03:00",
+      "SysID": "LUADEMEL"
+    },
+    {
+      "Id": 3,
+      "Descricao": "Namorados",
+      "DataAlteracao": null,
+      "SysID": "NAMORADOS"
+    },
+    {
+      "Id": 6,
+      "Descricao": "Noivos",
+      "DataAlteracao": null,
+      "SysID": "NOIVOS"
+    },
+    {
+      "Id": 1,
+      "Descricao": "Sem Vínculo",
+      "DataAlteracao": null,
+      "SysID": "SEM_VINCULO"
+    },
+    {
+      "Id": 2,
+      "Descricao": "Separado{a}/Divorciado{a}",
+      "DataAlteracao": null,
+      "SysID": "DIVORCIADO"
+    },
+    {
+      "Id": 7,
+      "Descricao": "Solteiro",
+      "DataAlteracao": null,
+      "SysID": "SOLTEIRO"
+    },
+    {
+      "Id": 5,
+      "Descricao": "União Estável",
+      "DataAlteracao": null,
+      "SysID": "UNIAO_ESTAVEL"
+    },
+    {
+      "Id": 9,
+      "Descricao": "Viúvo(a)",
+      "DataAlteracao": null,
+      "SysID": "VIUVO"
+    }
+  ]
+}

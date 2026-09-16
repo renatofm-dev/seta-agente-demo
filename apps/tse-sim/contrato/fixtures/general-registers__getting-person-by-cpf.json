@@ -1,0 +1,18 @@
+{
+  "nome": "general-registers__getting-person-by-cpf",
+  "pasta": "General Registers",
+  "method": "GET",
+  "path": "/api/cadastros/GetPessoaCpf/{{cpfCnpj}}",
+  "pathParams": [
+    "cpfCnpj"
+  ],
+  "query": [],
+  "requestBody": null,
+  "status": 200,
+  "contentType": "application/json; charset=utf-8",
+  "body": {
+    "IdPessoa": 356,
+    "NomePessoa": "INTEGRACAO TSE",
+    "Email": "integracao@exemplo.com.br"
+  }
+}

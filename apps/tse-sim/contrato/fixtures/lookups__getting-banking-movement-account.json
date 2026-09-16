@@ -1,0 +1,23 @@
+{
+  "nome": "lookups__getting-banking-movement-account",
+  "pasta": "Lookups",
+  "method": "GET",
+  "path": "/api/Lookup/ContaMovimentacaoBancaria",
+  "pathParams": [],
+  "query": [],
+  "requestBody": null,
+  "status": 200,
+  "contentType": "application/json; charset=utf-8",
+  "body": [
+    {
+      "IdContaMovimentacaoBancaria": 4,
+      "Agencia": "1111",
+      "DigitoAgencia": "1",
+      "NumeroConta": "22222",
+      "DigitoConta": "2",
+      "TipoConta": "Corrente",
+      "Operacao": null,
+      "Banco": "Bradesco"
+    }
+  ]
+}

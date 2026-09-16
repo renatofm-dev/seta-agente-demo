@@ -1,0 +1,24 @@
+{
+  "nome": "contract-usase__add-guest",
+  "pasta": "Contract Usase",
+  "method": "POST",
+  "path": "/api/utilizacaocontrato/AdicionarHospede",
+  "pathParams": [],
+  "query": [],
+  "requestBody": {
+    "IdUtilizacaoContrato": 25,
+    "IdFaixaEtaria": 1,
+    "Nome": "MARCOS",
+    "Sobrenome": "EDUARDO",
+    "Cpf": "00018250629",
+    "HospedePrincipal": false,
+    "Sexo": "MASCULINO",
+    "DataNascimento": "2000-03-15",
+    "IdBandeiraCartao": 1,
+    "IdContaMovimentacaoBancaria": 2,
+    "DataVencimento": "2021-05-10"
+  },
+  "status": 200,
+  "contentType": "application/json; charset=utf-8",
+  "body": "Hóspede adicionado com sucesso!"
+}

@@ -1,0 +1,14 @@
+{
+  "nome": "system-operator__active-or-inactive-operator",
+  "pasta": "System Operator",
+  "method": "POST",
+  "path": "/api/OperadorSistema/AtivarInativarUsuario/{{idOperador}}",
+  "pathParams": [
+    "idOperador"
+  ],
+  "query": [],
+  "requestBody": null,
+  "status": 200,
+  "contentType": "application/json",
+  "body": ""
+}

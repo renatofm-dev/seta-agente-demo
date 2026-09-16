@@ -1,0 +1,50 @@
+{
+  "nome": "contract-usase__getting-contract-usage-information",
+  "pasta": "Contract Usase",
+  "method": "GET",
+  "path": "/api/utilizacaocontrato/ObterDadosUtilizacaoContrato/{{idUtilizacao}}",
+  "pathParams": [
+    "idUtilizacao"
+  ],
+  "query": [],
+  "requestBody": null,
+  "status": 200,
+  "contentType": "application/json; charset=utf-8",
+  "body": {
+    "IdUtilizacaoContrato": 22,
+    "CreditoFracionamento": false,
+    "DebitoFracionamento": false,
+    "Cortesia": false,
+    "DataCheckIn": "2021-04-22T00:00:00-03:00",
+    "DataCheckOut": "2021-04-25T00:00:00-03:00",
+    "HotelReservaDescricao": "Hotel 1",
+    "TipoUhDescricao": "MASTER",
+    "Status": "ATIVO",
+    "QtdAdultos": 2,
+    "QtdCriancas": 0,
+    "QtdHospedes": 2,
+    "CustoTotalPontos": 3000,
+    "DescricaoTipoPensao1": null,
+    "DescricaoTipoPensao2": null,
+    "DescricaoTipoPensao3": null,
+    "ValorTotalPensao": 0,
+    "QtdTotalPontosPagamentoPensao": 0,
+    "ValorTotalPontosPagamentoPensao": 0,
+    "ValorTotalPensaoPagamentoCach": 0,
+    "ValorTotalTaxaManutencao": 396,
+    "ValorTaxaCancelamento": 0,
+    "TaxasManutencao": [
+      {
+        "IdTaxa": 20948,
+        "ValorTaxa": 396,
+        "IdTipoLancamentoTaxa": 2,
+        "DescricaoTipoLancamentoTaxa": "TAXA DE MANUTENÇÃO"
+      }
+    ],
+    "TaxasPensao": null,
+    "IdBlockCode": "",
+    "DescricaoBlockCode": "",
+    "IdMarketCode": "",
+    "DescricaoMarketCode": ""
+  }
+}

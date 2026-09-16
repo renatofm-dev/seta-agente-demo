@@ -1,0 +1,15 @@
+{
+  "nome": "client-area__second-ticket",
+  "pasta": "Client Area",
+  "method": "GET",
+  "path": "/api/PainelDoCliente/SegundaViaBoleto/{{idContaFinanceira}}",
+  "pathParams": [
+    "idContaFinanceira"
+  ],
+  "query": [],
+  "requestBody": null,
+  "status": 200,
+  "contentType": "application/pdf",
+  "bodySha256": "929f953325cdc60e9e437797d6e62180623dd1ad5a7a5cc51f932f8d43d652c1",
+  "bodyBytes": 118325
+}

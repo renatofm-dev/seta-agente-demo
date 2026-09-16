@@ -1,0 +1,30 @@
+{
+  "nome": "system-operator__get-all-groups-with-users",
+  "pasta": "System Operator",
+  "method": "GET",
+  "path": "/api/OperadorSistema/ListarTodosGruposVinculadoUsuario/{{idOperador}}",
+  "pathParams": [
+    "idOperador"
+  ],
+  "query": [],
+  "requestBody": null,
+  "status": 200,
+  "contentType": "application/json; charset=utf-8",
+  "body": [
+    {
+      "idgrupooperadoressistema": 2,
+      "descricao": "GERENTE DE SALA",
+      "ativo": true,
+      "idrespcadastro": 16,
+      "respcadastronome": "SUPORTE",
+      "idrespalteracao": 16,
+      "respalteracaonome": "integracao@exemplo.com.br",
+      "datacadastro": "2019-05-31T17:57:00-03:00",
+      "dataalteracao": "2021-04-22T09:34:54-03:00",
+      "iddepartamento": null,
+      "departamentodescricao": null,
+      "operadores": null,
+      "permissoes": null
+    }
+  ]
+}

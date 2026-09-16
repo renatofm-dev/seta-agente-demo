@@ -1,0 +1,22 @@
+{
+  "nome": "contract-usase__perform-instalments-payment",
+  "pasta": "Contract Usase",
+  "method": "POST",
+  "path": "/api/utilizacaocontrato/EfetuarPagamentoCartaoCredito",
+  "pathParams": [],
+  "query": [],
+  "requestBody": {
+    "IdTaxaPagar": 20951,
+    "IdBandeiraCartao": 1,
+    "IdUtilizacaoContrato": 26,
+    "NomeImpressoCartao": "INTEGRAÇÃO",
+    "NumeroCartao": "4224605990288539",
+    "AnoValidade": "2022",
+    "MesValidade": "09",
+    "CodigoSegurancaCartao": "111",
+    "qtdparcelas": 1
+  },
+  "status": 200,
+  "contentType": "application/json; charset=utf-8",
+  "body": "Processado com sucesso. Código de autorização: 186968"
+}

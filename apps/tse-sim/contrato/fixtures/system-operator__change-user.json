@@ -1,0 +1,42 @@
+{
+  "nome": "system-operator__change-user",
+  "pasta": "System Operator",
+  "method": "POST",
+  "path": "/api/OperadorSistema/AlterarInformacoesUsuario",
+  "pathParams": [],
+  "query": [],
+  "requestBody": {
+    "IdOperadorSistema": 305,
+    "Nome": "INTEGRAÇÃO",
+    "Habilitado": true,
+    "Login": "TSE.INTEGRACAO",
+    "Email": "integracao@exemplo.com.br",
+    "TipoOperador": "0",
+    "Idioma": "pt-BR",
+    "DataValidade": null,
+    "GrupoOperadores": [
+      {
+        "idgrupooperadoressistema": 2,
+        "descricao": "GERENTE DE SALA",
+        "ativo": true
+      }
+    ],
+    "Empresas": [
+      {
+        "IdEmpresa": 2,
+        "Sigla": "EMP2"
+      },
+      {
+        "IdEmpresa": 1,
+        "Sigla": "EMP1"
+      }
+    ],
+    "GuidPermissoes": [
+      "D9D8D0AD-9477-464E-9EA5-9040F66050A4",
+      "ABC024D3-6930-45FC-AB32-7293D059D8AF"
+    ]
+  },
+  "status": 200,
+  "contentType": "application/json",
+  "body": ""
+}

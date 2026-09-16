@@ -18,6 +18,8 @@
     { "path": "packages/anonimizacao" },
     { "path": "packages/sdr" },
     { "path": "apps/server" },
-    { "path": "infra/erp-mock" }
+    { "path": "apps/tse-sim" },
+    { "path": "infra/erp-mock" },
+    { "path": "tools" }
   ]
 }

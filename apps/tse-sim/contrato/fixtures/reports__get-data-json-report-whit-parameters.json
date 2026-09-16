@@ -1,0 +1,73 @@
+{
+  "nome": "reports__get-data-json-report-whit-parameters",
+  "pasta": "Reports",
+  "method": "POST",
+  "path": "/api/Relatorios/ObterJsonDadosRelatorioComParametros/{{idRelatorio}}",
+  "pathParams": [
+    "idRelatorio"
+  ],
+  "query": [],
+  "requestBody": [
+    {
+      "NomeParametro": "dataInicial",
+      "Value": "2021-01-01",
+      "Type": "DateTime",
+      "Criptografar": false
+    },
+    {
+      "NomeParametro": "dataFinal",
+      "Value": "2021-05-01",
+      "Type": "DateTime",
+      "Criptografar": false
+    }
+  ],
+  "status": 200,
+  "contentType": "application/json; charset=utf-8",
+  "body": [
+    {
+      "idcontrato": 274,
+      "datacadastro": "2021-01-07T00:00:00-03:00",
+      "numerocontrato": "TORRE 1-TORRE 01-01-103A-DIAMANTE-K"
+    },
+    {
+      "idcontrato": 277,
+      "datacadastro": "2021-03-08T00:00:00-03:00",
+      "numerocontrato": "TORRE 1-TORRE 01-01-109A-DIAMANTE-B"
+    },
+    {
+      "idcontrato": 272,
+      "datacadastro": "2021-01-06T00:00:00-03:00",
+      "numerocontrato": "TORRE 1-TORRE 01-02-204A-DIAMANTE-B"
+    },
+    {
+      "idcontrato": 275,
+      "datacadastro": "2021-01-27T00:00:00-03:00",
+      "numerocontrato": "TORRE 1-TORRE 01-10-1002A-PRATA-B"
+    },
+    {
+      "idcontrato": 280,
+      "datacadastro": "2021-03-29T00:00:00-03:00",
+      "numerocontrato": "TORRE 1-TORRE 01-10-1008A-JADE-L2"
+    },
+    {
+      "idcontrato": 279,
+      "datacadastro": "2021-03-17T00:00:00-03:00",
+      "numerocontrato": "TORRE 1-TORRE 01-02-208A-DIAMANTE-I"
+    },
+    {
+      "idcontrato": 281,
+      "datacadastro": "2021-04-16T16:31:16-03:00",
+      "numerocontrato": "TORRE 1-TORRE 01-01-103A-DIAMANTE-C"
+    },
+    {
+      "idcontrato": 282,
+      "datacadastro": "2021-04-19T00:00:00-03:00",
+      "numerocontrato": "TORRE 1-TORRE 01-03-305A-DIAMANTE-G"
+    },
+    {
+      "idcontrato": 276,
+      "datacadastro": "2021-02-24T00:00:00-03:00",
+      "numerocontrato": "TORRE 1-TORRE 01-05-507A-DIAMANTE-H"
+    }
+  ]
+}

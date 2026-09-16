@@ -1,0 +1,250 @@
+{
+  "nome": "client-area__simulate-contract-usage",
+  "pasta": "Client Area",
+  "method": "GET",
+  "path": "/api/PainelDoCliente/SimularUtilizacaoContrato",
+  "pathParams": [],
+  "query": [
+    "idGrupoTabelaPontos",
+    "qtdPagantes",
+    "dataInicial",
+    "dataFinal",
+    "tipoUnidadeHoteleiraId",
+    "idHotel",
+    "idContrato"
+  ],
+  "requestBody": null,
+  "status": 200,
+  "contentType": "application/json; charset=utf-8",
+  "body": {
+    "Data": "0001-01-01T00:00:00-02:00",
+    "QtdPontosSugerida": 5000,
+    "Tarifas": [
+      {
+        "Data": "2019-03-03T00:00:00-03:00",
+        "QtdPontosSugerida": 1000,
+        "QtdPontosSelecionada": 1000,
+        "DescricaoPeriodoSugerido": "PADRÃO",
+        "DescricaoTarifa": "PADRÃO - 1",
+        "DescricaoPeriodoSelecionado": "PADRÃO",
+        "TaxaManutencaoSelecionada": 100,
+        "TaxaManutencaoDiaSelecionada": 100,
+        "OpcoesTarifas": [
+          {
+            "IdTarifaPontos": 4,
+            "DescricaoTarifa": "PADRÃO - 1",
+            "DescricaoPeriodo": "PADRÃO",
+            "DescricaoTipoPeriodo": "Media",
+            "QtdPontosTarifa": 1000,
+            "TaxaManutencao": 100,
+            "TaxaManutencaoDiaria": 100,
+            "Bloqueado": false,
+            "TarifaAplicadaPorIncidenciaParcial": false,
+            "QtdDiasFracionamento": 1,
+            "BloqueadoPeriodoEspecifico": false,
+            "Prioridade": 0
+          },
+          {
+            "IdTarifaPontos": 5,
+            "DescricaoTarifa": "PADRÃO - 1",
+            "DescricaoPeriodo": "PADRÃO",
+            "DescricaoTipoPeriodo": "Media",
+            "QtdPontosTarifa": 1000,
+            "TaxaManutencao": 100,
+            "TaxaManutencaoDiaria": 100,
+            "Bloqueado": false,
+            "TarifaAplicadaPorIncidenciaParcial": false,
+            "QtdDiasFracionamento": 1,
+            "BloqueadoPeriodoEspecifico": false,
+            "Prioridade": 0
+          }
+        ],
+        "Bloqueado": false,
+        "BloqueadoPeriodoEspecifico": false,
+        "BloqueadoTipoPeriodoJaUtilizado": false,
+        "PeriodoBloqueado": false,
+        "TipoBloqueio": ""
+      },
+      {
+        "Data": "2019-03-04T00:00:00-03:00",
+        "QtdPontosSugerida": 1000,
+        "QtdPontosSelecionada": 1000,
+        "DescricaoPeriodoSugerido": "PADRÃO",
+        "DescricaoTarifa": "PADRÃO - 1",
+        "DescricaoPeriodoSelecionado": "PADRÃO",
+        "TaxaManutencaoSelecionada": 100,
+        "TaxaManutencaoDiaSelecionada": 100,
+        "OpcoesTarifas": [
+          {
+            "IdTarifaPontos": 4,
+            "DescricaoTarifa": "PADRÃO - 1",
+            "DescricaoPeriodo": "PADRÃO",
+            "DescricaoTipoPeriodo": "Media",
+            "QtdPontosTarifa": 1000,
+            "TaxaManutencao": 100,
+            "TaxaManutencaoDiaria": 100,
+            "Bloqueado": false,
+            "TarifaAplicadaPorIncidenciaParcial": false,
+            "QtdDiasFracionamento": 1,
+            "BloqueadoPeriodoEspecifico": false,
+            "Prioridade": 0
+          },
+          {
+            "IdTarifaPontos": 5,
+            "DescricaoTarifa": "PADRÃO - 1",
+            "DescricaoPeriodo": "PADRÃO",
+            "DescricaoTipoPeriodo": "Media",
+            "QtdPontosTarifa": 1000,
+            "TaxaManutencao": 100,
+            "TaxaManutencaoDiaria": 100,
+            "Bloqueado": false,
+            "TarifaAplicadaPorIncidenciaParcial": false,
+            "QtdDiasFracionamento": 1,
+            "BloqueadoPeriodoEspecifico": false,
+            "Prioridade": 0
+          }
+        ],
+        "Bloqueado": false,
+        "BloqueadoPeriodoEspecifico": false,
+        "BloqueadoTipoPeriodoJaUtilizado": false,
+        "PeriodoBloqueado": false,
+        "TipoBloqueio": ""
+      },
+      {
+        "Data": "2019-03-05T00:00:00-03:00",
+        "QtdPontosSugerida": 1000,
+        "QtdPontosSelecionada": 1000,
+        "DescricaoPeriodoSugerido": "PADRÃO",
+        "DescricaoTarifa": "PADRÃO - 1",
+        "DescricaoPeriodoSelecionado": "PADRÃO",
+        "TaxaManutencaoSelecionada": 100,
+        "TaxaManutencaoDiaSelecionada": 100,
+        "OpcoesTarifas": [
+          {
+            "IdTarifaPontos": 4,
+            "DescricaoTarifa": "PADRÃO - 1",
+            "DescricaoPeriodo": "PADRÃO",
+            "DescricaoTipoPeriodo": "Media",
+            "QtdPontosTarifa": 1000,
+            "TaxaManutencao": 100,
+            "TaxaManutencaoDiaria": 100,
+            "Bloqueado": false,
+            "TarifaAplicadaPorIncidenciaParcial": false,
+            "QtdDiasFracionamento": 1,
+            "BloqueadoPeriodoEspecifico": false,
+            "Prioridade": 0
+          },
+          {
+            "IdTarifaPontos": 5,
+            "DescricaoTarifa": "PADRÃO - 1",
+            "DescricaoPeriodo": "PADRÃO",
+            "DescricaoTipoPeriodo": "Media",
+            "QtdPontosTarifa": 1000,
+            "TaxaManutencao": 100,
+            "TaxaManutencaoDiaria": 100,
+            "Bloqueado": false,
+            "TarifaAplicadaPorIncidenciaParcial": false,
+            "QtdDiasFracionamento": 1,
+            "BloqueadoPeriodoEspecifico": false,
+            "Prioridade": 0
+          }
+        ],
+        "Bloqueado": false,
+        "BloqueadoPeriodoEspecifico": false,
+        "BloqueadoTipoPeriodoJaUtilizado": false,
+        "PeriodoBloqueado": false,
+        "TipoBloqueio": ""
+      },
+      {
+        "Data": "2019-03-06T00:00:00-03:00",
+        "QtdPontosSugerida": 1000,
+        "QtdPontosSelecionada": 1000,
+        "DescricaoPeriodoSugerido": "PADRÃO",
+        "DescricaoTarifa": "PADRÃO - 1",
+        "DescricaoPeriodoSelecionado": "PADRÃO",
+        "TaxaManutencaoSelecionada": 100,
+        "TaxaManutencaoDiaSelecionada": 100,
+        "OpcoesTarifas": [
+          {
+            "IdTarifaPontos": 4,
+            "DescricaoTarifa": "PADRÃO - 1",
+            "DescricaoPeriodo": "PADRÃO",
+            "DescricaoTipoPeriodo": "Media",
+            "QtdPontosTarifa": 1000,
+            "TaxaManutencao": 100,
+            "TaxaManutencaoDiaria": 100,
+            "Bloqueado": false,
+            "TarifaAplicadaPorIncidenciaParcial": false,
+            "QtdDiasFracionamento": 1,
+            "BloqueadoPeriodoEspecifico": false,
+            "Prioridade": 0
+          },
+          {
+            "IdTarifaPontos": 5,
+            "DescricaoTarifa": "PADRÃO - 1",
+            "DescricaoPeriodo": "PADRÃO",
+            "DescricaoTipoPeriodo": "Media",
+            "QtdPontosTarifa": 1000,
+            "TaxaManutencao": 100,
+            "TaxaManutencaoDiaria": 100,
+            "Bloqueado": false,
+            "TarifaAplicadaPorIncidenciaParcial": false,
+            "QtdDiasFracionamento": 1,
+            "BloqueadoPeriodoEspecifico": false,
+            "Prioridade": 0
+          }
+        ],
+        "Bloqueado": false,
+        "BloqueadoPeriodoEspecifico": false,
+        "BloqueadoTipoPeriodoJaUtilizado": false,
+        "PeriodoBloqueado": false,
+        "TipoBloqueio": ""
+      },
+      {
+        "Data": "2019-03-07T00:00:00-03:00",
+        "QtdPontosSugerida": 1000,
+        "QtdPontosSelecionada": 1000,
+        "DescricaoPeriodoSugerido": "PADRÃO",
+        "DescricaoTarifa": "PADRÃO - 1",
+        "DescricaoPeriodoSelecionado": "PADRÃO",
+        "TaxaManutencaoSelecionada": 100,
+        "TaxaManutencaoDiaSelecionada": 100,
+        "OpcoesTarifas": [
+          {
+            "IdTarifaPontos": 4,
+            "DescricaoTarifa": "PADRÃO - 1",
+            "DescricaoPeriodo": "PADRÃO",
+            "DescricaoTipoPeriodo": "Media",
+            "QtdPontosTarifa": 1000,
+            "TaxaManutencao": 100,
+            "TaxaManutencaoDiaria": 100,
+            "Bloqueado": false,
+            "TarifaAplicadaPorIncidenciaParcial": false,
+            "QtdDiasFracionamento": 1,
+            "BloqueadoPeriodoEspecifico": false,
+            "Prioridade": 0
+          },
+          {
+            "IdTarifaPontos": 5,
+            "DescricaoTarifa": "PADRÃO - 1",
+            "DescricaoPeriodo": "PADRÃO",
+            "DescricaoTipoPeriodo": "Media",
+            "QtdPontosTarifa": 1000,
+            "TaxaManutencao": 100,
+            "TaxaManutencaoDiaria": 100,
+            "Bloqueado": false,
+            "TarifaAplicadaPorIncidenciaParcial": false,
+            "QtdDiasFracionamento": 1,
+            "BloqueadoPeriodoEspecifico": false,
+            "Prioridade": 0
+          }
+        ],
+        "Bloqueado": false,
+        "BloqueadoPeriodoEspecifico": false,
+        "BloqueadoTipoPeriodoJaUtilizado": false,
+        "PeriodoBloqueado": false,
+        "TipoBloqueio": ""
+      }
+    ]
+  }
+}

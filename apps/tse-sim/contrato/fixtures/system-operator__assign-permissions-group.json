@@ -1,0 +1,15 @@
+{
+  "nome": "system-operator__assign-permissions-group",
+  "pasta": "System Operator",
+  "method": "POST",
+  "path": "/api/operadorsistema/SetPermissoesOperadorSistema",
+  "pathParams": [],
+  "query": [],
+  "requestBody": {
+    "IdOperador": 305,
+    "IdGrupoOperador": 2
+  },
+  "status": 200,
+  "contentType": "application/json; charset=utf-8",
+  "body": "Permissões atribuídas com sucesso"
+}
