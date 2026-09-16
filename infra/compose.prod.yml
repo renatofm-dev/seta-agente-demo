@@ -38,6 +38,11 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      # `service_started`, não `service_healthy`: o writer do server é preguiçoso
+      # (só fala com o TSE quando há baixa) e o papel `tse_sim` do banco nasce no
+      # seed, que roda DENTRO deste container — exigir saúde aqui seria impasse
+      tse-sim:
+        condition: service_started
     env_file:
       - ../.env.prod
     environment:
@@ -57,6 +62,13 @@ services:
       CATALOG_DIR: /app/catalog
       SKILLS_SEED_DIR: /app/skills-seed
       KB_DIR: /app/kb
+      # 036: o server escreve no ERP pela API do simulador da 035, que vive só
+      # na rede interna do compose. Na 041 esta linha passa a apontar para o TSE
+      # de verdade, e é a única coisa que muda.
+      TSE_BASE_URL: http://tse-sim:3010
+      TSE_USERNAME: ${TSE_USERNAME:?defina no .env.prod}
+      TSE_PASSWORD: ${TSE_PASSWORD:?defina no .env.prod}
+      ERP_CONCILIACAO: ${ERP_CONCILIACAO:-auto}
     ports:
       - '127.0.0.1:3001:3001' # só o Caddy do host enxerga
     logging: *logging
