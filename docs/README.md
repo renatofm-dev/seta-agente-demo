@@ -43,7 +43,8 @@ roadmap; o que é comportamento vive nas specs; o resto está nos guias abaixo.
 | [`asaas-setup.md`](asaas-setup.md) | Sandbox do Asaas, webhook de pagamento, simulação, limites |
 | [`whatsapp-templates.md`](whatsapp-templates.md) | Catálogo dos modelos de cobrança para cadastrar na Meta, com payload e o que cada um exige do código |
 | [`tse-api-setup.md`](tse-api-setup.md) | API HTTP do TS Explorer: contrato, autenticação, mapeamento no domínio, armadilhas e como rodar contra o simulador |
-| [`deploy-homelab.md`](deploy-homelab.md) | Preparar a VPS, login no GHCR, Caddy, `.env.prod`, deploy e seed de demo |
+| [`deploy-vps-coolify.md`](deploy-vps-coolify.md) | **O deploy da demo**: VPS da SETA com Coolify + Traefik em `demo.setaia.com.br`, os dois domínios, variáveis, seed e as checagens |
+| [`deploy-homelab.md`](deploy-homelab.md) | O outro caminho: máquina dedicada com Caddy do host — preparar a VPS, login no GHCR, `.env.prod`, deploy e seed |
 | [`roteiro-demo.md`](roteiro-demo.md) | Os cinco atos da demonstração e o plano B pelo simulador |
 
 ## Regras que valem para tudo
