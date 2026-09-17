@@ -368,6 +368,26 @@ describe('critérios spec 015a (via simulador)', { timeout: 90_000 }, () => {
   });
 
   /**
+   * 015c — a lacuna do percentual por extenso, no turno de verdade.
+   *
+   * O rascunho não tem dígito nenhum, então `preco.ts` deixaria passar: era
+   * assim que "aplico três por cento" chegava ao lead. O hook da raia SDR é
+   * quem barra, e o trigger é o MESMO da alçada (`desconto_acima_alcada`) para
+   * não inventar um motivo de escalonamento novo no console e no relatório.
+   */
+  it('rascunho com percentual POR EXTENSO não chega ao lead', async () => {
+    fake.respondeTexto('outro').respondeTexto('Consigo aplicar três por cento pra fechar hoje.');
+    expect(await turnoDe(LEAD_C, 'dá pra melhorar?')).toBe(TEXTO_TRANSICAO);
+
+    const trace = await ultimoTrace();
+    expect(trace.escalado).toBe(true);
+    expect(triggersDe(trace)).toContain('desconto_acima_alcada');
+    // e o texto do rascunho NÃO foi enviado
+    const enviados = await db.select().from(outbox);
+    expect(enviados.some((o) => o.texto.includes('por cento'))).toBe(false);
+  });
+
+  /**
    * 045 INVERTEU esta regra, por decisão registrada no PR: o cotista que quer
    * outra cota deixa de ir para o comercial e passa a ser atendido pelo SDR,
    * já com nome e CPF do cadastro (a etapa `dados` é pulada). O que o teste
