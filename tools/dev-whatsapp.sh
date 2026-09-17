@@ -50,6 +50,24 @@ asaas() { # método, path, [corpo]
       -H "User-Agent: seta-agente/dev"
   fi
 }
+
+# Acha o `seta-dev` pelo NOME, na conta. Existe porque depender de uma variável
+# deste processo só funciona quando o processo termina direito — e o caso que
+# interessa é justamente o contrário (terminal fechado, kill -9, túnel subido
+# por fora). Imprime "id url enabled" ou nada.
+asaas_seta_dev() {
+  [ -n "${ASAAS_API_KEY:-}" ] || return 0
+  asaas GET '/webhooks?limit=100' 2>/dev/null | python3 -c '
+import sys, json
+try:
+    d = json.load(sys.stdin)
+except Exception:
+    sys.exit(0)
+w = next((w for w in d.get("data", []) if w.get("name") == "seta-dev"), None)
+if w:
+    print(w.get("id", ""), w.get("url", ""), str(w.get("enabled", False)).lower())
+' 2>/dev/null || true
+}
 limpar() {
   echo
   if [ -n "$TUNNEL_URL" ]; then
@@ -58,10 +76,17 @@ limpar() {
       -H "Authorization: Bearer $WA_ACCESS_TOKEN" -H "Content-Type: application/json" \
       -d '{"webhook_configuration":{"override_callback_uri":""}}' >/dev/null || true
   fi
-  if [ -n "$ASAAS_WEBHOOK_ID" ]; then
-    # 014: a URL do quick tunnel morre junto — webhook ligado apontaria para o nada
+  # 014: a URL do quick tunnel morre junto — webhook ligado apontaria para o nada.
+  # Procura por NOME em vez de usar $ASAAS_WEBHOOK_ID: se o registro falhou no
+  # meio, ou se uma sessão anterior morreu sem rodar este trap, o webhook velho
+  # ainda está ligado e é ele que precisa ser desligado.
+  ASAAS_LIMPAR_ID="$ASAAS_WEBHOOK_ID"
+  if [ -z "$ASAAS_LIMPAR_ID" ]; then
+    ASAAS_LIMPAR_ID="$(asaas_seta_dev | awk '{print $1}')"
+  fi
+  if [ -n "$ASAAS_LIMPAR_ID" ]; then
     echo "→ desligando o webhook do Asaas (seta-dev)…"
-    asaas PUT "/webhooks/$ASAAS_WEBHOOK_ID" '{"enabled":false}' >/dev/null || true
+    asaas PUT "/webhooks/$ASAAS_LIMPAR_ID" '{"enabled":false}' >/dev/null || true
   fi
   [ -n "$TUNNEL_PID" ] && kill "$TUNNEL_PID" 2>/dev/null || true
   [ -n "$LOG" ] && rm -f "$LOG" || true
@@ -76,6 +101,21 @@ limpar() {
 trap limpar EXIT
 trap 'exit 0' INT
 trap 'exit 143' TERM
+
+# Sobra de sessão anterior: um `seta-dev` LIGADO apontando para um túnel que já
+# morreu. O Asaas entrega SEQUENTIALLY, então o primeiro evento que falha segura
+# todos os seguintes — e ele avisa por e-mail antes de suspender o webhook. Se o
+# registro abaixo for rodar, ele reaponta sozinho; se não for (sem chave, sem
+# e-mail), pelo menos quem está no terminal fica sabendo.
+ASAAS_SOBRA="$(asaas_seta_dev)"
+if [ -n "$ASAAS_SOBRA" ]; then
+  SOBRA_URL="$(printf '%s' "$ASAAS_SOBRA" | awk '{print $2}')"
+  SOBRA_ON="$(printf '%s' "$ASAAS_SOBRA" | awk '{print $3}')"
+  if [ "$SOBRA_ON" = "true" ]; then
+    echo "aviso: webhook 'seta-dev' do Asaas está LIGADO em $SOBRA_URL" >&2
+    echo "       (sobra de uma sessão que não encerrou direito; será reapontado)" >&2
+  fi
+fi
 
 echo "→ conferindo o server local ($SERVER_URL/healthz)…"
 if ! curl -sf --max-time 5 "$SERVER_URL/healthz" >/dev/null; then
