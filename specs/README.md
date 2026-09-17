@@ -37,7 +37,7 @@ autônomo sobre WhatsApp, rodando local (repo privado + homelab), fora da org se
 | 012 | Domínio de multipropriedade (corrige a 002 a partir do espelho real) | ✅ `main` (#50) |
 | 013 | Disparos de template para a carteira (reverte o corte da 004) | ✅ `main` (#59) |
 | 014 | Compra e cobrança pelo WhatsApp (PSP Asaas, ADR 0001) | ✅ `main` (#59) — PSP em modo de teste |
-| 015 / 015a | Agente SDR para lead frio: dados (#60) e núcleo (#64) | ✅ `main` — faltam 015b e 015c |
+| 015 / 015a | Agente SDR para lead frio: dados (#60) e núcleo (#64) | ✅ `main` — 015b entregue em 17/09; falta a 015c |
 | 016 | Anonimização do que sai para a LLM | ✅ `main` (#61) |
 | 017 | Relatório analítico de campanhas | ✅ `main` (#63) |
 | 042 | Asaas de verdade no sandbox (PSP deixa de ser simulado) | ✅ `main` (#20) |
@@ -46,6 +46,7 @@ autônomo sobre WhatsApp, rodando local (repo privado + homelab), fora da org se
 | 036 | Escrita no ERP (`ErpWriter`) e baixa real do pagamento | ✅ `main` (#25) — a baixa chega ao TSE; conciliação vira compensação |
 | 038 | Reserva de utilização de contrato pelo agente | ✅ 16/09/2026 — o agente reserva a semana e a utilização existe no ERP |
 | 045 | Venda de ponta a ponta (sinal por PIX + contrato no ERP; absorve a 039) | ✅ 17/09/2026 — lead frio e cotista compram, e o contrato nasce no TSE |
+| 015b | Aprovar/recusar/contra-propor a proposta acima da alçada pelo console | ✅ 17/09/2026 — o lead deixa de ficar sem resposta |
 
 A ordem, o calendário e as decisões pendentes estão em **[`docs/roadmap.md`](../docs/roadmap.md)**;
 o mapa técnico do que cada spec entregou está em
@@ -55,12 +56,11 @@ o mapa técnico do que cada spec entregou está em
 
 Escopo já desenhado, no mesmo formato, com o banner "Pré-spec" no topo e uma seção
 "Reaproveita" apontando o código que já existe. Viram spec quando entram no sprint. A
-numeração é a ordem de escrita, não de execução (015b e 015c executam antes das 018+; a 026
+numeração é a ordem de escrita, não de execução (a 015c executa antes das 018+; a 026
 executa em M2, antes de M4).
 
 | Pré-spec | Marco | Depende |
 |---|---|---|
-| [015b](015b-sdr-aprovacao-console.md) aprovar/recusar proposta no console | M1 | 015a |
 | [015c](015c-sdr-guardrail-percentual.md) percentual por extenso na raia SDR | M1 | 015a |
 | [026](026-backup-monitor-gitleaks.md) backup, monitor e gitleaks | M2 | — |
 | [018](018-espelho-real.md) conexão ao espelho real | M4 | D5 |
@@ -75,7 +75,7 @@ executa em M2, antes de M4).
 | [028](028-adaptador-seven.md) adaptador Seven (Winthor) | M5 | piloto |
 | [029](029-copiloto-cobranca.md) copiloto de cobrança | M5 | piloto |
 | [030](030-campanha-segmentada.md) campanha segmentada e opt-out | M5 | piloto |
-| [031](031-sdr-fase-2.md) SDR fase 2 | M5 | 015b, 023 |
+| [031](031-sdr-fase-2.md) SDR fase 2 | M5 | ✅015b, 023 |
 | [032](032-configuracao-pela-interface.md) configuração pela interface | M5 | 021 |
 | [033](033-midia-no-whatsapp.md) mídia no WhatsApp | M5 | piloto |
 | [034](034-multi-instancia.md) multi-instância | M5 | 021 |
