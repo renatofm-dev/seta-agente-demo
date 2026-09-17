@@ -37,7 +37,8 @@ autônomo sobre WhatsApp, rodando local (repo privado + homelab), fora da org se
 | 012 | Domínio de multipropriedade (corrige a 002 a partir do espelho real) | ✅ `main` (#50) |
 | 013 | Disparos de template para a carteira (reverte o corte da 004) | ✅ `main` (#59) |
 | 014 | Compra e cobrança pelo WhatsApp (PSP Asaas, ADR 0001) | ✅ `main` (#59) — PSP em modo de teste |
-| 015 / 015a | Agente SDR para lead frio: dados (#60) e núcleo (#64) | ✅ `main` — faltam 015b e 015c |
+| 015 / 015a | Agente SDR para lead frio: dados (#60) e núcleo (#64) | ✅ `main` — falta a 015b |
+| 015c | Guardrail do percentual por extenso na raia SDR | ✅ 17/09/2026 — "três por cento" deixa de chegar ao lead |
 | 016 | Anonimização do que sai para a LLM | ✅ `main` (#61) |
 | 017 | Relatório analítico de campanhas | ✅ `main` (#63) |
 | 042 | Asaas de verdade no sandbox (PSP deixa de ser simulado) | ✅ `main` (#20) |
@@ -55,13 +56,12 @@ o mapa técnico do que cada spec entregou está em
 
 Escopo já desenhado, no mesmo formato, com o banner "Pré-spec" no topo e uma seção
 "Reaproveita" apontando o código que já existe. Viram spec quando entram no sprint. A
-numeração é a ordem de escrita, não de execução (015b e 015c executam antes das 018+; a 026
+numeração é a ordem de escrita, não de execução (a 015b executa antes das 018+; a 026
 executa em M2, antes de M4).
 
 | Pré-spec | Marco | Depende |
 |---|---|---|
 | [015b](015b-sdr-aprovacao-console.md) aprovar/recusar proposta no console | M1 | 015a |
-| [015c](015c-sdr-guardrail-percentual.md) percentual por extenso na raia SDR | M1 | 015a |
 | [026](026-backup-monitor-gitleaks.md) backup, monitor e gitleaks | M2 | — |
 | [018](018-espelho-real.md) conexão ao espelho real | M4 | D5 |
 | [019](019-embeddings-reais.md) embeddings reais | M4 | D8 |

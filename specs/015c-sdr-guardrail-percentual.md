@@ -1,6 +1,18 @@
 # 015c — Guardrail da raia SDR: percentual por extenso e vocabulário proibido
 
-> **Pré-spec** (rascunho de 08/09/2026): ainda não executada. Depende da 015a (no `main`).
+> **Entregue em 17/09/2026.** O que saiu está em
+> [`docs/dev/04-modulos-entregues.md`](../docs/dev/04-modulos-entregues.md).
+>
+> **Um ajuste em relação ao rascunho, por causa da 045:** a condição para ligar o hook não pode ser
+> "`sdrDeps` presente", como o desenho supunha. A 045 abriu o SDR para o **cotista** também, e usar
+> as deps ligaria o hook na raia errada — onde o vocabulário proibido aparece legitimamente (a KB
+> fala em "abatimento do frete", e `preco.ts` trata isso com rastreabilidade justamente para não
+> escalar toda citação de política). A condição é **`clienteId === ''`**.
+>
+> O cotista comprando não fica descoberto: ali o fluxo de venda é determinístico e consome o turno
+> antes do LLM — não há rascunho para barrar.
+>
+> **Pré-spec** (rascunho de 08/09/2026). Depende da 015a (no `main`).
 > Item P-26 do roadmap, marco M1.
 
 ## Objetivo
