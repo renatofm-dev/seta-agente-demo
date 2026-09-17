@@ -1,10 +1,12 @@
 import { join } from 'node:path';
+import { createFakeProvider } from '@seta/ai-provider/testing';
 import { loadClientConfig } from '@seta/client-config';
 import { createTseErpApi, type ErpWriter } from '@seta/erp-api-tse';
 import { createPgConnector, type DbConnector } from '@seta/erp-connector';
-import { createLogger, newTraceId } from '@seta/observability';
+import { createLogger, createNoopObsEmitter, newTraceId } from '@seta/observability';
+import { createSimulatedPaymentProvider } from '@seta/payment-provider';
 import { createExecutor, type Executor, loadCatalog } from '@seta/query-catalog';
-import { eq, sql } from 'drizzle-orm';
+import { asc, desc, eq, sql } from 'drizzle-orm';
 import { migrate } from 'drizzle-orm/node-postgres/migrator';
 import pg from 'pg';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
@@ -33,10 +35,13 @@ import {
   reserva,
   sinalAprendizado,
   ticket,
+  traceTurno,
+  turno,
 } from '../src/db/schema.ts';
 import { type Env, loadEnv } from '../src/env.ts';
 import { createPagamentosRepo } from '../src/pagamentos/repo.ts';
 import { createDrizzleQueryEventSink } from '../src/query-event-sink.ts';
+import { createPgVectorStore } from '../src/rag/pgvector-store.ts';
 import { chaveReserva } from '../src/reserva/chave.ts';
 import {
   continuarFluxo,
@@ -47,6 +52,9 @@ import {
 import { createReservaRepo } from '../src/reserva/repo.ts';
 import { processarReserva } from '../src/reserva/worker.ts';
 import { seedApp, USUARIOS_DEMO } from '../src/seed-app.ts';
+import { registerDebounceWorker } from '../src/wa/debounce.ts';
+import { ticketPermiteBot } from '../src/wa/tickets.ts';
+import { createAgentTurnoHandler } from '../src/wa/turno-handler.ts';
 
 /**
  * Spec 038 — a reserva sai da conversa e chega ao ERP.
@@ -66,6 +74,10 @@ const LIVRE = { checkIn: '2027-05-10', checkOut: '2027-05-13' };
 /** Janeiro é ALTA, e LUXO em alta está bloqueado no seed. */
 const BLOQUEADO = { checkIn: '2028-01-10', checkOut: '2028-01-13' };
 const logger = createLogger({ level: 'silent', name: 'teste-038' });
+/** LLM fake: neste arquivo só o CLASSIFICADOR de intenção passa por ele. */
+let fake = createFakeProvider();
+/** Debounce curto — o teste de roteamento espera o turno de verdade. */
+const DEBOUNCE_MS = 300;
 const clientConfig = loadClientConfig(
   join(import.meta.dirname, '../../../configs/demo/client.yaml'),
 );
@@ -181,6 +193,10 @@ beforeAll(async () => {
     LOG_LEVEL: 'silent',
     CONTATOS_PATH: join(import.meta.dirname, '../../../configs/demo/contatos.yaml'),
     EMBEDDING_DIM: '8',
+    // /dev/inbound é o caminho do teste de roteamento por intenção; sem o
+    // debounce curto o turno só roda 10 s depois (default de WA_DEBOUNCE_MS)
+    DEV_SIMULATOR: 'true',
+    WA_DEBOUNCE_MS: String(DEBOUNCE_MS),
   } as NodeJS.ProcessEnv);
 
   const criado = createDb(env.DATABASE_URL);
@@ -232,6 +248,45 @@ beforeAll(async () => {
     },
     logger,
   };
+
+  /**
+   * O turno COMPLETO (debounce → classificador → roteamento), que os testes
+   * acima não exercitam porque chamam `iniciarFluxo` direto. É aqui que a
+   * regressão do classificador aparecia: sem a categoria `reservar`, a frase
+   * do cotista era classificada como `comprar_cota` e o turno escalava.
+   */
+  await registerDebounceWorker({
+    db,
+    boss,
+    debounceMs: DEBOUNCE_MS,
+    ticketGate: (conversaId) => ticketPermiteBot(db, conversaId),
+    handler: createAgentTurnoHandler({
+      db,
+      boss,
+      get provider() {
+        return fake;
+      },
+      catalog,
+      executor,
+      clientConfig,
+      registry: null,
+      store: createPgVectorStore({ db, dim: env.EMBEDDING_DIM }),
+      obs: createNoopObsEmitter(),
+      logger,
+      turnoTimeoutMs: 30_000,
+      resumoACadaTurnos: 99,
+      debounceMs: DEBOUNCE_MS,
+      // reservaDeps só existe com `pagamentos` presente (as duas vivem na raia
+      // do cotista); o PSP simulado basta — nenhum teste daqui cobra nada.
+      pagamentos: { repo: createPagamentosRepo(db), psp: createSimulatedPaymentProvider(), env },
+      reserva: {
+        repo: deps.repo,
+        writer,
+        env: deps.env,
+      },
+    }),
+    logger,
+  });
 
   const auth = createAuth(db, { secret: env.BETTER_AUTH_SECRET, baseURL: env.BETTER_AUTH_URL });
   app = buildApp({ env, clientConfig, wa: { db, boss }, console: { auth, executor } });
@@ -292,7 +347,9 @@ afterAll(async () => {
   await db?.delete(sinalAprendizado);
   await db?.delete(ticket);
   await db?.delete(outbox);
-  await db?.delete(mensagem);
+  await db?.delete(traceTurno);
+  await db?.delete(mensagem); // FK mensagem.turno_id → turno: mensagem primeiro
+  await db?.delete(turno);
   await db?.delete(conversaLeitura);
   await db?.delete(contato).where(eq(contato.waId, WA_ID));
   await db?.delete(conversa).where(eq(conversa.waId, WA_ID));
@@ -510,6 +567,77 @@ describe('taxa acima do teto: um humano decide', () => {
     });
     expect(lista.statusCode).toBe(200);
     expect((lista.json() as { reservas: unknown[] }).reservas).toHaveLength(1);
+  });
+});
+
+/**
+ * Regressão encontrada em 17/09/2026 testando a demo no WhatsApp real: o
+ * cotista escreveu "Gostaria de realizar uma reserva" e o agente abriu um
+ * chamado para o comercial. O classificador (006) não tinha categoria para
+ * reserva, então a frase caía em `comprar_cota` — que escala na raia do
+ * cotista. Nenhum teste da 038 pegava isso porque todos entram por
+ * `iniciarFluxo`, pulando o classificador.
+ */
+describe('o classificador leva a reserva ao fluxo, não ao comercial', { timeout: 60_000 }, () => {
+  /** Turno COMPLETO pelo mesmo caminho do webhook. */
+  async function turnoDe(texto: string): Promise<string> {
+    const antes = (await db.select().from(traceTurno)).length;
+    const res = await app.inject({
+      method: 'POST',
+      url: '/dev/inbound',
+      headers: { cookie }, // com console presente o simulador exige sessão
+      payload: { waId: WA_ID, text: texto },
+    });
+    expect(res.statusCode).toBe(202);
+    for (let i = 0; i < 100 && (await db.select().from(traceTurno)).length === antes; i++) {
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    const linhas = await db.select().from(outbox).orderBy(asc(outbox.criadoEm), asc(outbox.seq));
+    return linhas[linhas.length - 1]?.texto ?? '';
+  }
+
+  const ultimoTrace = async () => {
+    const linhas = await db.select().from(traceTurno).orderBy(desc(traceTurno.criadoEm)).limit(1);
+    return linhas[0];
+  };
+
+  beforeEach(async () => {
+    fake = createFakeProvider();
+    await db.delete(traceTurno);
+    // os testes de HITL acima deixam tickets (e jobs em voo que ainda criam
+    // outros) — zerar aqui é o único jeito de asserir "nenhum ticket novo"
+    await db.delete(eventoTicket);
+    await db.delete(ticket);
+  });
+
+  it('"gostaria de realizar uma reserva" ABRE o fluxo e não escala', async () => {
+    fake.respondeTexto('reservar'); // só o classificador passa pelo LLM aqui
+    const resposta = await turnoDe('Gostaria de realizar uma reserva');
+
+    // o fluxo existe: a primeira pergunta da máquina é o período
+    const ativo = await deps.repo.fluxoAtivo(conversaId);
+    expect(ativo, 'o fluxo de reserva precisa ter sido aberto').toBeTruthy();
+    // prova positiva: a máquina da 038 abre pedindo o PERÍODO
+    expect(resposta).toMatch(/per[íi]odo/i);
+    expect(resposta).not.toContain('equipe comercial');
+
+    const trace = await ultimoTrace();
+    expect(trace?.escalado, 'reserva não escala').toBe(false);
+    // o ticket `bot_ativo` é o registro normal da conversa no console; o que
+    // NÃO pode existir é ticket com motivo de escalonamento (ida ao comercial)
+    const escalados = (await db.select().from(ticket)).filter(
+      (x) => x.motivoEscalonamento !== null,
+    );
+    expect(escalados, 'nenhuma escalada para o comercial').toHaveLength(0);
+  });
+
+  it('interesse de COMPRA continua escalando na raia do cotista', async () => {
+    fake.respondeTexto('comprar_cota');
+    await turnoDe('quero comprar outra cota');
+
+    const trace = await ultimoTrace();
+    expect(trace?.escalado, 'comprar_cota com vínculo ainda é do comercial').toBe(true);
+    expect(await deps.repo.fluxoAtivo(conversaId)).toBeFalsy();
   });
 });
 

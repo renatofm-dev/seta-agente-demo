@@ -11,14 +11,18 @@ export const INTENCOES = [
   'tema_sensivel',
   'pedir_humano',
   'pagar',
+  'reservar',
   'comprar_cota',
   'outro',
 ] as const;
 export type Intencao = (typeof INTENCOES)[number];
 const IntencaoSchema = z.enum(INTENCOES);
 
-/** Intenções que NÃO escalam: `outro` segue para o agente; `pagar` inicia o fluxo de cobrança (014). */
-export type IntencaoQueEscala = Exclude<Intencao, 'outro' | 'pagar'>;
+/**
+ * Intenções que NÃO escalam: `outro` segue para o agente; `pagar` inicia o
+ * fluxo de cobrança (014); `reservar` inicia o fluxo de reserva (038).
+ */
+export type IntencaoQueEscala = Exclude<Intencao, 'outro' | 'pagar' | 'reservar'>;
 
 export const TRIGGER_POR_INTENCAO: Readonly<Record<IntencaoQueEscala, string>> = {
   negociar_preco: 'negociacao_preco',
@@ -29,7 +33,7 @@ export const TRIGGER_POR_INTENCAO: Readonly<Record<IntencaoQueEscala, string>> =
 };
 
 export function intencaoEscala(i: Intencao): i is IntencaoQueEscala {
-  return i !== 'outro' && i !== 'pagar';
+  return i !== 'outro' && i !== 'pagar' && i !== 'reservar';
 }
 
 export interface ClassificacaoIntencao {
@@ -60,7 +64,10 @@ export async function classificarIntencao(
           `- tema_sensivel: menciona algum destes temas: ${temasSensiveis.join(', ') || '(nenhum configurado)'}\n` +
           '- pedir_humano: pede explicitamente para falar com uma pessoa/atendente\n' +
           '- pagar: quer pagar, quitar ou regularizar parcelas do contrato; pede boleto, PIX ou link de pagamento PARA PAGAR; diz que quer fazer/fechar o pagamento ou a compra\n' +
-          '- comprar_cota: quer adquirir OUTRA cota, fazer upgrade ou comprar um produto novo\n' +
+          '- reservar: quer USAR o contrato que já tem — reservar ou marcar hospedagem, ' +
+          'semana, período, diária ou feriado; perguntar hotéis/unidades disponíveis para usar os pontos\n' +
+          '- comprar_cota: quer ADQUIRIR outra cota, fazer upgrade ou comprar um produto novo ' +
+          '(dinheiro saindo para adquirir, não uso do que já é dele)\n' +
           '- outro: qualquer outra coisa (dúvidas, pedidos de informação, saudações, perguntar o que está vencido sem pedir para pagar)',
       },
       { role: 'user', content: textoUsuario },

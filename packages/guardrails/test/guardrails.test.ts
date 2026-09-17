@@ -5,6 +5,7 @@ import {
   extrairValoresMonetarios,
   type GuardrailCtx,
   guardrailPreco,
+  intencaoEscala,
   runBeforeReply,
   runToolHooks,
 } from '@seta/guardrails';
@@ -187,6 +188,36 @@ describe('classificador de intenção', () => {
     const fake = createFakeProvider().respondeTexto('tema_sensivel');
     await classificarIntencao(fake, 'vou acionar meu advogado', ['jurídico', 'imprensa']);
     expect(fake.requests[0]?.messages[0]?.content).toContain('jurídico, imprensa');
+  });
+
+  /**
+   * 038: sem a categoria `reservar`, "gostaria de realizar uma reserva" era
+   * classificada como `comprar_cota` e o turno ESCALAVA para o comercial — o
+   * fluxo de reserva nunca começava. Estes casos travam o contrato.
+   */
+  it('reservar é uma categoria e NÃO escala', async () => {
+    const fake = createFakeProvider().respondeTexto('reservar');
+    const r = await classificarIntencao(fake, 'gostaria de realizar uma reserva', []);
+    expect(r.intencao).toBe('reservar');
+    expect(intencaoEscala(r.intencao)).toBe(false);
+  });
+
+  it('o prompt distingue usar o contrato de adquirir outra cota', async () => {
+    const fake = createFakeProvider().respondeTexto('reservar');
+    await classificarIntencao(fake, 'quero marcar minha semana', []);
+    const prompt = fake.requests[0]?.messages[0]?.content ?? '';
+    // sem as duas âncoras o LLM não tem como separar reserva de compra
+    expect(prompt).toContain('reservar');
+    expect(prompt).toContain('USAR o contrato');
+    expect(prompt).toContain('ADQUIRIR outra cota');
+  });
+
+  it('pagar e reservar seguem para os fluxos; comprar_cota ainda escala', () => {
+    expect(intencaoEscala('pagar')).toBe(false);
+    expect(intencaoEscala('reservar')).toBe(false);
+    expect(intencaoEscala('outro')).toBe(false);
+    expect(intencaoEscala('comprar_cota')).toBe(true);
+    expect(intencaoEscala('tema_sensivel')).toBe(true);
   });
 });
 
