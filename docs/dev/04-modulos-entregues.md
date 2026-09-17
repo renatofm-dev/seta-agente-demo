@@ -391,3 +391,52 @@ aqui é o mapa.
 - **Ficou de fora:** a **015b** (aprovar proposta abaixo do piso no console — quem pede abaixo da
   alçada continua parando sem resposta), assinatura de contrato, parcelamento negociado na
   conversa e prospecção ativa.
+
+## 040 — 2ª via de boleto em PDF pelo WhatsApp
+- **Entrega:** o cotista pede "me manda a segunda via" e **o boleto chega em PDF**, com nome de
+  arquivo legível (`boleto-parcela-03-20260310.pdf`). Até aqui o agente só sabia mandar texto: o
+  `OutboundGateway` tinha `send` e `sendTemplate`, e a `outbox` só tinha `texto`.
+- **Onde está:** `packages/wa-meta` (`sendDocument` + upload de mídia nos dois gateways),
+  `packages/erp-api-tse` (`obterSegundaVia` + o GET binário em `http.ts`),
+  `apps/tse-sim/src/boleto-pdf.ts` e a rota `SegundaViaBoleto`,
+  `apps/server/src/wa/segunda-via.ts` (a tool), `wa/outbox.ts` (o worker resolve o anexo),
+  `catalog/financeiro/boleto_da_parcela.yaml`, migração `0022` e o clipe de anexo no
+  `inbox/painel-conversa.tsx`.
+- **O PDF não é armazenado em lugar nenhum.** Escolhemos **upload de mídia** (`media_id`) em vez
+  de link público assinado: o boleto traz nome, CPF e valor, e um link assinado é um endereço
+  público para dado pessoal. Sem URL para servir, não há o que guardar — os bytes existem só entre
+  a resposta do ERP e o `POST /media`, dentro do job. A pré-spec pedia `anexo_url`; a coluna virou
+  um **descritor** (`{tipo, contaFinanceiraId, filename}`), resolvido no instante do envio.
+- **Resolver no envio, e não ao enfileirar, é o que mantém o retry honesto.** Cada tentativa do
+  pg-boss busca o arquivo de novo, em vez de reenviar um `media_id` que a Meta já pode ter
+  expirado (eles valem 30 dias).
+- **O modelo escolhe QUAL parcela; o servidor confere de quem ela é.** `titulo_id` é o único
+  parâmetro que vem do LLM neste caminho, e `financeiro.boleto_da_parcela` tem o contrato como
+  bind de **sessão** — pedir a parcela de outro contrato não devolve linha nenhuma e o fluxo nem
+  começa. O PDF, esse, nunca chega perto do prompt.
+- **Nenhuma falha vira silêncio.** ERP sem o arquivo ⇒ linha `falha` + ticket **+ uma mensagem
+  honesta ao cotista**, dedupada pelo id da linha. Aqui o ticket sozinho não bastava, e é o que
+  separa este caso do #29: o agente **acabou de prometer** o arquivo, e sumir depois de prometer é
+  pior do que nunca ter oferecido. Terminal, sem retry — tentar de novo não faz o boleto aparecer.
+  Descritor corrompido ⇒ **não** cai para texto puro, porque o cotista receberia a legenda sem o
+  boleto. Janela de 24h fechada ⇒ nem faz upload, para não deixar arquivo esquecido na Meta.
+- **Parcela sem boleto é explicada, não inventada.** A tool devolve o motivo com a forma de
+  pagamento na mão — cartão recorrente e "boleto ainda não gerado" são respostas diferentes.
+- **Bug achado por teste:** `vencimento` chega do `pg` como **Date**, não string ISO. Tratado
+  como string, o nome do arquivo saía `boleto-parcela-100-17.pdf` — e a data da legenda sairia
+  errada junto. `isoDia` (014) normaliza as duas formas sem deslocar o dia por fuso.
+- **Efeito colateral corrigido de passagem:** o `seq` do turno era `fluxoIniciado ? 3 : 2`, um
+  chute que colidiria com o dedupe (`turnoId:seq`) num turno com pagamento (2+ mensagens) e
+  reserva juntos — a segunda mensagem sumiria em silêncio. Agora conta quantas saíram.
+- **O boleto do dublê é sintético e diz isso no papel.** O PDF do fornecedor não está no repo
+  (035): a fixture guarda só `contentType`, `bodyBytes` e o `sha256`. `apps/tse-sim` desenha o
+  seu à mão (a stack é travada, não há lib de PDF) com tarja de **DOCUMENTO SIMULADO** —
+  um boleto que parece pagável e não é seria pior que texto nenhum.
+- **Como exercitar:** `apps/server/test/segunda-via.integration.test.ts` (7 casos ponta a ponta),
+  `apps/tse-sim/test/boleto-pdf.test.ts` (a `xref` conferida por offset de byte),
+  `apps/tse-sim/test/divergencias.integration.test.ts` (os 404 que o fornecedor não exemplificou)
+  e `packages/wa-meta/test/documento.test.ts`.
+- **Para ver na demo é preciso `TSE_BASE_URL`.** Sem ela o writer é o de memória, que não tem
+  documento para servir — desenhar boleto é trabalho do ERP.
+- **Ficou de fora:** o resto da 033 (inbound de mídia, áudio, OCR de comprovante), retenção por
+  política (024) e o boleto do Asaas, que já vai por link em texto.

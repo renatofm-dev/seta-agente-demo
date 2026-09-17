@@ -15,6 +15,9 @@ se a Meta falhar no dia.
       (aprendizado) — senhas no seed.
 - [ ] `/metricas` aberta numa aba para o Ato 4 já ter dados dos ensaios.
 - [ ] Celular com o número de teste no WhatsApp, tela espelhada.
+- [ ] `TSE_BASE_URL` apontando para o simulador (`http://localhost:3010`) —
+      **sem ela o Ato 8 não acontece**: quem desenha o boleto é o ERP, e o
+      writer em memória não tem documento para servir.
 
 ## Ato 1 — Autonomia com dado real de negócio (~2 min)
 
@@ -152,6 +155,26 @@ comercial: até a 044 o lead do SDR morria numa tabela nossa.
 
 Narrar no fim: "o lead virou cotista no ERP do cliente sem ninguém digitar nada
 — e nenhuma linha foi escrita antes de o dinheiro entrar."
+
+## Ato 8 — O boleto chega como arquivo (040, ~2 min)
+
+Do número **…0002** (inadimplente), com o **inbox** aberto no browser do
+atendente. É curto de propósito: o valor está em ser óbvio.
+
+30. **"me manda a segunda via do meu boleto"** → o agente lista as parcelas em
+    aberto e pergunta qual.
+31. Escolher uma → uma frase curta ("já estou te enviando") e, logo em seguida,
+    **o PDF chega no WhatsApp**, com nome de arquivo legível
+    (`boleto-parcela-03-20260310.pdf`). Abrir no celular: o boleto traz o nome do
+    cotista, o contrato, o valor e o vencimento daquela parcela.
+32. No **inbox**, a mesma mensagem aparece com o clipe e o nome do arquivo —
+    o atendente sabe o que foi entregue sem precisar do celular.
+33. Bônus de honestidade: pedir a 2ª via de uma parcela **no cartão
+    recorrente** → o agente explica que aquela parcela não tem boleto, em vez de
+    inventar um.
+
+Narrar no fim: "o PDF veio do ERP e foi direto para a Meta — ele não é
+armazenado em lugar nenhum nosso, e não passou pelo modelo em momento algum."
 
 Fechamento: "tudo isso rodando numa VPS de €4, com o LLM atrás de um port —
 levar para dentro de casa é trocar duas variáveis de ambiente."

@@ -78,7 +78,6 @@ em PDF. Decisão no [ADR 0002](../adr/0002-integracao-erp-por-api.md); contrato 
 | [037 — catálogo por HTTP](../../specs/037-catalogo-http.md) | `source: sql \| api` no catálogo; `financeiro.*` lendo do TSE | 035, 036 |
 | [038 — reserva de utilização](../../specs/038-reserva-utilizacao.md) | o agente reserva de verdade (hoje a persona diz que não sabe) | 035, 036 |
 | [039 — SDR escreve no ERP](../../specs/039-sdr-escreve-no-erp.md) | lead vira casal e proposta aprovada vira contrato | 036, 015b |
-| [040 — 2ª via em PDF](../../specs/040-segunda-via-pdf.md) | envio de documento no WhatsApp (fatia fina da 033) | 036, 033 |
 | [041 — TSE real](../../specs/041-tse-real-e-fim-da-conciliacao.md) | aponta para um TSE de verdade e apaga `conciliacao.ts` | 037, ambiente do TSE |
 
 **Duas coisas que quem executar precisa saber antes de abrir o editor:**
