@@ -2,7 +2,6 @@ import { join } from 'node:path';
 import { TEXTO_TRANSICAO } from '@seta/agent';
 import { createFakeProvider } from '@seta/ai-provider/testing';
 import { loadClientConfig } from '@seta/client-config';
-import { TEXTO_INTERESSE_COMPRA } from '@seta/cobranca';
 import { createPgConnector, type DbConnector } from '@seta/erp-connector';
 import { createLogger, createNoopObsEmitter, newTraceId } from '@seta/observability';
 import { createExecutor, type Executor, loadCatalog } from '@seta/query-catalog';
@@ -38,6 +37,7 @@ import {
   ticket,
   traceTurno,
   turno,
+  venda,
 } from '../src/db/schema.ts';
 import { type Env, loadEnv } from '../src/env.ts';
 import { createDrizzleQueryEventSink } from '../src/query-event-sink.ts';
@@ -178,12 +178,16 @@ beforeAll(async () => {
   app = buildApp({ env, clientConfig, wa: { db, boss } });
 }, 60_000);
 
-beforeEach(async () => {
-  fake = createFakeProvider();
-  await boss.deleteQueuedJobs(FILA_DEBOUNCE);
-  await boss.deleteQueuedJobs(FILA_OUTBOX);
+/**
+ * 045: a limpeza passou a ser chamada TAMBÉM no afterAll. Antes, o lixo do
+ * último teste era inócuo (o cotista com vínculo só escalava); agora ele deixa
+ * lead, fluxo e mensagens na conversa 5511999990001 — que outras suítes usam,
+ * e `console-atendimento` conta mensagens não lidas nela.
+ */
+async function limpar(): Promise<void> {
   for (let tentativa = 0; ; tentativa++) {
     try {
+      await db.delete(venda);
       await db.delete(propostaSdr);
       await db.delete(fluxoSdr);
       await db.delete(lead);
@@ -199,15 +203,23 @@ beforeEach(async () => {
       await db.delete(turno);
       await db.delete(conversaLeitura);
       await db.delete(conversa);
-      break;
+      return;
     } catch (err) {
       if (tentativa >= 4) throw err;
       await new Promise((r) => setTimeout(r, 250));
     }
   }
+}
+
+beforeEach(async () => {
+  fake = createFakeProvider();
+  await boss.deleteQueuedJobs(FILA_DEBOUNCE);
+  await boss.deleteQueuedJobs(FILA_OUTBOX);
+  await limpar();
 });
 
 afterAll(async () => {
+  await limpar();
   await app?.close();
   await boss?.stop({ graceful: false });
   await connector?.close();
@@ -355,11 +367,22 @@ describe('critérios spec 015a (via simulador)', { timeout: 90_000 }, () => {
     expect(triggersDe(trace)).toContain('negociacao_preco');
   });
 
-  it('cotista COM vínculo pedindo outra cota continua escalando interesse_compra (sem regressão)', async () => {
+  /**
+   * 045 INVERTEU esta regra, por decisão registrada no PR: o cotista que quer
+   * outra cota deixa de ir para o comercial e passa a ser atendido pelo SDR,
+   * já com nome e CPF do cadastro (a etapa `dados` é pulada). O que o teste
+   * trava agora é que ele ENTRA no fluxo em vez de escalar.
+   */
+  it('cotista COM vínculo pedindo outra cota entra no SDR (045 abriu a raia)', async () => {
     fake.respondeTexto('comprar_cota');
-    expect(await turnoDe(WA_VINCULADO, 'quero comprar mais uma cota')).toBe(TEXTO_INTERESSE_COMPRA);
-    expect(await db.select().from(fluxoSdr)).toHaveLength(0);
-    expect(await db.select().from(lead)).toHaveLength(0);
-    expect(triggersDe(await ultimoTrace())).toContain('interesse_compra');
+    expect(await turnoDe(WA_VINCULADO, 'quero comprar mais uma cota')).toBe(
+      TEXTO_QUALIFICACAO_PESSOAS,
+    );
+    expect(await db.select().from(fluxoSdr)).toHaveLength(1);
+    expect(await db.select().from(lead)).toHaveLength(1);
+    // e NÃO escala mais: era isto que mandava o cotista para o comercial
+    const trace = await ultimoTrace();
+    expect(trace.escalado).toBe(false);
+    expect(triggersDe(trace)).not.toContain('interesse_compra');
   });
 });
