@@ -62,6 +62,13 @@ export const mensagem = pgTable('mensagem', {
   atendenteId: text('atendente_id'),
   waMessageId: text('wa_message_id').unique(),
   texto: text('texto').notNull(),
+  /**
+   * 040: nome do arquivo que acompanhou esta mensagem (`null` = só texto). É o
+   * NOME, não o arquivo: o console precisa mostrar que um boleto foi entregue e
+   * qual, e para isso o nome basta. Os bytes não passam por aqui em momento
+   * nenhum — ver `outbox.anexo`.
+   */
+  anexoNome: text('anexo_nome'),
   status: text('status', {
     enum: ['recebida', 'pendente', 'enviada', 'entregue', 'lida', 'falha'],
   }).notNull(),
@@ -90,6 +97,17 @@ export const outbox = pgTable('outbox', {
    * fecha. Nulo ⇒ comportamento da 014 (marca `janela_fechada` + ticket).
    */
   template: jsonb('template'),
+  /**
+   * 040: DESCRITOR do anexo — nunca os bytes. Diz o que buscar (qual conta
+   * financeira, de qual contrato) e com que nome entregar; o worker resolve no
+   * instante do envio, manda para a Meta e esquece.
+   *
+   * O PDF de boleto é dado pessoal (nome, CPF, valor). Guardá-lo aqui o faria
+   * viver no backup do Postgres para sempre, e a retenção disso é assunto da
+   * 024 — que ainda não existe. Descritor não tem esse problema: o que ele
+   * guarda, a linha do lado já guarda.
+   */
+  anexo: jsonb('anexo'),
   status: text('status', {
     enum: ['pendente', 'enviada', 'falha', 'janela_fechada'],
   })

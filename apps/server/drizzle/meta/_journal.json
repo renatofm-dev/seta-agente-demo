@@ -148,6 +148,13 @@
       "when": 1789652082246,
       "tag": "0020_venda",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1789668749711,
+      "tag": "0022_anexo-outbox",
+      "breakpoints": true
     }
   ]
 }
