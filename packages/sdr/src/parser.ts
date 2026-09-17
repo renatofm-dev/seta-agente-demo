@@ -23,6 +23,58 @@ const RE_CONFIRMAR =
 const RE_PEDIR_MELHOR =
   /\b(melhor|desconto|menos|abaixo|mais barat[oa]|car[oa] demais|muito car[oa]|baixar|negociar|consegue|tem como|da pra|dá pra|melhorar|abater)\b/;
 
+/**
+ * 045 — CPF do comprador. Cópia deliberada de `packages/reserva/src/parser.ts`:
+ * os dois domínios são irmãos e não se importam, e acoplá-los por uma função
+ * pura de 15 linhas seria pior que repeti-la. A matemática do DV não diverge.
+ *
+ * A primeira linha é a que importa: **um token de anonimização nunca é CPF**.
+ * O decorator da 016 devolve `[CPF_1]` no lugar do número, e gravar isso num
+ * ERP de terceiro é um dado errado que ninguém corrige depois.
+ */
+function cpfValido(bruto: string): string | null {
+  const d = bruto.replace(/\D/g, '');
+  if (d.length !== 11) return null;
+  if (/^(\d)\1{10}$/.test(d)) return null;
+  const dv = (n: number): number => {
+    let soma = 0;
+    for (let i = 0; i < n; i++) soma += Number(d[i]) * (n + 1 - i);
+    const r = (soma * 10) % 11;
+    return r === 10 ? 0 : r;
+  };
+  return dv(9) === Number(d[9]) && dv(10) === Number(d[10]) ? d : null;
+}
+
+export function extrairCpf(texto: string): string | null {
+  if (/\[[A-Z_]+\d*\]/.test(texto)) return null;
+  for (const m of texto.matchAll(/\d[\d.\-\s]{9,17}\d/g)) {
+    const cpf = cpfValido(m[0]);
+    if (cpf) return cpf;
+  }
+  return null;
+}
+
+/**
+ * Nome completo: o que sobra do texto depois de tirar o CPF e as palavras de
+ * ligação. Exige duas palavras — "João" não é nome completo, e o TSE grava o
+ * que receber.
+ */
+export function extrairNome(texto: string): string | null {
+  const semCpf = texto.replace(/\d[\d.\-\s]{9,17}\d/g, ' ');
+  const limpo = semCpf
+    .replaceAll(/\b(meu|nome|completo|e|eh|é|sou|o|a|cpf|numero|número)\b/gi, ' ')
+    .replaceAll(/[^\p{L}\s']/gu, ' ')
+    .replaceAll(/\s+/g, ' ')
+    .trim();
+  const partes = limpo.split(' ').filter((p) => p.length >= 2);
+  if (partes.length < 2) return null;
+  return partes
+    .slice(0, 6)
+    .map((p) => p.charAt(0).toUpperCase() + p.slice(1).toLowerCase())
+    .join(' ')
+    .slice(0, 120);
+}
+
 const CARDINAIS: Record<string, number> = {
   um: 1,
   uma: 1,
@@ -109,6 +161,21 @@ export function parsearResposta(texto: string, estado: EstadoFluxo): Acao | null
       if (RE_PEDIR_MELHOR.test(t)) return { tipo: 'pedir_melhor' };
       return null;
     }
+    case 'dados': {
+      // pedir humano tem precedência: quem quer gente não quer preencher dados
+      if (/\b(atendente|humano|pessoa|ligar|telefone|falar com)\b/.test(t)) {
+        return { tipo: 'agendar', texto: original.slice(0, 200) };
+      }
+      const cpf = extrairCpf(original);
+      const nome = extrairNome(original);
+      return cpf && nome ? { tipo: 'dados', nome, cpf } : null;
+    }
+    case 'fechamento':
+      // nada que o lead escreva avança o fechamento — quem avança é o PSP.
+      // Só o pedido explícito de humano tem efeito.
+      return /\b(atendente|humano|pessoa|ligar|falar com)\b/.test(t)
+        ? { tipo: 'agendar', texto: original.slice(0, 200) }
+        : null;
     case 'agendamento':
       return original.length >= 2 ? { tipo: 'agendar', texto: original.slice(0, 200) } : null;
     default:

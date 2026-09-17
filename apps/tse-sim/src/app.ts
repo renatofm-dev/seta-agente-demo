@@ -7,7 +7,9 @@ import { cadastrosRoutes } from './rotas/cadastros.js';
 import { financeiroRoutes } from './rotas/financeiro.js';
 import { lookupRoutes } from './rotas/lookup.js';
 import { painelDoClienteRoutes } from './rotas/painel-do-cliente.js';
+import { recepcaoRoutes } from './rotas/recepcao.js';
 import { utilizacaoContratoRoutes } from './rotas/utilizacao-contrato.js';
+import { vendasRoutes } from './rotas/vendas.js';
 
 /**
  * Simulador da API do TS Explorer (035). Responde COMO o fornecedor — mesmo
@@ -107,6 +109,9 @@ export function buildTseSimApp({ env, db, auth }: BuildOptions): App {
   app.register(cadastrosRoutes, { db, auth: autenticador });
   app.register(financeiroRoutes, { db, auth: autenticador });
   app.register(lookupRoutes, { auth: autenticador });
+  // 045: o ciclo comercial — lead ("casal") e venda
+  app.register(recepcaoRoutes, { db, auth: autenticador });
+  app.register(vendasRoutes, { db, auth: autenticador });
 
   return app;
 }

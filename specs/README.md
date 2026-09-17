@@ -45,6 +45,7 @@ autônomo sobre WhatsApp, rodando local (repo privado + homelab), fora da org se
 | 035 | Simulador da API do TS Explorer (`apps/tse-sim`) | ✅ `main` (#24) — 30 das 89 rotas da coleção |
 | 036 | Escrita no ERP (`ErpWriter`) e baixa real do pagamento | ✅ `main` (#25) — a baixa chega ao TSE; conciliação vira compensação |
 | 038 | Reserva de utilização de contrato pelo agente | ✅ 16/09/2026 — o agente reserva a semana e a utilização existe no ERP |
+| 045 | Venda de ponta a ponta (sinal por PIX + contrato no ERP; absorve a 039) | ✅ 17/09/2026 — lead frio e cotista compram, e o contrato nasce no TSE |
 
 A ordem, o calendário e as decisões pendentes estão em **[`docs/roadmap.md`](../docs/roadmap.md)**;
 o mapa técnico do que cada spec entregou está em
@@ -79,10 +80,11 @@ executa em M2, antes de M4).
 | [033](033-midia-no-whatsapp.md) mídia no WhatsApp | M5 | piloto |
 | [034](034-multi-instancia.md) multi-instância | M5 | 021 |
 | [037](037-catalogo-http.md) catálogo por HTTP (`source: api`) | **Demo** | ✅035, ✅036, **D10** |
-| [039](039-sdr-escreve-no-erp.md) SDR escreve lead e venda no ERP | **Demo** | ✅036, 015b |
+| ~~[039](039-sdr-escreve-no-erp.md) SDR escreve lead e venda no ERP~~ | — | **absorvida pela ✅045** |
 | [040](040-segunda-via-pdf.md) 2ª via de boleto em PDF | **Demo** | ✅036, 033 (fatia fina) |
 | [041](041-tse-real-e-fim-da-conciliacao.md) TSE real e fim da conciliação | **Demo** | 037, ambiente do TSE |
 | [044](044-cobranca-proativa.md) cobrança proativa | **Pagamentos** | ✅042, ✅043 |
+
 
 ### A frente "demo ponta a ponta" (035–041)
 
@@ -106,6 +108,7 @@ Duas coisas que valem para quem for executar:
 `apps/tse-sim/test/pendentes.ts`, e o teste de contrato garante que só encolhe) e sobe com a demo
 no homelab sem porta publicada; a baixa do pagamento **chega ao ERP de verdade** e a conciliação da
 014 virou compensação do que ainda está em voo. **038, 039 e 040 estão destravadas.**
+(A 039 foi absorvida pela **045**, entregue em 17/09 com o elo que faltava: o pagamento do sinal.)
 
 **Nada disso esperou o fornecedor, e nem deveria:** a demo roda contra o simulador, que é nosso. As
 cinco perguntas abertas (§6 do guia) bloqueiam a **041**, não a demo — cada uma virou premissa
@@ -114,7 +117,9 @@ escrita e isolada, para que a resposta custe uma função. A 036 acrescentou a m
 
 **Se o objetivo é liberar a demo**, a fila muda de ordem: 036 e 037 são encanamento invisível (a
 conversa responde igual antes e depois). O que APARECE na demo é a 038 (entregue), a **040** (o
-boleto em PDF chega no WhatsApp) e a **039** (o lead do SDR deixa de morrer na nossa tabela).
+boleto em PDF chega no WhatsApp) e a **045** (o lead do SDR deixa de morrer na nossa tabela — e
+agora paga o sinal por PIX e vira contrato no ERP). **A 045 foi entregue em 17/09/2026**; sobra a
+040.
 
 **A 038 foi entregue em 16/09/2026** e trocou o ato mais honesto da demo pelo mais forte: o que era
 *"o agente admite não saber reservar"* virou *"o agente reserva, e a utilização existe no ERP com o

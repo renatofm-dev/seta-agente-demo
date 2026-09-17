@@ -1,4 +1,5 @@
-import type { FastifyInstance, FastifyPluginOptions } from 'fastify';
+import type { FastifyInstance, FastifyPluginOptions, FastifyReply } from 'fastify';
+import { z } from 'zod';
 import type { Autenticador } from '../auth.js';
 import type { Consulta } from '../db.js';
 import { agoraTse } from '../pascal.js';
@@ -28,8 +29,48 @@ interface LinhaPessoa {
 
 const NAO_ENCONTRADA = { Message: 'Pessoa não encontrada.' } as const;
 
+/**
+ * 045: `SetPessoa` — cria o comprador que `SetVenda` exige em `IdComprador1`.
+ * Só `RazaoSocial` (o nome) e `CpfCnpj` importam para o espelho; o resto do
+ * corpo do TSE (RG, estado civil, endereços, idioma) não existe no erp_mock e
+ * é aceito e ignorado, pelo mesmo motivo de sempre: recusar o que o TSE aceita
+ * quebraria o adapter só contra o dublê.
+ *
+ * Diferente das outras escritas, a resposta **não é prosa**: é o id nu
+ * (`358` no exemplo do fornecedor).
+ */
+const SetPessoaSchema = z
+  .object({
+    RazaoSocial: z.string().min(1),
+    CpfCnpj: z.string().min(11),
+    NomeFantasia: z.string().nullish(),
+  })
+  .passthrough();
+
 export function cadastrosRoutes(app: FastifyInstance, opts: CadastrosDeps, done: () => void): void {
   exigirBearer(app, opts.auth);
+
+  /** O `0` do path é do fornecedor (id do item, 0 = nova pessoa). */
+  app.post('/api/cadastros/SetPessoa/:id', async (req, reply: FastifyReply) => {
+    const p = SetPessoaSchema.parse(req.body);
+    const digitos = p.CpfCnpj.replace(/\D/g, '');
+    // mesma pessoa não vira dois cadastros: o CPF é a chave natural do espelho,
+    // e é isso que torna a escrita do adapter reprocessável sem duplicar
+    const [existente] = await opts.db.buscar<{ idpessoa: number }>(
+      `SELECT idpessoa FROM pessoa
+        WHERE regexp_replace(cpf, '\\D', '', 'g') = :cpf`,
+      { cpf: digitos },
+    );
+    if (existente) {
+      return reply.type('application/json; charset=utf-8').send(String(existente.idpessoa));
+    }
+    const [nova] = await opts.db.buscar<{ idpessoa: number }>(
+      `INSERT INTO pessoa (nome, cpf, email) VALUES (:nome, :cpf, NULL)
+       RETURNING idpessoa`,
+      { nome: p.RazaoSocial, cpf: digitos },
+    );
+    return reply.type('application/json; charset=utf-8').send(String(nova?.idpessoa));
+  });
 
   app.get<{ Params: { idPessoa: string } }>(
     '/api/cadastros/GetPessoa/:idPessoa',

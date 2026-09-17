@@ -24,6 +24,10 @@ export const ETAPAS = [
   'qualificacao',
   'apresentacao',
   'oferta',
+  /** 045: nome e CPF do comprador — pulada na raia do cotista, que já tem os dois. */
+  'dados',
+  /** 045: sinal emitido, esperando o PIX cair. */
+  'fechamento',
   'agendamento',
   'encerrado',
 ] as const;
@@ -31,6 +35,8 @@ export type Etapa = (typeof ETAPAS)[number];
 
 export const ENCERRAMENTOS = [
   'agendado',
+  /** 045: sinal pago e venda registrada no ERP. */
+  'vendido',
   'sem_interesse',
   'sem_estoque',
   'abandonado',
@@ -61,6 +67,8 @@ export interface EstadoFluxo {
   readonly oferta: Oferta | null;
   readonly naoEntendi: number;
   readonly encerramento: Encerramento | null;
+  /** 045: preenchido em `dados` (lead frio) ou já no início (cotista). */
+  readonly comprador: Comprador | null;
 }
 
 export type Acao =
@@ -72,6 +80,10 @@ export type Acao =
   /** "fecho por 180 mil" — com valor: compara com o piso. */
   | { readonly tipo: 'pedir_valor'; readonly centavos: number }
   | { readonly tipo: 'aceitar' }
+  /** 045: nome completo e CPF, extraídos pelo PARSER do texto cru — nunca pelo LLM. */
+  | { readonly tipo: 'dados'; readonly nome: string; readonly cpf: string }
+  /** 045: vem do webhook do PSP, não do lead. */
+  | { readonly tipo: 'sinal_pago' }
   | { readonly tipo: 'agendar'; readonly texto: string }
   | { readonly tipo: 'cancelar' }
   | { readonly tipo: 'nao_entendi' };
@@ -82,6 +94,20 @@ export interface ContextoFluxo {
   readonly descontoMaxBps: number;
   readonly maxPropostasDia: number;
   readonly propostasHoje: number;
+  /**
+   * 045: comprador já conhecido (raia do cotista — nome e CPF vêm de `contato`,
+   * como a 038 faz com o hóspede titular). Presente ⇒ a etapa `dados` é pulada
+   * e o CPF nunca precisa ser pedido nem trafegar pela conversa.
+   */
+  readonly compradorConhecido?: Comprador | null;
+  /** 045: valor do sinal que o PIX vai cobrar. */
+  readonly sinalCentavos?: number;
+}
+
+/** 045: quem assina a compra. O CPF vem do parser ou do cadastro, jamais do LLM. */
+export interface Comprador {
+  readonly nome: string;
+  readonly cpf: string;
 }
 
 export type Efeito =
@@ -95,7 +121,11 @@ export type Efeito =
   | 'escalar_sem_estoque'
   | 'escalar_limite'
   /** Lead aceitou e deixou contato: proposta aceita, lead agendado. */
-  | 'agendar';
+  | 'agendar'
+  /** 045: comprador identificado — emitir a cobrança do sinal e mandar o PIX. */
+  | 'emitir_sinal'
+  /** 045: sinal pago — gravar pessoa, lead e venda no ERP. */
+  | 'registrar_venda';
 
 export interface Transicao {
   readonly estado: EstadoFluxo;

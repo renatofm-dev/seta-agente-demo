@@ -34,6 +34,8 @@ import { registerErpReservaWorker } from './reserva/worker.js';
 import { createSdrRepo } from './sdr/repo.js';
 import { createSkillRegistry } from './skills/registry.js';
 import { registerSinaisDiarios } from './skills/sinais-job.js';
+import { createVendaRepo } from './venda/repo.js';
+import { registerErpVendaWorker } from './venda/worker.js';
 import { registerDebounceWorker } from './wa/debounce.js';
 import { registerDisparoWorker } from './wa/disparo.js';
 import { registerOutboxSweeper, registerOutboxWorker } from './wa/outbox.js';
@@ -105,6 +107,7 @@ const reservaWriter: ErpWriter =
       })
     : erpWriter;
 const reservaRepo = createReservaRepo(db);
+const vendaRepo = createVendaRepo(db);
 logger.info(
   {
     reserva: clientConfig.modulos.reserva,
@@ -184,6 +187,7 @@ await registerDebounceWorker({
     pagamentos: { repo: pagamentosRepo, psp, env }, // 014
     sdr: { repo: createSdrRepo(db), env }, // 015: só age na raia sem vínculo com modulos.sdr
     reserva: { repo: reservaRepo, writer: reservaWriter, env }, // 038
+    venda: { repo: vendaRepo, pspNome: psp.nome }, // 045
     ...(anonimizacao ? { anonimizacao: anonimizacao.acumulador } : {}), // 016
   }),
   logger,
@@ -209,6 +213,16 @@ await registerCobrancaEventoWorker({ db, boss, repo: pagamentosRepo, gateway, en
 await registerErpBaixaWorker({ db, boss, writer: erpWriter, logger });
 // 038: criar + confirmar a reserva no ERP, com read-back por chave natural
 await registerErpReservaWorker({ db, boss, writer: reservaWriter, logger });
+// 045: pessoa + casal + venda, disparado SÓ pelo pagamento do sinal
+await registerErpVendaWorker({
+  db,
+  boss,
+  writer: reservaWriter,
+  logger,
+  idProdutoPadrao: env.VENDA_ID_PRODUTO,
+  idMeioPagamentoSinal: env.VENDA_MEIO_PAGAMENTO_SINAL,
+  idMeioPagamentoSaldo: env.VENDA_MEIO_PAGAMENTO_SALDO,
+});
 
 const app = buildApp({
   env,
@@ -241,6 +255,9 @@ try {
       reserva: clientConfig.modulos.reserva
         ? `teto taxa ${env.RESERVA_TETO_TAXA_SEM_HITL_CENTAVOS} centavos`
         : false, // 038
+      venda: clientConfig.modulos.sdr
+        ? `sinal ${env.VENDA_SINAL_CENTAVOS} centavos, produto ${env.VENDA_ID_PRODUTO}`
+        : false, // 045
     },
     'server no ar',
   );

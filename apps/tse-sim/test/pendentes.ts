@@ -4,7 +4,8 @@
  * que ela só encolhe — uma rota implementada some daqui, e nenhuma fixture
  * pode ficar fora das duas listas.
  *
- * Quase tudo aqui tem dono marcado: lead e venda na 039, 2ª via em PDF na 040.
+ * Quase tudo aqui tem dono marcado: a 2ª via em PDF é da 040. O ciclo
+ * comercial (lead, pessoa e venda) saiu daqui na 045.
  * `OperadorSistema/*` e `Relatorios/*` (30 rotas) estão fora de escopo da frente
  * inteira — nenhuma jornada da demo as usa.
  *
@@ -55,14 +56,6 @@ export const PENDENTES: readonly string[] = [
   'contract-usase__getting-total-receivable-by-contract-usage-id',
   'contract-usase__perform-instalments-payment',
   'contract-usase__remove-guest',
-  // Aproach Control (3)
-  'aproach-control__create-lead',
-  'aproach-control__getting-lead',
-  'aproach-control__getting-leads-by-period',
-  // General Registers (1)
-  'general-registers__create-person',
-  // Sales (1)
-  'sales__create-new-sale',
   // Reports (3)
   'reports__get-data-json-report',
   'reports__get-data-json-report-whit-parameters',

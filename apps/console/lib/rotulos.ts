@@ -6,6 +6,7 @@ import type {
   StatusPropostaSdr,
   StatusReserva,
   StatusTicket,
+  StatusVenda,
   TraceEvento,
 } from './console-api';
 
@@ -47,6 +48,17 @@ export const STATUS_RESERVA: Record<StatusReserva, { rotulo: string; papel: Pape
   falha: { rotulo: 'Falha', papel: 'risk' },
   cancelada: { rotulo: 'Cancelada', papel: 'off' },
   recusada: { rotulo: 'Recusada', papel: 'risk' },
+};
+
+/** 045: os seis estados da venda. `sinal_pago` é warn de propósito — é dinheiro
+ * recebido cujo contrato ainda não existe no ERP. */
+export const STATUS_VENDA: Record<StatusVenda, { rotulo: string; papel: Papel }> = {
+  sinal_emitido: { rotulo: 'Aguardando sinal', papel: 'info' },
+  sinal_pago: { rotulo: 'Sinal pago', papel: 'warn' },
+  registrando: { rotulo: 'Registrando', papel: 'info' },
+  registrada: { rotulo: 'Contrato criado', papel: 'ok' },
+  falha: { rotulo: 'Falha', papel: 'risk' },
+  cancelada: { rotulo: 'Cancelada', papel: 'off' },
 };
 
 export const STATUS_LEAD: Record<StatusLead, { rotulo: string; papel: Papel }> = {

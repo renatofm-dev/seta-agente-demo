@@ -5,12 +5,22 @@ export {
   interpretarResposta,
 } from './interpretar.js';
 export { apresentar, iniciar, MAX_NAO_ENTENDI, transicionar } from './maquina.js';
-export { normalizar, numeroPequeno, parsearResposta, valorDoTexto } from './parser.js';
+export {
+  extrairCpf,
+  extrairNome,
+  normalizar,
+  numeroPequeno,
+  parsearResposta,
+  valorDoTexto,
+} from './parser.js';
 export { referenciaProposta } from './referencia.js';
 export {
   descricaoCota,
   formatarReais,
   TEXTO_AGENDAMENTO,
+  TEXTO_AGUARDANDO_SINAL,
+  TEXTO_DADOS,
+  TEXTO_DADOS_INVALIDOS,
   TEXTO_JA_NO_PISO,
   TEXTO_NAO_ENTENDI,
   TEXTO_QUALIFICACAO_PERIODOS,
@@ -24,9 +34,12 @@ export {
   textoLista,
   textoOfertaPiso,
   textoOfertaTabela,
+  textoSinalEmitido,
+  textoVendido,
 } from './render.js';
 export {
   type Acao,
+  type Comprador,
   type ContextoFluxo,
   type CotaDisponivel,
   cotaEscolhida,

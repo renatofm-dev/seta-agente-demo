@@ -95,12 +95,28 @@ export function acaoValida(saida: z.infer<typeof AcaoLlmSchema>, estado: EstadoF
   }
 }
 
+/**
+ * 045: etapas em que o LLM NÃO é consultado, nunca.
+ *
+ * `dados` é onde o comprador manda nome e CPF. Mandar esse texto ao modelo
+ * seria mandar dado pessoal para fora sem necessidade — e aceitar a resposta
+ * dele seria deixar um CPF nascer de uma saída estruturada, que é exatamente o
+ * que a 038 proibiu. O parser determinístico resolve ou re-pergunta.
+ *
+ * `fechamento` está aqui por outro motivo: nada que o lead escreva avança o
+ * fluxo (quem avança é o webhook do PSP), então não há nada a interpretar.
+ */
+const SEM_LLM: readonly EstadoFluxo['etapa'][] = ['dados', 'fechamento'];
+
 export async function interpretarResposta(
   provider: AIProvider,
   estado: EstadoFluxo,
   texto: string,
   opts?: { readonly traceId?: string },
 ): Promise<Interpretacao> {
+  if (SEM_LLM.includes(estado.etapa)) {
+    return { acao: { tipo: 'nao_entendi' }, tokensEntrada: 0, tokensSaida: 0 };
+  }
   try {
     const res = await provider.chat({
       signal: AbortSignal.timeout(TIMEOUT_MS),

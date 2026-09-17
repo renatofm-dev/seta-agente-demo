@@ -43,6 +43,10 @@ interface Contexto {
   readonly idParaConfirmar: number;
   readonly idParaCancelar: number;
   readonly idParaLer: number;
+  /** 045: o ciclo comercial — casal lido de volta, comprador e cota livre. */
+  readonly idCasal: number;
+  readonly idComprador: number;
+  readonly idCotaDisponivel: number;
 }
 
 /** 038: período em mês de tarifa PADRÃO — nada bloqueado no caminho feliz. */
@@ -130,6 +134,65 @@ const CASOS: Readonly<Record<string, Caso>> = {
       DataVencimento: '2026-12-10',
       ValorReceber: 8,
       QuantidadeParcelas: 2,
+    }),
+  },
+  // --- 045: o ciclo comercial ----------------------------------------------
+  'general-registers__create-person': {
+    method: 'POST',
+    path: () => '/api/cadastros/SetPessoa/0',
+    // CPF fictício com DV válido, prefixo 000 como todo CPF do contrato/
+    body: () => ({ RazaoSocial: 'COMPRADOR DA DEMO', CpfCnpj: '00035417544' }),
+  },
+  'aproach-control__create-lead': {
+    method: 'POST',
+    path: () => '/api/recepcaots/setcasal/0',
+    body: () => ({
+      Nome1: 'LEAD DA DEMO',
+      Cpf1: '00013218468',
+      Email: 'integracao@exemplo.com.br',
+      IdOrigemCasal: 1,
+      Agendado: true,
+      DataHoraAgendamento: '2026-09-18T09:15:00Z',
+    }),
+  },
+  'aproach-control__getting-lead': {
+    method: 'GET',
+    path: (ctx) => `/api/recepcaots/GetCasal/${ctx.idCasal}`,
+  },
+  'aproach-control__getting-leads-by-period': {
+    method: 'GET',
+    path: () =>
+      '/api/recepcaots/GetCasaisPorPeriodo?dataInicial=2020-01-01&dataFinal=2099-12-31' +
+      '&idUnidadeNegocio=1&somenteAgendados=false',
+  },
+  'sales__create-new-sale': {
+    method: 'POST',
+    path: () => '/api/vendats/SetVenda/0',
+    body: (ctx) => ({
+      DataCadastro: '2026-09-18',
+      IdCasal: ctx.idCasal,
+      IdComprador1: ctx.idComprador,
+      IdProduto: 111,
+      IdCotaUh: ctx.idCotaDisponivel,
+      ValorNegociado: 23900,
+      // ids do erp_mock (1=BOLETO, 2=PIX; 1=ENTRADA, 2=SALDO) — os do exemplo
+      // do fornecedor são de outra base e não existem aqui
+      ContasFinanceirasAddUpdt: [
+        {
+          IdMeioPagamento: 2,
+          IdTipoOrigemContaFinanceira: 1,
+          DataVencimento: '2026-09-18',
+          ValorReceber: 3000,
+          QuantidadeParcelas: 1,
+        },
+        {
+          IdMeioPagamento: 1,
+          IdTipoOrigemContaFinanceira: 2,
+          DataVencimento: '2026-10-18',
+          ValorReceber: 20900,
+          QuantidadeParcelas: 1,
+        },
+      ],
     }),
   },
   // --- 038: o ciclo da reserva ---------------------------------------------
@@ -285,12 +348,46 @@ beforeAll(async () => {
     });
     return (r.json() as { IdUtilizacaoContrato: number }).IdUtilizacaoContrato;
   };
+  /**
+   * 045: `setcasal` não devolve id — o casal do contexto é criado e LIDO DE
+   * VOLTA por `GetCasaisPorPeriodo`, que é exatamente o que o adapter faz em
+   * produção. Se esta leitura quebrar, o read-back do worker quebra junto.
+   */
+  await app.inject({
+    method: 'POST',
+    url: '/api/recepcaots/setcasal/0',
+    headers: { authorization: bearer },
+    payload: { Nome1: 'CASAL DO CONTEXTO', Cpf1: '00029865310', Agendado: true },
+  });
+  const casais = await app.inject({
+    method: 'GET',
+    url: '/api/recepcaots/GetCasaisPorPeriodo?dataInicial=2020-01-01&dataFinal=2099-12-31',
+    headers: { authorization: bearer },
+  });
+  const listaCasais = casais.json() as { IdItem: number; Cpf1: string }[];
+  const meu = listaCasais.find((c) => c.Cpf1 === '00029865310');
+
+  const comprador = await app.inject({
+    method: 'POST',
+    url: '/api/cadastros/SetPessoa/0',
+    headers: { authorization: bearer },
+    payload: { RazaoSocial: 'COMPRADOR DO CONTEXTO', CpfCnpj: '00052998224' },
+  });
+  const [cotaLivre] = (
+    await admin.query(
+      `SELECT idcotauh FROM cotauh WHERE statuscota = 'DISPONIVEL' ORDER BY idcotauh DESC LIMIT 1`,
+    )
+  ).rows as { idcotauh: number }[];
+
   ctx = {
     cpfTitular: pessoa?.cpf ?? '',
     idParcelaAberta: parcela?.idcontafinanceira ?? 0,
     idParaConfirmar: await criar(),
     idParaCancelar: await criar(),
     idParaLer: await criar(),
+    idCasal: meu?.IdItem ?? 0,
+    idComprador: Number(comprador.json()),
+    idCotaDisponivel: cotaLivre?.idcotauh ?? 0,
   };
 }, 120_000);
 
