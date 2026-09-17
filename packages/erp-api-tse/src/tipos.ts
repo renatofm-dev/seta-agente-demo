@@ -46,6 +46,12 @@ export const RegistrarPagamentoInputSchema = z.object({
 });
 export type RegistrarPagamentoInput = z.input<typeof RegistrarPagamentoInputSchema>;
 
+/** Arquivo vindo do ERP — hoje só o boleto em PDF da 040. */
+export interface DocumentoErp {
+  readonly bytes: Uint8Array;
+  readonly mime: string;
+}
+
 export interface ParcelaErp {
   readonly contaFinanceiraId: string;
   readonly contratoId: string;
@@ -109,6 +115,17 @@ export interface ErpWriter {
    * não no catálogo, porque não faz parte da superfície do agente.
    */
   lerParcela(contaFinanceiraId: string, contratoId: string): Promise<ParcelaErp | null>;
+  // --- 040: a 2ª via de boleto ----------------------------------------------
+  /**
+   * O boleto em PDF. `null` = o ERP não tem arquivo para esta parcela (parcela
+   * sem boleto gerado, ou que não existe) — é resposta, não falha: quem chama
+   * explica ao cotista em vez de tentar de novo. Instabilidade do fornecedor
+   * continua vindo como exceção, que é o que o worker deve re-tentar.
+   *
+   * Devolve BYTES, nunca caminho de arquivo: o PDF é dado pessoal (nome, CPF,
+   * valor) e não é escrito em disco em lugar nenhum desta plataforma.
+   */
+  obterSegundaVia(contaFinanceiraId: string): Promise<DocumentoErp | null>;
   health(): Promise<{ ok: boolean; latencyMs: number }>;
 }
 

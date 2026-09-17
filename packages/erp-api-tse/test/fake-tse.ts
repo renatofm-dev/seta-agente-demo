@@ -30,11 +30,17 @@ export interface FakeTse {
   responder(rota: string, r: { status?: number; body: unknown }): void;
   /** Faz a próxima chamada a essa rota explodir (rede/timeout). */
   derrubar(rota: string, vezes?: number): void;
+  /** 040: resposta BINÁRIA — `SegundaViaBoleto` devolve PDF, não JSON. */
+  responderBytes(
+    rota: string,
+    r: { status?: number; bytes: Uint8Array; contentType?: string },
+  ): void;
 }
 
 export function criarFakeTse(opts: { tokenExpiraEm?: number } = {}): FakeTse {
   const chamadas: Chamada[] = [];
   const respostas = new Map<string, { status: number; body: unknown }>();
+  const binarias = new Map<string, { status: number; bytes: Uint8Array; contentType: string }>();
   const quedas = new Map<string, number>();
   let emitidos = 0;
 
@@ -68,6 +74,14 @@ export function criarFakeTse(opts: { tokenExpiraEm?: number } = {}): FakeTse {
       });
     }
 
+    const bin = binarias.get(rota);
+    if (bin) {
+      return new Response(bin.bytes, {
+        status: bin.status,
+        headers: { 'content-type': bin.contentType },
+      });
+    }
+
     const r = respostas.get(rota);
     if (!r) return new Response('sem stub', { status: 404 });
     return new Response(JSON.stringify(r.body), {
@@ -84,6 +98,13 @@ export function criarFakeTse(opts: { tokenExpiraEm?: number } = {}): FakeTse {
     },
     derrubar(rota, vezes = 1) {
       quedas.set(rota, vezes);
+    },
+    responderBytes(rota, r) {
+      binarias.set(rota, {
+        status: r.status ?? 200,
+        bytes: r.bytes,
+        contentType: r.contentType ?? 'application/pdf',
+      });
     },
   };
 }

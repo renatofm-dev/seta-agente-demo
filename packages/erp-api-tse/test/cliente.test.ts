@@ -123,3 +123,50 @@ describe('lerParcela (read-back)', () => {
     expect(url.searchParams.get('idContrato')).toBe('273');
   });
 });
+
+/**
+ * 040 — a 2ª via em PDF. A fixture do fornecedor guarda a FORMA
+ * (`client-area__second-ticket`: 200, `application/pdf`, 118 KB) e não o
+ * documento: o boleto do exemplo é de gente real e ficou fora do repo (035).
+ * O que se prova aqui é o tratamento dessa forma — inclusive das duas maneiras
+ * de um 200 mentir.
+ */
+describe('obterSegundaVia (040)', () => {
+  const SEGUNDA_VIA = 'GET /api/PainelDoCliente/SegundaViaBoleto/20453';
+  const PDF = new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2d, 0x31, 0x2e, 0x34, 0x0a, 0x25]);
+
+  it('devolve os bytes quando o TSE responde PDF', async () => {
+    const fake = criarFakeTse();
+    fake.responderBytes(SEGUNDA_VIA, { bytes: PDF });
+    const doc = await api(fake).obterSegundaVia('20453');
+    expect(doc?.mime).toBe('application/pdf');
+    expect(Array.from(doc?.bytes ?? [])).toEqual(Array.from(PDF));
+  });
+
+  it('404 vira null — é resposta de negócio, não falha para re-tentar', async () => {
+    const fake = criarFakeTse();
+    // sem stub, o fake responde 404: o mesmo que "não há boleto para a parcela"
+    await expect(api(fake).obterSegundaVia('20453')).resolves.toBeNull();
+  });
+
+  it('200 com corpo que NÃO é PDF vira null — o ASP.NET erra com 200', async () => {
+    const fake = criarFakeTse();
+    fake.responderBytes(SEGUNDA_VIA, {
+      bytes: new TextEncoder().encode('<html>An error has occurred.</html>'),
+      contentType: 'text/html',
+    });
+    await expect(api(fake).obterSegundaVia('20453')).resolves.toBeNull();
+  });
+
+  it('200 vazio vira null — não manda arquivo de 0 byte ao cotista', async () => {
+    const fake = criarFakeTse();
+    fake.responderBytes(SEGUNDA_VIA, { bytes: new Uint8Array() });
+    await expect(api(fake).obterSegundaVia('20453')).resolves.toBeNull();
+  });
+
+  it('indisponibilidade do TSE SOBE — quem re-tenta é o worker, com backoff', async () => {
+    const fake = criarFakeTse();
+    fake.derrubar(SEGUNDA_VIA, 1);
+    await expect(api(fake).obterSegundaVia('20453')).rejects.toThrow(/sem resposta/i);
+  });
+});
