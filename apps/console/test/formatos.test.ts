@@ -30,6 +30,7 @@ function msg(parcial: Partial<MensagemThread> & { id: string }): MensagemThread 
     atendenteId: null,
     atendenteNome: null,
     texto: 'x',
+    anexoNome: null,
     status: 'recebida',
     criadoEm: '2026-09-01T14:00:00',
     ...parcial,
