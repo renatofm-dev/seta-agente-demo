@@ -35,6 +35,8 @@ export type Etapa = (typeof ETAPAS)[number];
 
 export const ENCERRAMENTOS = [
   'agendado',
+  /** 015b: o humano recusou e o lead não quis o piso. */
+  'recusado',
   /** 045: sinal pago e venda registrada no ERP. */
   'vendido',
   'sem_interesse',
@@ -69,6 +71,12 @@ export interface EstadoFluxo {
   readonly encerramento: Encerramento | null;
   /** 045: preenchido em `dados` (lead frio) ou já no início (cotista). */
   readonly comprador: Comprador | null;
+  /**
+   * 015b: valor decidido por um HUMANO — aprovação abaixo do piso ou
+   * contraproposta. Quando presente vence a derivação de `oferta`, que só sabe
+   * falar em tabela e piso e não teria como representar um valor negociado.
+   */
+  readonly valorAcordadoCentavos: number | null;
 }
 
 export type Acao =
@@ -85,6 +93,13 @@ export type Acao =
   /** 045: vem do webhook do PSP, não do lead. */
   | { readonly tipo: 'sinal_pago' }
   | { readonly tipo: 'agendar'; readonly texto: string }
+  /**
+   * 015b: decisões que vêm do CONSOLE, não da conversa. O server as injeta
+   * depois de um humano clicar; o lead nunca as produz.
+   */
+  | { readonly tipo: 'aprovar_humano'; readonly centavos: number }
+  | { readonly tipo: 'recusar_humano' }
+  | { readonly tipo: 'contrapropor_humano'; readonly centavos: number }
   | { readonly tipo: 'cancelar' }
   | { readonly tipo: 'nao_entendi' };
 
@@ -164,9 +179,12 @@ export function cotaEscolhida(
 
 /** Valor da oferta vigente — tabela ou piso — ou null se ainda não há oferta. */
 export function valorOfertadoCentavos(
-  estado: Pick<EstadoFluxo, 'opcoes' | 'escolha' | 'oferta'>,
+  estado: Pick<EstadoFluxo, 'opcoes' | 'escolha' | 'oferta'> &
+    Partial<Pick<EstadoFluxo, 'valorAcordadoCentavos'>>,
   bps: number,
 ): number | null {
+  // 015b: o que um humano decidiu vale mais que a tabela e que o piso
+  if (estado.valorAcordadoCentavos != null) return estado.valorAcordadoCentavos;
   const cota = cotaEscolhida(estado);
   if (!cota || !estado.oferta) return null;
   return estado.oferta === 'tabela'
