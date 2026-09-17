@@ -54,6 +54,7 @@ import {
   type SdrFluxoDeps,
 } from '../sdr/fluxo.js';
 import type { SdrRepo } from '../sdr/repo.js';
+import type { VendaRepo } from '../venda/repo.js';
 import type { TurnoHandler, TurnoPronto } from './debounce.js';
 import { agendarDebounce } from './inbound.js';
 import { enqueueOutbound, enviarJobOutbound, inserirOutbound } from './outbox.js';
@@ -92,6 +93,14 @@ export interface AgentTurnoHandlerDeps {
   readonly sdr?: SdrTurnoDeps;
   /** 038: reserva de utilização; ausente ⇒ o agente não sabe reservar. */
   readonly reserva?: ReservaTurnoDeps;
+  /** 045: presente ⇒ o SDR fecha a venda com sinal por PIX. */
+  readonly venda?: VendaTurnoDeps;
+}
+
+/** 045: o que o fechamento da venda precisa além do que o turno já tem. */
+export interface VendaTurnoDeps {
+  readonly repo: VendaRepo;
+  readonly pspNome: string;
 }
 
 /** 038: o que o fluxo de reserva precisa além do que o turno já tem. */
@@ -378,10 +387,26 @@ async function processarComAgente(
     session,
     textoUsuario: t.textoAgregado,
   };
-  // 015: agente SDR — só na raia SEM vínculo, com o módulo ligado e deps presentes.
-  // As duas raias são disjuntas por construção: o SDR não toca o fluxo do cotista.
+  /**
+   * 015 + 045: o agente SDR.
+   *
+   * A 015 rodava só na raia SEM vínculo. A 045 abre para o cotista também —
+   * quem já tem contrato pode comprar outra cota, e antes disso a conversa
+   * escalava para o comercial. O que muda por raia é só QUEM é o comprador:
+   *
+   *  - sem vínculo: lead frio, o CPF é pedido na etapa `dados`;
+   *  - com vínculo: nome e CPF vêm de `contato` e a etapa `dados` é pulada —
+   *    o CPF do cotista não volta a trafegar pela conversa.
+   *
+   * Sem `deps.venda` o fluxo não fecha venda nenhuma: o aceite continua caindo
+   * em `agendamento`, que é o comportamento da 015a.
+   */
+  const compradorConhecido =
+    clienteId !== '' && vinculo?.documento
+      ? { nome: vinculo.nome ?? 'Cotista', cpf: vinculo.documento }
+      : null;
   const sdrDeps: SdrFluxoDeps | null =
-    deps.clientConfig.modulos.sdr && deps.sdr && clienteId === ''
+    deps.clientConfig.modulos.sdr && deps.sdr
       ? {
           db: deps.db,
           executor: deps.executor,
@@ -389,6 +414,14 @@ async function processarComAgente(
           provider: deps.provider,
           env: deps.sdr.env,
           logger: deps.logger,
+          venda: deps.venda
+            ? {
+                repo: deps.venda.repo,
+                boss: deps.boss,
+                pspNome: deps.venda.pspNome,
+                compradorConhecido,
+              }
+            : null,
         }
       : null;
   /**
@@ -466,7 +499,20 @@ async function processarComAgente(
       personaExtra = NOTA_FLUXO_ABANDONADO;
     }
   }
-  // 015: fluxo SDR ativo consome o turno do lead (mesma forma da cobrança)
+  /**
+   * 015: fluxo SDR ativo consome o turno (mesma forma da cobrança).
+   *
+   * 045: com a raia do cotista aberta, TRÊS fluxos passam a dividir a mesma
+   * raia. A precedência é a ordem destes blocos e é deliberada:
+   *
+   *   pagamento → reserva → venda
+   *
+   * Dinheiro que o cliente JÁ DEVE fala primeiro; depois o uso do que ele já
+   * comprou; por último a compra nova. Um cotista no meio de uma compra que
+   * peça para pagar uma parcela é atendido pelo fluxo de venda até sair dele —
+   * na etapa `fechamento` isso é de propósito, porque há uma cobrança emitida
+   * esperando pagamento e trocar de assunto perderia o contexto dela.
+   */
   if (sdrDeps) {
     const ativo = await sdrDeps.repo.fluxoAtivo(t.conversaId);
     if (ativo) {
@@ -553,8 +599,8 @@ async function processarComAgente(
     }
     // sem os dois (módulo desligado) o agente geral responde este turno
   }
-  // 015: interesse de compra SEM vínculo inicia o SDR em vez de escalar; com
-  // vínculo (cotista querendo outra cota) segue escalando `interesse_compra`
+  // 015/045: interesse de compra inicia o SDR nas DUAS raias. Antes da 045, o
+  // cotista com vínculo escalava para o comercial aqui.
   if (intencao === 'comprar_cota' && sdrDeps) {
     const r = await iniciarFluxoSdr(sdrDeps, ctxSdr);
     await enviarVarias(r.mensagens);

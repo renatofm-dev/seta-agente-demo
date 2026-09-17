@@ -23,6 +23,7 @@ import { webhookPspRoutes } from './pagamentos/webhook-routes.js';
 import { relatoriosRoutes } from './relatorios-routes.js';
 import { reservasRoutes } from './reserva/reservas-routes.js';
 import { leadsRoutes } from './sdr/leads-routes.js';
+import { vendasRoutes } from './venda/vendas-routes.js';
 import { devRoutes } from './wa/dev-routes.js';
 import { waRoutes } from './wa/routes.js';
 
@@ -162,6 +163,7 @@ export function buildApp({
       // Reservas (038): listagem e a aprovação da taxa de manutenção
       if (clientConfig.modulos.reserva) {
         app.register(reservasRoutes, { db: wa.db, boss: wa.boss, auth: consoleDeps.auth });
+        app.register(vendasRoutes, { db: wa.db, auth: consoleDeps.auth }); // 045
       }
       if (consoleDeps.registry) {
         app.register(aprendizadoRoutes, {

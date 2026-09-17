@@ -119,6 +119,25 @@ export const EnvSchemaBase = z.object({
    * valor de tabela da cota — política nossa, o ERP só conhece o preço cheio.
    */
   SDR_DESCONTO_MAX_BPS: z.coerce.number().int().min(0).max(10_000).default(300),
+  /**
+   * 045 — venda de ponta a ponta.
+   *
+   * `VENDA_SINAL_CENTAVOS`: o sinal que o PIX cobra. Fixo (e não percentual)
+   * porque é assim que a operação fala com o comprador — "dois mil de sinal" —
+   * e porque um percentual de cota cairia num valor que ninguém paga por PIX.
+   *
+   * `VENDA_ID_PRODUTO`: `SetVenda` exige `IdProduto`, e o espelho do ERP não
+   * modela produto (a 012 levantou as 36 tabelas e ele não está lá). 111 é o
+   * `INFINITY 900` do `Lookup/Produtos` do fornecedor. QUAL produto corresponde
+   * a cada tier de cota é pergunta aberta ao cliente — registrada no PR.
+   *
+   * `VENDA_MEIO_PAGAMENTO_*`: ids de `meiopagamento` no espelho (1 = BOLETO,
+   * 2 = PIX). O sinal entra como PIX porque foi PIX; o saldo, como boleto.
+   */
+  VENDA_SINAL_CENTAVOS: z.coerce.number().int().min(100).default(200_000),
+  VENDA_ID_PRODUTO: z.coerce.number().int().positive().default(111),
+  VENDA_MEIO_PAGAMENTO_SINAL: z.coerce.number().int().positive().default(2),
+  VENDA_MEIO_PAGAMENTO_SALDO: z.coerce.number().int().positive().default(1),
   SDR_FLUXO_EXPIRA_MIN: z.coerce.number().int().min(1).default(60),
   SDR_MAX_PROPOSTAS_DIA: z.coerce.number().int().min(1).default(3),
   /**

@@ -273,6 +273,16 @@ export const cobranca = pgTable(
     linhaDigitavel: text('linha_digitavel'),
     pixCopiaCola: text('pix_copia_cola'),
     pixExpiraEm: text('pix_expira_em'),
+    /**
+     * 045: de onde veio a cobrança. `contrato` é a 014 (parcela de quem já é
+     * cotista); `venda` é o sinal de uma compra — nesse caso ainda NÃO existe
+     * contrato, e `contrato_id` carrega `lead:{id}` só para chavear o cliente
+     * no PSP (ver a decisão registrada no PR).
+     */
+    origem: text('origem', { enum: ['contrato', 'venda'] })
+      .notNull()
+      .default('contrato'),
+    propostaId: uuid('proposta_id'),
     /** Motivo de bloqueio, falha ou recusa (humano-legível). */
     motivo: text('motivo'),
     aprovadoPor: text('aprovado_por'),
@@ -366,9 +376,24 @@ export const fluxoSdr = pgTable(
       .notNull()
       .references(() => lead.id),
     etapa: text('etapa', {
-      enum: ['qualificacao', 'apresentacao', 'oferta', 'agendamento', 'encerrado'],
+      // 045: `dados` e `fechamento` entram entre a oferta e o agendamento
+      enum: [
+        'qualificacao',
+        'apresentacao',
+        'oferta',
+        'dados',
+        'fechamento',
+        'agendamento',
+        'encerrado',
+      ],
     }).notNull(),
     encerramento: text('encerramento'),
+    /**
+     * 045: `{ nome, cpf }` do comprador. Preenchido na etapa `dados` (lead
+     * frio) ou já no aceite (cotista, do cadastro). É dado pessoal: só existe
+     * aqui porque o ERP exige CPF para criar pessoa, casal e venda.
+     */
+    comprador: jsonb('comprador'),
     perfil: jsonb('perfil').notNull().default({}),
     opcoes: jsonb('opcoes').notNull().default([]),
     escolha: integer('escolha'),
@@ -384,6 +409,17 @@ export const fluxoSdr = pgTable(
     uniqueIndex('fluxo_sdr_ativo_uq').on(t.conversaId).where(sql`etapa <> 'encerrado'`),
   ],
 );
+
+/** 045: estados da venda, do sinal emitido ao contrato criado no ERP. */
+export const STATUS_VENDA = [
+  'sinal_emitido',
+  'sinal_pago',
+  'registrando',
+  'registrada',
+  'falha',
+  'cancelada',
+] as const;
+export type StatusVenda = (typeof STATUS_VENDA)[number];
 
 /**
  * Proposta feita ao lead — gravada ANTES de ser enviada. É a trilha de
@@ -923,5 +959,50 @@ export const reserva = pgTable(
       .where(sql`status IN ('aguardando_aprovacao','criando','criada','confirmada')`),
     index('reserva_conversa_idx').on(t.conversaId, t.criadoEm),
     index('reserva_status_idx').on(t.status),
+  ],
+);
+
+/**
+ * 045: a venda — do sinal emitido ao contrato no ERP.
+ *
+ * Existe separada de `proposta_sdr` porque a proposta é da CONVERSA (o que foi
+ * ofertado e a quem) e a venda é do DINHEIRO e da escrita (o sinal, o contrato
+ * criado, as tentativas). Reprocessar o job nunca cria uma segunda: `erp_escrita`
+ * guarda a chave, e `erp_contrato_id` é preenchido uma vez só.
+ */
+export const venda = pgTable(
+  'venda',
+  {
+    id: uuid('id').primaryKey(),
+    conversaId: uuid('conversa_id')
+      .notNull()
+      .references(() => conversa.id),
+    leadId: uuid('lead_id').references(() => lead.id),
+    propostaId: uuid('proposta_id').references(() => propostaSdr.id),
+    /** Cobrança do sinal (014/042/043) — o PIX que o comprador recebe. */
+    cobrancaId: uuid('cobranca_id').references(() => cobranca.id),
+    status: text('status', { enum: STATUS_VENDA }).notNull(),
+    /** Comprador: `{ nome, cpf }`. O CPF vem do parser ou do cadastro. */
+    comprador: jsonb('comprador').notNull(),
+    cotaId: text('cota_id').notNull(),
+    cotaCodigo: text('cota_codigo').notNull(),
+    idProduto: integer('id_produto').notNull(),
+    valorCentavos: integer('valor_centavos').notNull(),
+    sinalCentavos: integer('sinal_centavos').notNull(),
+    /** Ids que a escrita no ERP produz, na ordem em que nascem. */
+    erpPessoaId: text('erp_pessoa_id'),
+    erpCasalId: text('erp_casal_id'),
+    erpContratoId: text('erp_contrato_id'),
+    motivo: text('motivo'),
+    criadoEm: timestamp('criado_em', { withTimezone: true }).notNull().defaultNow(),
+    atualizadoEm: timestamp('atualizado_em', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    /** Uma venda viva por cota: duas conversas não vendem a mesma unidade. */
+    uniqueIndex('venda_cota_uq')
+      .on(t.cotaId)
+      .where(sql`status IN ('sinal_emitido','sinal_pago','registrando','registrada')`),
+    index('venda_conversa_idx').on(t.conversaId, t.criadoEm),
+    index('venda_status_idx').on(t.status),
   ],
 );

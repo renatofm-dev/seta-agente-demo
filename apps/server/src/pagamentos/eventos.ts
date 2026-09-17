@@ -5,11 +5,20 @@ import { and, eq, isNull } from 'drizzle-orm';
 import type { PgBoss } from 'pg-boss';
 import type { Logger } from 'pino';
 import { z } from 'zod';
-import { FILA_COBRANCA_EVENTO } from '../boss.js';
+import { FILA_COBRANCA_EVENTO, FILA_ERP_VENDA } from '../boss.js';
 import type { Db } from '../db/index.js';
-import { cobranca, conversa, eventoPsp, mensagem, pagamento } from '../db/schema.js';
+import {
+  cobranca,
+  conversa,
+  erpEscrita,
+  eventoPsp,
+  mensagem,
+  pagamento,
+  venda,
+} from '../db/schema.js';
 import type { Env } from '../env.js';
 import { enfileirarBaixas, registrarBaixasPendentes } from '../erp/baixa.js';
+import { chaveVenda } from '../venda/chave.js';
 import { enqueueOutbound } from '../wa/outbox.js';
 import type { CobrancaRow, CobrancaTituloRow, PagamentosRepo } from './repo.js';
 
@@ -197,8 +206,20 @@ async function marcarPaga(
     );
     return;
   }
-  const titulos = await deps.repo.titulosDe(c.id);
   const recebidoEm = paymentDate ? new Date(`${paymentDate.slice(0, 10)}T12:00:00`) : new Date();
+
+  /**
+   * 045: sinal de VENDA. Caminho próprio e curto — não há títulos para baixar
+   * (o contrato ainda não existe: é este pagamento que o cria). A venda vai
+   * para `sinal_pago` e a escrita no ERP nasce PENDENTE na mesma transação,
+   * exatamente como a baixa da 036 faz. O job só sai depois do commit.
+   */
+  if (c.origem === 'venda') {
+    await marcarSinalPago(deps, c, recebidoEm);
+    return;
+  }
+
+  const titulos = await deps.repo.titulosDe(c.id);
   // 036: a baixa no ERP nasce na MESMA transação do `pagamento` — as duas
   // existem juntas ou não existem. O job só é enfileirado depois do commit, e
   // só para as linhas que realmente entraram (o webhook do Asaas reentrega).
@@ -305,4 +326,44 @@ async function notificarPago(
   } catch (err) {
     deps.logger.warn({ err, cobrancaId: c.id }, 'aviso de pagamento confirmado falhou');
   }
+}
+
+/**
+ * 045 — o sinal caiu. Três efeitos, numa transação só: a cobrança vira `paga`,
+ * a venda vira `sinal_pago` e `erp_escrita` ganha a linha pendente que autoriza
+ * o worker a escrever no ERP. Sem essa linha, `processarVenda` não faz nada —
+ * é a mesma guarda da baixa (036) e da reserva (038).
+ */
+async function marcarSinalPago(deps: EventosDeps, c: CobrancaRow, recebidoEm: Date): Promise<void> {
+  const [v] = await deps.db.select().from(venda).where(eq(venda.cobrancaId, c.id));
+  if (!v) {
+    deps.logger.error({ cobrancaId: c.id }, 'sinal pago sem venda correspondente');
+    return;
+  }
+  let enfileirar = false;
+  await deps.db.transaction(async (tx) => {
+    await tx
+      .update(cobranca)
+      .set({ status: 'paga', pagoEm: recebidoEm, atualizadoEm: new Date() })
+      .where(eq(cobranca.id, c.id));
+    await tx
+      .update(venda)
+      .set({ status: 'sinal_pago', atualizadoEm: new Date() })
+      .where(and(eq(venda.id, v.id), eq(venda.status, 'sinal_emitido')));
+    const [linha] = await tx
+      .insert(erpEscrita)
+      .values({
+        chave: chaveVenda(v.id),
+        operacao: 'venda',
+        // o alvo é a COTA: é o que um humano procura no ERP quando algo falha
+        alvo: v.cotaId,
+        payload: { vendaId: v.id, cotaCodigo: v.cotaCodigo, sinalCentavos: v.sinalCentavos },
+      })
+      // reentrega do webhook não cria segunda escrita nem re-enfileira o job
+      .onConflictDoNothing({ target: erpEscrita.chave })
+      .returning({ chave: erpEscrita.chave });
+    enfileirar = linha !== undefined;
+  });
+  if (enfileirar) await deps.boss.send(FILA_ERP_VENDA, { vendaId: v.id });
+  deps.logger.info({ vendaId: v.id, enfileirar }, '045: sinal pago — venda a caminho do ERP');
 }

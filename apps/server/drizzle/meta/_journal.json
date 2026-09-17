@@ -141,6 +141,13 @@
       "when": 1789577742808,
       "tag": "0019_reserva",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1789652082246,
+      "tag": "0020_venda",
+      "breakpoints": true
     }
   ]
 }
