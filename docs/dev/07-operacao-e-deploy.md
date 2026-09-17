@@ -19,14 +19,25 @@ free em repo privado), então a disciplina é do fluxo de PR.
 - Dispara **depois** do workflow `ci` terminar com sucesso no `main` (`workflow_run`), no SHA
   que o CI validou — push com teste quebrado não gera imagem (P-30). `workflow_dispatch`
   republica um SHA à mão.
-- Duas imagens no GHCR: `ghcr.io/<owner>/seta-agente-server` e `…-console`, com as tags
-  `latest` e `<sha>`. Numeração de versão (`vX.Y.Z`) chega com a spec 021.
+- **Três** imagens no GHCR, todas privadas: `ghcr.io/renatofm-dev/seta-agente-demo-server`,
+  `…-console` e `…-tse-sim` (035), com as tags `latest` e `<sha>`. Numeração de versão
+  (`vX.Y.Z`) chega com a spec 021.
 - `infra/docker/server.Dockerfile`: build com `tsc -b`, runtime só com deps de produção,
   **baixa o modelo NER na build** (o container sobe sem rede para o Hugging Face).
 - `infra/docker/console.Dockerfile`: `next build` standalone; `SERVER_INTERNAL_URL` é lido
   no build (os rewrites são fixados na imagem).
 
-## Homelab (`seta.outerlab.com.br`)
+## Onde a demo roda: VPS da SETA com Coolify (`demo.setaia.com.br`)
+
+O deploy da demo **não é o do homelab**. A VPS da SETA roda **Coolify + Traefik**, e lá a
+aplicação é criada como *Docker Compose* apontando para `infra/compose.coolify.yml` — sem
+portas publicadas (quem roteia é o Traefik), sem `.env.prod` no disco (as variáveis vivem na
+UI) e com a **migração no start do server**, porque não há `deploy.sh` para rodá-la.
+
+Dois domínios: `demo.setaia.com.br` → console, `api.demo.setaia.com.br` → server (só os
+webhooks da Meta e do Asaas). O passo a passo é [`deploy-vps-coolify.md`](../deploy-vps-coolify.md).
+
+## Homelab (`seta.outerlab.com.br`) — o outro caminho
 
 Preparação única em [`deploy-homelab.md`](../deploy-homelab.md): swap, clone raso (só
 `infra/` e `docs/`), login no GHCR com PAT `read:packages`, Caddy do host com o site block

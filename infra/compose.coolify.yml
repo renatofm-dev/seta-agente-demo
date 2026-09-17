@@ -1,0 +1,161 @@
+# Produção na VPS da SETA (162.55.51.98) — **Coolify + Traefik**, demo.setaia.com.br.
+# Ver docs/deploy-vps-coolify.md. Para o homelab (Caddy do host), use compose.prod.yml.
+#
+# Três diferenças em relação ao compose.prod.yml, e todas têm a mesma causa —
+# aqui quem roteia é o Traefik do Coolify, não um Caddy do host:
+#
+#   1. NENHUM serviço publica porta. O Traefik alcança os containers pela rede do
+#      Docker; publicar em 127.0.0.1 só funcionaria com proxy rodando no host.
+#   2. Nada de `env_file`. As variáveis vêm da UI do Coolify, que as injeta.
+#   3. O server MIGRA no start. No homelab quem migra é o infra/deploy.sh, que
+#      aqui não existe: o Coolify sobe o compose sozinho.
+#
+# O serviço do console PRECISA continuar se chamando `server`: o rewrite do Next
+# é resolvido no BUILD (infra/docker/console.Dockerfile fixa
+# SERVER_INTERNAL_URL=http://server:3001), então o nome é contrato de build, não
+# de runtime — renomear aqui quebra /api/* sem erro visível.
+
+name: seta-agente
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: '10m'
+    max-file: '3'
+
+services:
+  db:
+    image: pgvector/pgvector:pg17
+    restart: unless-stopped
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?defina nas variáveis do Coolify}
+      # P-29: senhas dos papéis do produto (o init as usa no 1º boot do volume;
+      # em volume já existente, rotacionar com ALTER USER)
+      APP_OWNER_PASSWORD: ${APP_OWNER_PASSWORD:?defina nas variáveis do Coolify}
+      ERP_RO_PASSWORD: ${ERP_RO_PASSWORD:?defina nas variáveis do Coolify}
+    volumes:
+      - seta_pg_prod:/var/lib/postgresql/data
+      # cria bancos app + erp_mock, usuários e extensão pgvector no 1º boot.
+      # Caminho relativo a infra/ — depende do checkout que o Coolify faz do repo.
+      - ./postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    logging: *logging
+
+  server:
+    image: ghcr.io/renatofm-dev/seta-agente-demo-server:${TAG:-latest}
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      tse-sim:
+        condition: service_started
+    # MIGRA e só então sobe. Uma réplica, então não há corrida; e `migrate.js` é
+    # idempotente (drizzle pula o que já aplicou).
+    command: sh -c "node apps/server/dist/migrate.js && node apps/server/dist/index.js"
+    environment:
+      NODE_ENV: production
+      NODE_OPTIONS: --max-old-space-size=512
+      PORT: '3001'
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      # P-29: nenhuma senha literal aqui — o server recusa senha de dev em produção
+      DATABASE_URL: postgres://app_owner:${APP_OWNER_PASSWORD}@db:5432/app
+      ERP_DATABASE_URL: postgres://erp_ro:${ERP_RO_PASSWORD}@db:5432/erp_mock
+      ERP_MOCK_ADMIN_URL: postgres://postgres:${POSTGRES_PASSWORD}@db:5432/erp_mock
+      TSE_SIM_DB_PASSWORD: ${TSE_SIM_DB_PASSWORD:?defina nas variáveis do Coolify}
+      # paths absolutos dentro da imagem
+      CLIENT_CONFIG_PATH: /app/configs/demo/client.yaml
+      CONTATOS_PATH: /app/configs/demo/contatos.yaml
+      CATALOG_DIR: /app/catalog
+      SKILLS_SEED_DIR: /app/skills-seed
+      KB_DIR: /app/kb
+      # a URL PÚBLICA do console: é ela que o Better Auth usa como baseURL, e o
+      # cookie de sessão nasce para este host
+      BETTER_AUTH_URL: ${BETTER_AUTH_URL:?a URL pública do console, ex https://demo.setaia.com.br}
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?defina nas variáveis do Coolify}
+      # WhatsApp (Meta Cloud API) — docs/meta-setup.md
+      WA_VERIFY_TOKEN: ${WA_VERIFY_TOKEN:?defina nas variáveis do Coolify}
+      WA_APP_SECRET: ${WA_APP_SECRET:?defina nas variáveis do Coolify}
+      WA_ACCESS_TOKEN: ${WA_ACCESS_TOKEN:-}
+      WA_PHONE_NUMBER_ID: ${WA_PHONE_NUMBER_ID:-}
+      WA_WABA_ID: ${WA_WABA_ID:-}
+      WA_TEMPLATE_COBRANCA_PIX: ${WA_TEMPLATE_COBRANCA_PIX:-}
+      WA_TEMPLATE_COBRANCA_BOLETO: ${WA_TEMPLATE_COBRANCA_BOLETO:-}
+      WA_TEMPLATE_COBRANCA_CARTAO: ${WA_TEMPLATE_COBRANCA_CARTAO:-}
+      WA_TEMPLATE_BOLETO_SEGUNDA_VIA: ${WA_TEMPLATE_BOLETO_SEGUNDA_VIA:-}
+      WA_TEMPLATE_PAGAMENTO_CONFIRMADO: ${WA_TEMPLATE_PAGAMENTO_CONFIRMADO:-}
+      # LLM (endpoint OpenAI-compatible)
+      LLM_BASE_URL: ${LLM_BASE_URL:-}
+      LLM_API_KEY: ${LLM_API_KEY:-}
+      LLM_MODEL: ${LLM_MODEL:-}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-}
+      EMBEDDING_DIM: ${EMBEDDING_DIM:-1536}
+      LLM_PRECO_IN_POR_1M: ${LLM_PRECO_IN_POR_1M:-0}
+      LLM_PRECO_OUT_POR_1M: ${LLM_PRECO_OUT_POR_1M:-0}
+      # Pagamentos (Asaas) — a base URL decide sandbox × produção
+      ASAAS_BASE_URL: ${ASAAS_BASE_URL:-https://api-sandbox.asaas.com/v3}
+      ASAAS_API_KEY: ${ASAAS_API_KEY:-}
+      ASAAS_WEBHOOK_TOKEN: ${ASAAS_WEBHOOK_TOKEN:-}
+      # 036/038: escrita no ERP pela API do simulador da 035, na rede interna.
+      # Na 041 o TSE_BASE_URL passa a apontar para o TSE real.
+      TSE_BASE_URL: http://tse-sim:3010
+      TSE_USERNAME: ${TSE_USERNAME:?defina nas variáveis do Coolify}
+      TSE_PASSWORD: ${TSE_PASSWORD:?defina nas variáveis do Coolify}
+      TSE_RESERVA_USERNAME: ${TSE_RESERVA_USERNAME:-}
+      TSE_RESERVA_PASSWORD: ${TSE_RESERVA_PASSWORD:-}
+      ERP_CONCILIACAO: ${ERP_CONCILIACAO:-auto}
+      RESERVA_TETO_TAXA_SEM_HITL_CENTAVOS: ${RESERVA_TETO_TAXA_SEM_HITL_CENTAVOS:-100000}
+      # simulador de WhatsApp do console (plano B da demo) — exige login em produção
+      DEV_SIMULATOR: ${DEV_SIMULATOR:-false}
+    expose:
+      - '3001'
+    logging: *logging
+
+  # 035: dublê da API do TS Explorer. Sem domínio no Coolify e sem porta: só a
+  # rede interna. O server o alcança em http://tse-sim:3010 e a internet não o
+  # alcança de jeito nenhum — dar um FQDN a este serviço seria o erro a evitar.
+  tse-sim:
+    image: ghcr.io/renatofm-dev/seta-agente-demo-tse-sim:${TAG:-latest}
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      NODE_OPTIONS: --max-old-space-size=256
+      TSE_SIM_PORT: '3010'
+      TSE_SIM_DATABASE_URL: postgres://tse_sim:${TSE_SIM_DB_PASSWORD:?defina nas variáveis do Coolify}@db:5432/erp_mock
+      TSE_SIM_USERS: ${TSE_SIM_USERS:?defina nas variáveis do Coolify}
+      TSE_SIM_PAINEL_ESCOPO: ${TSE_SIM_PAINEL_ESCOPO:-qualquer}
+    # a imagem é node:24-slim, sem curl — o healthcheck usa o próprio node
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          'fetch("http://localhost:3010/healthz").then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))',
+        ]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+    logging: *logging
+
+  console:
+    image: ghcr.io/renatofm-dev/seta-agente-demo-console:${TAG:-latest}
+    restart: unless-stopped
+    depends_on:
+      - server
+    environment:
+      NODE_OPTIONS: --max-old-space-size=512
+      # decorativo: o valor real está congelado na imagem (ver o cabeçalho)
+      SERVER_INTERNAL_URL: http://server:3001
+    expose:
+      - '3000'
+    logging: *logging
+
+volumes:
+  seta_pg_prod:

@@ -1,4 +1,7 @@
-# Site block da POC (011) — incluir no Caddyfile do host:
+# Site block do caminho HOMELAB (011) — incluir no Caddyfile do host.
+# Não vale para a VPS da SETA, onde quem roteia é o Traefik do Coolify e os
+# labels são gerados pela plataforma (ver docs/deploy-vps-coolify.md).
+# Incluir no Caddyfile do host:
 #   import /caminho/para/seta-agente/infra/caddy/seta.outerlab.com.br.caddy
 # TLS automático via Cloudflare (proxy laranja ligado funciona para o webhook Meta).
 

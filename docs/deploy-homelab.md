@@ -1,5 +1,10 @@
 # Deploy no homelab (011) — seta.outerlab.com.br
 
+> **Este NÃO é o caminho da demo.** A demo vai para a VPS da SETA, que roda Coolify + Traefik —
+> ver [deploy-vps-coolify.md](deploy-vps-coolify.md). Este documento descreve o deploy em **máquina
+> dedicada com Caddy do host** (spec 011), que continua válido e é o que o
+> `infra/compose.prod.yml`, o `infra/deploy.sh` e o `infra/caddy/` implementam.
+
 CX23 (2 vCPU / 4 GB / Ubuntu 24.04), Docker Compose + Caddy do host, wildcard
 `*.outerlab.com.br` no Cloudflare (proxy laranja LIGADO funciona para o webhook Meta).
 **A VPS nunca builda** — o CI (`.github/workflows/release.yml`) publica as imagens no

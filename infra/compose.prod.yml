@@ -1,4 +1,6 @@
-# Produção homelab (011) — CX23, Caddy do host faz TLS/proxy.
+# Produção HOMELAB (011) — CX23, Caddy do host faz TLS/proxy.
+# A DEMO não vai por aqui: ela roda na VPS da SETA com Coolify + Traefik, e o
+# compose de lá é o infra/compose.coolify.yml (ver docs/deploy-vps-coolify.md).
 # Uso: docker compose -f infra/compose.prod.yml --env-file .env.prod ...
 # Imagens vêm do GHCR (CI builda; a VPS só faz pull) — ver docs/deploy-homelab.md.
 
