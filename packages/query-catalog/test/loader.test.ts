@@ -6,7 +6,7 @@ const CATALOG_REAL = join(import.meta.dirname, '../../../catalog');
 const FIXTURES_INVALIDAS = join(import.meta.dirname, 'fixtures-invalidas');
 
 describe('loader do catálogo', () => {
-  it('carrega o catálogo real do repo: 8 entradas da 012 + 1 interna da 014 + 2 comerciais da 015', () => {
+  it('carrega o catálogo real do repo: 8 da 012 + 1 interna da 014 + 2 comerciais da 015 + 1 da 040', () => {
     const catalog = loadCatalog(CATALOG_REAL);
     const ids = catalog
       .list()
@@ -19,6 +19,7 @@ describe('loader do catálogo', () => {
       'contrato.meu_produto',
       'contrato.minha_cota',
       'contrato.status_cancelamento',
+      'financeiro.boleto_da_parcela',
       'financeiro.proxima_parcela',
       'financeiro.proximas_parcelas',
       'financeiro.saldo_contrato',
@@ -33,8 +34,12 @@ describe('loader do catálogo', () => {
       } else {
         expect(entry.params.contrato_id?.source).toBe('session');
       }
-      // 014: proximas_parcelas é uso interno (fluxo/conciliação), não vira tool do modelo
-      expect(entry.tool.expose).toBe(entry.id !== 'financeiro.proximas_parcelas');
+      // Duas entradas NÃO viram tool do modelo: `proximas_parcelas` é uso interno
+      // do fluxo/conciliação (014) e `boleto_da_parcela` é a VERIFICAÇÃO que o
+      // servidor faz antes de buscar o PDF (040) — o agente chama
+      // `enviar_segunda_via`, não esta.
+      const internas = ['financeiro.proximas_parcelas', 'financeiro.boleto_da_parcela'];
+      expect(entry.tool.expose).toBe(!internas.includes(entry.id));
       // 015: condicoes_cota é a primeira price_source — a alçada do SDR emerge dela
       expect(entry.price_source).toBe(entry.id === 'comercial.condicoes_cota');
     }
