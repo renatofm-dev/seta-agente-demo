@@ -531,6 +531,28 @@ async function processarComAgente(
     await enviarVarias(r.mensagens);
     return resultadoDoFluxo(r);
   }
+  /**
+   * 038: "quero reservar" inicia o fluxo de reserva. Sem este ramo o
+   * classificador não tinha categoria para reserva e a frase mais natural do
+   * cotista ("gostaria de realizar uma reserva") caía em `comprar_cota` — o
+   * turno escalava para o comercial e o fluxo da 038 nunca começava.
+   *
+   * Sem vínculo não existe contrato para usar: ali a mesma frase é interesse
+   * comercial e segue para o SDR. A raia resolve a ambiguidade de "reservar".
+   */
+  if (intencao === 'reservar') {
+    if (reservaDeps) {
+      const r = await iniciarFluxoReserva(reservaDeps, ctxFluxo);
+      await enviarVarias(r.mensagens);
+      return resultadoDoFluxoReserva(r);
+    }
+    if (sdrDeps) {
+      const r = await iniciarFluxoSdr(sdrDeps, ctxSdr);
+      await enviarVarias(r.mensagens);
+      return resultadoDoFluxo(r);
+    }
+    // sem os dois (módulo desligado) o agente geral responde este turno
+  }
   // 015: interesse de compra SEM vínculo inicia o SDR em vez de escalar; com
   // vínculo (cotista querendo outra cota) segue escalando `interesse_compra`
   if (intencao === 'comprar_cota' && sdrDeps) {
