@@ -1,6 +1,7 @@
 import type { FastifyInstance, FastifyPluginOptions } from 'fastify';
 import { z } from 'zod';
 import type { Autenticador, Sessao } from '../auth.js';
+import { boletoPdf } from '../boleto-pdf.js';
 import type { Consulta } from '../db.js';
 import { agoraTse, dataTse, decimal, diasEntre, hojeTse, instanteTse } from '../pascal.js';
 import { exigirBearer } from '../plugin-bearer.js';
@@ -14,6 +15,14 @@ import { exigirBearer } from '../plugin-bearer.js';
  * não consegue ler o financeiro de ninguém — e a 037 morre. Enquanto o
  * fornecedor não responde, `TSE_SIM_PAINEL_ESCOPO` exercita os dois mundos.
  */
+
+/**
+ * Cedente do boleto. O `erp_mock` não tem tabela de empresa — no TSE real esse
+ * dado é do cadastro do fornecedor, não do cotista —, então o dublê usa um nome
+ * fixo e declaradamente fictício. Trocar por um resort de verdade seria colocar
+ * no PDF exatamente o tipo de dado que a 035 decidiu manter fora do repo.
+ */
+const CEDENTE = 'RESORT DEMONSTRACAO MULTIPROPRIEDADE LTDA';
 
 /** O TSE pagina de 10 em 10 (deduzido do exemplo: 4 páginas sobre 10 itens). */
 const POR_PAGINA = 10;
@@ -329,6 +338,64 @@ export function painelDoClienteRoutes(
     );
     return paginar(parcelas, paginaAtual);
   });
+
+  /**
+   * 040 — a 2ª via em PDF. A coleção do fornecedor prova a FORMA (200 com
+   * `application/pdf`, 118 KB), e é só isso que a fixture guarda: o boleto do
+   * exemplo é de gente real e não entra no repo (035). O dublê gera o seu a
+   * partir do `erp_mock`, marcado como simulado no próprio papel.
+   *
+   * **Divergência consciente**: a coleção não tem exemplo de erro aqui. Parcela
+   * inexistente, fora do escopo do token ou SEM boleto gerado respondem 404 no
+   * envelope do ASP.NET. É a resposta honesta para um dublê que não sabe o que
+   * o fornecedor faz — e o consumidor (040) nunca chega neste caminho pelo
+   * caminho feliz, porque checa `linha_digitavel` antes de pedir o arquivo.
+   */
+  app.get<{ Params: { idContaFinanceira: string } }>(
+    '/api/PainelDoCliente/SegundaViaBoleto/:idContaFinanceira',
+    async (req, reply) => {
+      const id = z.coerce.number().int().positive().parse(req.params.idContaFinanceira);
+      const [linha] = await opts.db.buscar<{
+        idcontrato: number;
+        numeroparcela: number;
+        qtdparcelas: number;
+        valorreceber: string;
+        linhadigitavel: string | null;
+        vencimento: string;
+        sacado: string;
+        cpf: string;
+      }>(
+        `SELECT cf.idcontrato, cf.numeroparcela, cf.qtdparcelas, cf.valorreceber,
+                cf.linhadigitavel, p.nome AS sacado, p.cpf,
+                to_char(coalesce(cf.datavencimentorecorrencia, cf.datavencimento),
+                        'YYYY-MM-DD') AS vencimento
+           FROM contafinanceira cf
+           JOIN contrato c ON c.idcontrato = cf.idcontrato
+           JOIN pessoa p   ON p.idpessoa = c.idpessoatitular
+          WHERE cf.idcontafinanceira = :id AND cf.tipohistorico = 'ATIVO'`,
+        { id },
+      );
+      if (!linha || !(await contratoVisivel(req.sessao, linha.idcontrato))) {
+        return reply.code(404).send({ Message: 'Conta financeira nao encontrada.' });
+      }
+      if (linha.linhadigitavel === null) {
+        return reply.code(404).send({ Message: 'Nao ha boleto gerado para esta parcela.' });
+      }
+      const pdf = boletoPdf({
+        cedente: CEDENTE,
+        sacado: linha.sacado,
+        sacadoCpf: linha.cpf,
+        nossoNumero: `14${String(id).padStart(15, '0')}-9`,
+        contrato: String(linha.idcontrato),
+        parcela: `${linha.numeroparcela}/${linha.qtdparcelas}`,
+        vencimento: linha.vencimento,
+        valorReais: decimal(linha.valorreceber),
+        linhaDigitavel: linha.linhadigitavel,
+        emitidoEm: hojeTse(),
+      });
+      return reply.code(200).type('application/pdf').send(pdf);
+    },
+  );
 
   // --- reserva (038): o que o cotista vê da própria utilização -----------------
 
