@@ -119,6 +119,39 @@ export const TEXTO_NAO_ENTENDI =
 
 export const TEXTO_SEM_INTERESSE = 'Tudo bem! Se mudar de ideia, é só me chamar por aqui. 🙂';
 
+// --- 045: fechamento com sinal por PIX --------------------------------------
+
+/**
+ * O pedido de nome e CPF. Só acontece DEPOIS do aceite, e só na raia do lead
+ * frio: quem já é cotista tem os dois no cadastro. É a mesma ordem da 038 —
+ * nenhum dado pessoal é pedido antes de o negócio estar de pé.
+ */
+export const TEXTO_DADOS =
+  'Combinado! Para emitir o sinal eu preciso de duas informações: seu *nome completo* e seu ' +
+  '*CPF*. Pode mandar os dois na mesma mensagem. 🙂';
+
+export const TEXTO_DADOS_INVALIDOS =
+  'Não consegui ler o CPF 😅 Pode mandar de novo, com o nome completo e os 11 dígitos?';
+
+export function textoSinalEmitido(sinalCentavos: number, totalCentavos: number): string {
+  return (
+    `Perfeito! Para garantir a unidade, o sinal é de ${formatarReais(sinalCentavos)} ` +
+    `(o total fica em ${formatarReais(totalCentavos)}). ` +
+    'Estou te mandando o PIX aqui embaixo — assim que cair, eu confirmo por aqui. 👇'
+  );
+}
+
+export const TEXTO_AGUARDANDO_SINAL =
+  'Ainda não identifiquei o pagamento do sinal. Assim que ele cair eu te aviso por aqui! Se ' +
+  'preferir falar com alguém da equipe, é só dizer.';
+
+export function textoVendido(contratoErp: string): string {
+  return (
+    `Pagamento confirmado e contrato registrado! 🎉 Seu contrato é o *${contratoErp}*. ` +
+    'A partir de agora você já pode consultar parcelas e reservar sua semana por aqui.'
+  );
+}
+
 /** Todos os textos fixos — o teste de vocabulário varre isto + os renders. */
 export const TEXTOS_FIXOS: readonly string[] = [
   TEXTO_QUALIFICACAO_PESSOAS,
@@ -128,4 +161,7 @@ export const TEXTOS_FIXOS: readonly string[] = [
   TEXTO_SEM_ESTOQUE,
   TEXTO_NAO_ENTENDI,
   TEXTO_SEM_INTERESSE,
+  TEXTO_DADOS,
+  TEXTO_DADOS_INVALIDOS,
+  TEXTO_AGUARDANDO_SINAL,
 ];

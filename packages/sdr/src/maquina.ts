@@ -1,5 +1,7 @@
 import {
   TEXTO_AGENDAMENTO,
+  TEXTO_AGUARDANDO_SINAL,
+  TEXTO_DADOS,
   TEXTO_JA_NO_PISO,
   TEXTO_NAO_ENTENDI,
   TEXTO_QUALIFICACAO_PERIODOS,
@@ -12,9 +14,11 @@ import {
   textoLista,
   textoOfertaPiso,
   textoOfertaTabela,
+  textoSinalEmitido,
 } from './render.js';
 import {
   type Acao,
+  type Comprador,
   type ContextoFluxo,
   type CotaDisponivel,
   cotaEscolhida,
@@ -34,8 +38,13 @@ import {
  *
  *   qualificacao ──(pessoas, periodos)──► [buscar_estoque] ──apresentar──► apresentacao
  *   apresentacao ──(escolher)──► oferta@tabela ──(pedir_melhor)──► oferta@piso
- *   oferta ──(aceitar)──► agendamento ──(agendar)──► encerrado:agendado
+ *   oferta ──(aceitar)──► dados ──(nome+cpf)──► fechamento  [emitir_sinal]
+ *                     └──(cotista: já tem CPF)──► fechamento [emitir_sinal]
+ *   fechamento ──(sinal_pago)──► encerrado:vendido  [registrar_venda]
  *   oferta ──(pedir_valor < piso)──► encerrado:aguardando_aprovacao  [escalar_alcada]
+ *
+ * 045: `agendamento` continua existindo como saída — quem prefere falar com
+ * gente diz isso a qualquer momento e o fluxo entrega ao comercial como antes.
  */
 
 /** Duas respostas seguidas não entendidas ⇒ o fluxo sai da frente do agente geral. */
@@ -49,6 +58,7 @@ const ESTADO_INICIAL: EstadoFluxo = {
   oferta: null,
   naoEntendi: 0,
   encerramento: null,
+  comprador: null,
 };
 
 function encerrar(estado: EstadoFluxo, encerramento: EstadoFluxo['encerramento']): EstadoFluxo {
@@ -135,11 +145,7 @@ function oferta(estado: EstadoFluxo, acao: Acao, ctx: ContextoFluxo): Transicao 
 
   switch (acao.tipo) {
     case 'aceitar':
-      return {
-        estado: { ...estado, etapa: 'agendamento', naoEntendi: 0 },
-        mensagens: [TEXTO_AGENDAMENTO],
-        efeito: 'nenhum',
-      };
+      return aceitar(estado, ctx);
     case 'pedir_melhor':
       if (estado.oferta === 'piso' || piso === vigente) {
         return {
@@ -152,11 +158,7 @@ function oferta(estado: EstadoFluxo, acao: Acao, ctx: ContextoFluxo): Transicao 
     case 'pedir_valor': {
       if (acao.centavos >= vigente) {
         // pediu igual ou acima do que já está na mesa: é um aceite pelo valor vigente
-        return {
-          estado: { ...estado, etapa: 'agendamento', naoEntendi: 0 },
-          mensagens: [TEXTO_AGENDAMENTO],
-          efeito: 'nenhum',
-        };
+        return aceitar(estado, ctx);
       }
       if (acao.centavos >= piso) {
         // dentro da alçada, mas só ofertamos pontos discretos: vai para o piso
@@ -174,6 +176,42 @@ function oferta(estado: EstadoFluxo, acao: Acao, ctx: ContextoFluxo): Transicao 
   }
 }
 
+/**
+ * 045: o aceite. Na raia do cotista o comprador já é conhecido (nome e CPF do
+ * cadastro) e o fluxo salta direto para o sinal — o CPF nunca é pedido nem
+ * trafega pela conversa. No lead frio, passa por `dados`.
+ */
+function aceitar(estado: EstadoFluxo, ctx: ContextoFluxo): Transicao {
+  // 045 desligada (nenhum sinal configurado) ⇒ a 015a segue intacta: o aceite
+  // entrega o lead ao comercial. É o degrau que mantém as duas versões vivas.
+  if (!ctx.sinalCentavos) {
+    return {
+      estado: { ...estado, etapa: 'agendamento', naoEntendi: 0 },
+      mensagens: [TEXTO_AGENDAMENTO],
+      efeito: 'nenhum',
+    };
+  }
+  const conhecido = ctx.compradorConhecido ?? null;
+  if (conhecido) return irParaFechamento({ ...estado, comprador: conhecido }, ctx);
+  return {
+    estado: { ...estado, etapa: 'dados', naoEntendi: 0 },
+    mensagens: [TEXTO_DADOS],
+    efeito: 'nenhum',
+  };
+}
+
+/** Sinal emitido: a mensagem sai, o server emite a cobrança e manda o card do PIX. */
+function irParaFechamento(estado: EstadoFluxo, ctx: ContextoFluxo): Transicao {
+  const cota = cotaEscolhida(estado);
+  const total = valorOfertadoCentavos(estado, ctx.descontoMaxBps) ?? cota?.valorTabelaCentavos ?? 0;
+  const sinal = Math.min(ctx.sinalCentavos ?? 0, total);
+  return {
+    estado: { ...estado, etapa: 'fechamento', naoEntendi: 0 },
+    mensagens: [textoSinalEmitido(sinal, total)],
+    efeito: 'emitir_sinal',
+  };
+}
+
 export function transicionar(estado: EstadoFluxo, acao: Acao, ctx: ContextoFluxo): Transicao {
   if (estado.etapa === 'encerrado') return { estado, mensagens: [], efeito: 'nenhum' };
   if (acao.tipo === 'cancelar') {
@@ -182,6 +220,17 @@ export function transicionar(estado: EstadoFluxo, acao: Acao, ctx: ContextoFluxo
       mensagens: [TEXTO_SEM_INTERESSE],
       efeito: 'nenhum',
     };
+  }
+  /**
+   * 045: `fechamento` intercepta ANTES do guard de `nao_entendi`, e isso é a
+   * correção de um defeito real: o guard global roda antes do switch por etapa,
+   * então tudo que o comprador dissesse enquanto o PIX não caía contava como
+   * "não entendi" — duas mensagens e o fluxo saía da frente, **abandonando uma
+   * cobrança já emitida**. Aqui nada que ele diga derruba o fluxo; quem o faz
+   * avançar é o webhook do PSP.
+   */
+  if (estado.etapa === 'fechamento' && acao.tipo !== 'sinal_pago' && acao.tipo !== 'agendar') {
+    return { estado, mensagens: [TEXTO_AGUARDANDO_SINAL], efeito: 'nenhum' };
   }
   if (acao.tipo === 'nao_entendi') return naoEntendi(estado);
 
@@ -203,6 +252,31 @@ export function transicionar(estado: EstadoFluxo, acao: Acao, ctx: ContextoFluxo
     }
     case 'oferta':
       return oferta(estado, acao, ctx);
+    case 'dados': {
+      // "prefiro falar com alguém" continua valendo aqui
+      if (acao.tipo === 'agendar') {
+        return {
+          estado: { ...estado, etapa: 'agendamento', naoEntendi: 0 },
+          mensagens: [TEXTO_AGENDAMENTO],
+          efeito: 'nenhum',
+        };
+      }
+      if (acao.tipo !== 'dados') return naoEntendi(estado);
+      const comprador: Comprador = { nome: acao.nome, cpf: acao.cpf };
+      return irParaFechamento({ ...estado, comprador }, ctx);
+    }
+    case 'fechamento': {
+      // só duas ações chegam aqui (o guard acima filtra o resto)
+      if (acao.tipo === 'agendar') {
+        return {
+          estado: { ...estado, etapa: 'agendamento', naoEntendi: 0 },
+          mensagens: [TEXTO_AGENDAMENTO],
+          efeito: 'nenhum',
+        };
+      }
+      // o aviso do PSP: o único caminho para a venda existir
+      return { estado: encerrar(estado, 'vendido'), mensagens: [], efeito: 'registrar_venda' };
+    }
     case 'agendamento': {
       if (acao.tipo !== 'agendar') return naoEntendi(estado);
       const perfil = { ...estado.perfil, contato: acao.texto };
