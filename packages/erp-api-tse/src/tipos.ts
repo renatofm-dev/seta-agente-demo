@@ -6,6 +6,7 @@ import type {
   SimularUtilizacaoInput,
   UtilizacaoErp,
 } from './reserva.js';
+import type { CasalErp, LeadInput, PessoaInput, VendaInput } from './venda.js';
 
 /**
  * Fronteira tipada com a API do TS Explorer (036). Dinheiro entra e sai em
@@ -92,6 +93,17 @@ export interface ErpWriter {
   listarUtilizacoes(contratoId: string): Promise<UtilizacaoErp[]>;
   /** Pontos que o contrato ainda tem — o fluxo precisa antes de simular. */
   lerSaldoPontos(contratoId: string): Promise<number>;
+  // --- 045: ciclo comercial (pessoa, lead e venda) ---------------------------
+  criarPessoa(i: PessoaInput): Promise<{ pessoaId: number }>;
+  /**
+   * Grava o lead ("casal") e devolve o id. O POST do TSE responde vazio: o id
+   * sai de um read-back por CPF, feito aqui dentro — quem chama não precisa
+   * saber que a API do fornecedor não devolve o que criou.
+   */
+  criarLead(i: LeadInput): Promise<{ casalId: number }>;
+  /** Base do read-back do lead, e do reconhecimento de escrita já feita. */
+  listarLeads(de: string, ate: string): Promise<CasalErp[]>;
+  criarVenda(i: VendaInput): Promise<{ contratoId: number }>;
   /**
    * Leitura de VERIFICAÇÃO do write (read-back de idempotência). Mora aqui, e
    * não no catálogo, porque não faz parte da superfície do agente.

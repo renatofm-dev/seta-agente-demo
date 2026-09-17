@@ -11,6 +11,14 @@ import {
   type RegistrarPagamentoInput,
   RegistrarPagamentoInputSchema,
 } from './tipos.js';
+import {
+  type CasalErp,
+  LeadInputSchema,
+  mesmoCasal,
+  PessoaInputSchema,
+  type VendaInput,
+  VendaInputSchema,
+} from './venda.js';
 
 /**
  * `ErpWriter` em memória. Duas utilidades:
@@ -36,6 +44,10 @@ export interface ErpSimulado extends ErpWriter {
     saldoPontos?: number;
   }): void;
   readonly utilizacoes: readonly UtilizacaoErp[];
+  /** 045: pessoas, leads e vendas "gravados", para o teste conferir. */
+  readonly pessoas: readonly { pessoaId: number; nome: string; cpf: string }[];
+  readonly leads: readonly CasalErp[];
+  readonly vendas: readonly { contratoId: number; input: VendaInput }[];
 }
 
 /** Diárias entre check-in e check-out (a noite é que conta). */
@@ -54,6 +66,9 @@ function diarias(checkIn: string, checkOut: string): string[] {
 
 export function createErpSimulado(): ErpSimulado {
   const transacoes: { input: RegistrarPagamentoInput; transacaoId: string }[] = [];
+  const pessoas: { pessoaId: number; nome: string; cpf: string }[] = [];
+  const leads: CasalErp[] = [];
+  const vendas: { contratoId: number; input: VendaInput }[] = [];
   const parcelas = new Map<string, ParcelaErp>();
   let seq = 0;
   // 038
@@ -200,6 +215,53 @@ export function createErpSimulado(): ErpSimulado {
           .filter((u) => u.status.toUpperCase() !== 'CANCELADA')
           .reduce((a, u) => a + u.custoPontos, 0)
       );
+    },
+
+    // --- 045: ciclo comercial -------------------------------------------------
+
+    get pessoas() {
+      return pessoas;
+    },
+    get leads() {
+      return leads;
+    },
+    get vendas() {
+      return vendas;
+    },
+
+    async criarPessoa(entrada) {
+      const i = PessoaInputSchema.parse(entrada);
+      const cpf = i.cpf.replace(/\D/g, '');
+      // o CPF é chave natural aqui também: repetir não cria segunda pessoa
+      const existente = pessoas.find((p) => p.cpf === cpf);
+      if (existente) return { pessoaId: existente.pessoaId };
+      const pessoaId = pessoas.length + 1;
+      pessoas.push({ pessoaId, nome: i.nome, cpf });
+      return { pessoaId };
+    },
+
+    async listarLeads() {
+      return [...leads];
+    },
+
+    async criarLead(entrada) {
+      const i = LeadInputSchema.parse(entrada);
+      const cpf = (i.cpf ?? '').replace(/\D/g, '');
+      if (cpf.length === 0) {
+        throw new ErpBusinessError('lead sem CPF: o read-back do casal fica impossível', 400, '');
+      }
+      const existente = leads.find((c) => mesmoCasal(c, cpf));
+      if (existente) return { casalId: existente.casalId };
+      const casalId = leads.length + 1;
+      leads.push({ casalId, nome: i.nome, cpf });
+      return { casalId };
+    },
+
+    async criarVenda(entrada) {
+      const i = VendaInputSchema.parse(entrada);
+      const contratoId = 900_000 + vendas.length + 1;
+      vendas.push({ contratoId, input: i });
+      return { contratoId };
     },
 
     async health() {

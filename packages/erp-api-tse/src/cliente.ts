@@ -22,6 +22,17 @@ import {
   paraParcelaErp,
   RegistrarPagamentoInputSchema,
 } from './tipos.js';
+import {
+  type CasalErp,
+  contratoDaProsa,
+  LeadInputSchema,
+  mesmoCasal,
+  PessoaInputSchema,
+  paraCasal,
+  paraReais,
+  pessoaDaResposta,
+  VendaInputSchema,
+} from './venda.js';
 
 /**
  * Cliente do TS Explorer (036). Duas operações, e a segunda existe por causa da
@@ -63,6 +74,21 @@ export interface TseErpApi extends ErpWriter {
 
 export function createTseErpApi(config: TseHttpConfig): TseErpApi {
   const { api } = criarHttp(config);
+
+  /**
+   * 045: função LOCAL, não método — `criarLead` a chama duas vezes (antes e
+   * depois de gravar) e `this` num objeto literal se perde assim que alguém
+   * desestrutura o writer.
+   */
+  const listarLeads = async (de: string, ate: string): Promise<CasalErp[]> => {
+    const { json } = await api.request({
+      method: 'GET',
+      path:
+        '/api/recepcaots/GetCasaisPorPeriodo' +
+        `?dataInicial=${de}&dataFinal=${ate}&idUnidadeNegocio=1&somenteAgendados=false`,
+    });
+    return (Array.isArray(json) ? json : []).map(paraCasal);
+  };
 
   return {
     fornecedor: 'tse',
@@ -283,8 +309,142 @@ export function createTseErpApi(config: TseHttpConfig): TseErpApi {
       return null;
     },
 
+    // --- 045: ciclo comercial ------------------------------------------------
+
+    async criarPessoa(entrada) {
+      const i = PessoaInputSchema.parse(entrada);
+      const { json } = await api.request({
+        method: 'POST',
+        path: '/api/cadastros/SetPessoa/0',
+        body: {
+          DataCadastro: hoje(),
+          IdTipoPessoa: 0,
+          RazaoSocial: i.nome,
+          NomeFantasia: i.nome,
+          CpfCnpj: i.cpf.replace(/\D/g, ''),
+        },
+      });
+      const pessoaId = pessoaDaResposta(json);
+      if (pessoaId === null) {
+        throw new ErpBusinessError(
+          `TSE respondeu 200 sem id de pessoa: ${String(json).slice(0, 200)}`,
+          200,
+          String(json),
+        );
+      }
+      return { pessoaId };
+    },
+
+    listarLeads,
+
+    /**
+     * Grava e RELÊ. O POST devolve string vazia (nem id, nem eco), então o
+     * único jeito de saber o que foi criado é procurar pelo CPF na janela do
+     * dia. A janela é ±1 dia porque o TSE carimba `DataCadastro` no fuso dele
+     * e uma escrita perto da meia-noite cairia fora de uma janela de um dia só.
+     */
+    async criarLead(entrada) {
+      const i = LeadInputSchema.parse(entrada);
+      const digitos = (i.cpf ?? '').replace(/\D/g, '');
+      if (digitos.length === 0) {
+        throw new ErpBusinessError('lead sem CPF: o read-back do casal fica impossível', 400, '');
+      }
+      const [de, ate] = janelaDeLeitura();
+
+      // já gravado numa tentativa anterior cuja resposta se perdeu? adota.
+      const antes = await listarLeads(de, ate);
+      const existente = antes.find((c: CasalErp) => mesmoCasal(c, digitos));
+      if (existente) return { casalId: existente.casalId };
+
+      await api.request({
+        method: 'POST',
+        path: '/api/recepcaots/setcasal/0',
+        body: {
+          DataCadastro: hoje(),
+          Nome1: i.nome,
+          Cpf1: digitos,
+          Nome2: '',
+          Cpf2: '',
+          Email: i.email ?? '',
+          TelefoneMovel: i.telefone ?? '',
+          IdOrigemCasal: i.idOrigemCasal ?? null,
+          Agendado: false,
+        },
+      });
+
+      const depois = await listarLeads(de, ate);
+      const criado = depois.find((c: CasalErp) => mesmoCasal(c, digitos));
+      if (!criado) {
+        // NÃO grava de novo: sem confirmação, uma segunda escrita é duplicata
+        throw new ErpBusinessError(
+          'casal gravado mas não encontrado no read-back por CPF',
+          200,
+          '',
+        );
+      }
+      return { casalId: criado.casalId };
+    },
+
+    async criarVenda(entrada) {
+      const i = VendaInputSchema.parse(entrada);
+      const { json } = await api.request({
+        method: 'POST',
+        path: '/api/vendats/SetVenda/0',
+        body: {
+          DataCadastro: hoje(),
+          IdCasal: i.idCasal ?? 0,
+          IdComprador1: i.idComprador,
+          IdComprador2: 0,
+          IdProduto: i.idProduto,
+          IdCotaUh: i.idCotaUh,
+          ValorNegociado: paraReais(i.valorCentavos),
+          ValorAVista: paraReais(i.valorCentavos),
+          ValorFinanciado: 0,
+          ValorDesconto: 0,
+          ContabilizadoVenda: true,
+          ContasFinanceirasCancel: [],
+          ContasFinanceirasAddUpdt: i.parcelas.map((p) => ({
+            IdMeioPagamento: p.idMeioPagamento,
+            IdTipoOrigemContaFinanceira: p.idTipoOrigem,
+            DataVencimento: p.vencimento,
+            ValorReceber: paraReais(p.valorCentavos),
+            ValorParcela: paraReais(p.valorCentavos),
+            QuantidadeParcelas: 1,
+            TipoValorInformado: 'INDIVIDUAL',
+            DestinoContaFinanceira: 'R',
+          })),
+        },
+      });
+      const contratoId = contratoDaProsa(json);
+      if (contratoId === null) {
+        // 200 com prosa inesperada é erro de negócio — a doutrina da 036
+        throw new ErpBusinessError(
+          `TSE respondeu 200 sem IdContrato: ${String(json).slice(0, 200)}`,
+          200,
+          String(json),
+        );
+      }
+      return { contratoId };
+    },
+
     health: () => api.health(),
   } satisfies TseErpApi as TseErpApi;
+}
+
+/** Hoje em `YYYY-MM-DD` no fuso do TSE — toda escrita carimba `DataCadastro`. */
+function hoje(): string {
+  return new Intl.DateTimeFormat('sv-SE', { timeZone: 'America/Sao_Paulo' }).format(new Date());
+}
+
+/**
+ * Janela do read-back do casal: ontem a amanhã. Um único dia falharia para uma
+ * escrita perto da virada, já que o carimbo é do fuso do servidor do TSE.
+ */
+function janelaDeLeitura(): [string, string] {
+  const fmt = new Intl.DateTimeFormat('sv-SE', { timeZone: 'America/Sao_Paulo' });
+  const dia = 86_400_000;
+  const agora = Date.now();
+  return [fmt.format(new Date(agora - dia)), fmt.format(new Date(agora + dia))];
 }
 
 export type { ParcelaErp };
