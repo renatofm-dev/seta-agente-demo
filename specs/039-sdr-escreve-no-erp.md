@@ -1,5 +1,10 @@
 # 039 — O SDR escreve no ERP: lead (`setcasal`) e venda (`SetVenda`)
 
+> **⚠️ Absorvida pela [045](045-venda-ponta-a-ponta.md) em 17/09/2026.** A 045 faz tudo o que está
+> aqui (`setcasal`, `SetVenda`, simulador, `erp_escrita`) e acrescenta o elo que faltava — o
+> **pagamento do sinal por PIX** — além de abrir a venda para a raia do cotista. Esta spec fica
+> como referência do levantamento da API; **execute a 045**, não esta.
+>
 > **Pré-spec** (rascunho de 14/09/2026): ainda não executada. Quinta fatia da frente
 > **demo ponta a ponta**. Depende da **036** (`ErpWriter`) e da
 > [015b](015b-sdr-aprovacao-console.md) (a aprovação humana é o gatilho da escrita).

@@ -346,3 +346,48 @@ aqui é o mapa.
 - **Ficou de fora:** pagamento da taxa por cartão, cancelamento com multa, intercâmbio e crédito de
   fracionamento, calendário visual no console, e o `PainelDoCliente/SimularUtilizacaoContrato` (a
   jornada usa a simulação do OPERADOR, a única que devolve `Bloqueado` por diária).
+
+## 045 — Venda de ponta a ponta: do interesse ao contrato, com sinal por PIX
+- **Entrega:** o ciclo comercial fecha sem humano no caminho feliz. O SDR (015a) qualificava,
+  ofertava e **entregava o lead a um humano** — os dois encerramentos da máquina eram `agendado` e
+  `aguardando_aprovacao`, e nada chegava ao ERP. Agora: aceite → nome e CPF → **PIX do sinal no
+  WhatsApp** (template `cobranca_pix`, com link no corpo e copia-e-cola no `ORDER_DETAILS`) →
+  pagamento confirmado → `SetPessoa` + `setcasal` + `SetVenda` → **contrato de multipropriedade
+  criado**, com as parcelas em `contafinanceira` e a cota fora do estoque.
+- **Onde está:** `packages/sdr` (etapas `dados` e `fechamento`, efeitos `emitir_sinal` e
+  `registrar_venda`), `packages/erp-api-tse/src/venda.ts`, `apps/tse-sim/src/rotas/{recepcao,vendas}.ts`
+  (+ `SetPessoa` em `cadastros.ts`), `apps/server/src/venda/` (`repo`, `worker`, `escalar`,
+  `chave`, `vendas-routes`), o efeito no `sdr/fluxo.ts`, o gatilho em `pagamentos/eventos.ts`,
+  migração `0020` e `apps/console/app/(console)/vendas/`.
+- **A 045 abriu a raia do cotista.** `comprar_cota` com vínculo escalava para o comercial
+  (`turno-handler.ts`); agora entra no SDR com nome e CPF do cadastro — e a etapa `dados` é
+  **pulada**, então o CPF do cotista não volta a trafegar pela conversa. Era escopo da 031.
+- **Três escritas encadeadas, nenhuma idempotente no TSE.** `SetPessoa` → `IdPessoa`,
+  `setcasal` → **nada** (o POST responde string vazia!), `SetVenda` → `"IdContrato: 285"` em prosa.
+  O id do casal sai de um **read-back por CPF** em `GetCasaisPorPeriodo`, e cada id é gravado em
+  `venda` no instante em que nasce: uma tentativa que morre no meio retoma de onde parou em vez de
+  criar uma segunda pessoa, um segundo casal ou (o pior) um segundo contrato.
+- **Nada é escrito sem pagamento confirmado.** Quem enfileira `FILA_ERP_VENDA` é o evento do PSP,
+  nunca o turno e nunca o LLM. A linha `erp_escrita` nasce na MESMA transação do `sinal_pago`, com
+  `onConflictDoNothing` — reentrega de webhook não escreve duas vezes.
+- **O CPF vem do parser, não do modelo.** `extrairCpf` roda sobre o texto cru, rejeita qualquer
+  token de anonimização (`[CPF_1]`) e confere o DV. Na etapa `dados` o **LLM não é chamado**
+  (`SEM_LLM` em `interpretar.ts`): mandar nome e CPF ao modelo seria mandar dado pessoal para fora
+  sem necessidade, e aceitar a resposta dele deixaria um CPF nascer de saída estruturada.
+- **O guard de `nao_entendi` vinha antes da etapa** — defeito achado pelo teste de precedência,
+  não em revisão: em `transicionar`, o guard global roda antes do switch, então tudo que o
+  comprador dissesse enquanto o PIX não caía contava como "não entendi", e duas mensagens
+  derrubavam o fluxo **abandonando uma cobrança já emitida**. `fechamento` agora intercepta antes
+  do guard; só `sinal_pago` (do webhook) e o pedido de humano avançam dali.
+- **A 015a continua viva sozinha.** Sem `VENDA_SINAL_CENTAVOS` no contexto, o aceite volta a cair
+  em `agendamento` — o degrau é explícito na máquina, não um efeito de configuração ausente.
+- **Persona:** a `personaSdr` dizia "encaminha o fechamento para a equipe comercial" e "nunca peça
+  CPF, nunca prometa código PIX". As duas frases foram reescritas junto com a persona do cotista e
+  a regra 8 do prompt-base — sem isso o modelo contradiria o fluxo determinístico.
+- **Como exercitar:** `apps/server/test/venda.integration.test.ts` (8 casos contra o simulador da
+  035, incluindo o contrato conferido em `contrato`/`contafinanceira`, o reprocesso que não
+  duplica e o token de anonimização recusado como CPF) e `apps/tse-sim/test/contrato.test.ts` (as
+  5 rotas comerciais novas contra as fixtures do fornecedor).
+- **Ficou de fora:** a **015b** (aprovar proposta abaixo do piso no console — quem pede abaixo da
+  alçada continua parando sem resposta), assinatura de contrato, parcelamento negociado na
+  conversa e prospecção ativa.

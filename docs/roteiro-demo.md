@@ -119,6 +119,40 @@ atendente. É o ato que era, até agora, o exemplo de limitação:
 Narrar no fim: "a reserva existe no ERP com o nome do operador do agente — o
 sistema do cliente sabe distinguir o que o robô fez do que uma pessoa fez."
 
+## Ato 7 — Venda de ponta a ponta (045, ~4 min)
+
+De um número **sem vínculo** (um lead frio de verdade — use o simulador se não
+tiver um chip à mão), com a página **Vendas** aberta. É o ato que fecha o ciclo
+comercial: até a 044 o lead do SDR morria numa tabela nossa.
+
+22. **"quero comprar uma cota"** → o agente qualifica: quantas pessoas viajam,
+    quantos períodos por ano.
+23. **"4"** e **"2"** → ele lista o **estoque real** (`v_cota_disponivel`), as
+    três mais baratas com tier e modelo distintos, com valor de tabela.
+24. **"1"** → oferta na tabela. **"consegue melhorar?"** → vai ao **piso da
+    alçada** (3%), falando em VALOR, nunca em percentual.
+25. **"fechado"** → o fluxo pede **nome completo e CPF**. Narrar: "ele só pede
+    dado pessoal depois que o negócio está de pé — e o CPF sai de um parser
+    determinístico, nunca da saída do modelo".
+26. **"Joana Pereira Lima, CPF 000.354.175-44"** → chega o **card do PIX**:
+    valor do sinal, vencimento, link de pagamento e o botão *Copy Pix code* com
+    o copia-e-cola. É o template `cobranca_pix`, aprovado na WABA.
+27. **Pagar no sandbox do Asaas** (ou disparar o webhook de teste) → em segundos
+    chega **"Pagamento confirmado e contrato registrado! Seu contrato é o
+    nº …"**, e a página **Vendas** mostra *Contrato criado*.
+28. Conferir no ERP que o contrato existe de verdade, com as parcelas:
+    ```sql
+    select c.idcontrato, c.statuscontrato, p.nome, count(f.*) as parcelas
+      from contrato c join pessoa p on p.idpessoa = c.idpessoatitular
+      left join contafinanceira f on f.idcontrato = c.idcontrato
+     where c.idcontrato = <o número> group by 1,2,3;
+    ```
+29. Bônus: repetir a mesma pergunta do **número do Renato (cotista)** → ele
+    entra no mesmo fluxo **sem pedir CPF**, porque o cadastro já tem.
+
+Narrar no fim: "o lead virou cotista no ERP do cliente sem ninguém digitar nada
+— e nenhuma linha foi escrita antes de o dinheiro entrar."
+
 Fechamento: "tudo isso rodando numa VPS de €4, com o LLM atrás de um port —
 levar para dentro de casa é trocar duas variáveis de ambiente."
 
