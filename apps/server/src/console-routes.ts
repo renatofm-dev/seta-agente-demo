@@ -51,6 +51,8 @@ export interface InstalacaoInfo {
     readonly diasVencimento: number;
     readonly descontoMaxBps: number;
     readonly maxPropostasDia: number;
+    /** 038: acima disto a taxa da reserva espera aprovação. */
+    readonly tetoTaxaReservaCentavos: number;
   };
   readonly canal: {
     readonly gateway: 'meta' | 'log-only';
@@ -252,17 +254,21 @@ export const consoleRoutes: FastifyPluginCallback<ConsoleRoutesOpts> = (app, opt
         SELECT
           (SELECT count(*)::int FROM ticket WHERE status = 'aguardando_humano') AS aguardando_humano,
           (SELECT count(*)::int FROM cobranca WHERE status = 'aguardando_aprovacao') AS cobrancas_aprovacao,
-          (SELECT count(*)::int FROM proposta_sdr WHERE status = 'aguardando_aprovacao') AS leads_aprovacao
+          (SELECT count(*)::int FROM proposta_sdr WHERE status = 'aguardando_aprovacao') AS leads_aprovacao,
+          -- 038: criada tambem pede gente: a utilizacao existe no TSE e nao foi confirmada
+          (SELECT count(*)::int FROM reserva WHERE status IN ('aguardando_aprovacao','criada')) AS reservas_aprovacao
       `)
     ).rows as {
       aguardando_humano: number;
       cobrancas_aprovacao: number;
       leads_aprovacao: number;
+      reservas_aprovacao: number;
     }[];
     return {
       aguardandoHumano: r?.aguardando_humano ?? 0,
       cobrancasAguardandoAprovacao: r?.cobrancas_aprovacao ?? 0,
       leadsAguardandoAprovacao: r?.leads_aprovacao ?? 0,
+      reservasAguardandoAprovacao: r?.reservas_aprovacao ?? 0,
     };
   });
 

@@ -129,6 +129,9 @@ importers:
       '@seta/rag':
         specifier: workspace:*
         version: link:../../packages/rag
+      '@seta/reserva':
+        specifier: workspace:*
+        version: link:../../packages/reserva
       '@seta/sdr':
         specifier: workspace:*
         version: link:../../packages/sdr
@@ -323,6 +326,15 @@ importers:
 
   packages/rag:
     dependencies:
+      zod:
+        specifier: ^4.4.3
+        version: 4.4.3
+
+  packages/reserva:
+    dependencies:
+      '@seta/ai-provider':
+        specifier: workspace:*
+        version: link:../ai-provider
       zod:
         specifier: ^4.4.3
         version: 4.4.3

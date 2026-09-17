@@ -29,6 +29,8 @@ import { registerCobrancaEventoWorker } from './pagamentos/eventos.js';
 import { createPagamentosRepo } from './pagamentos/repo.js';
 import { createDrizzleQueryEventSink } from './query-event-sink.js';
 import { createPgVectorStore } from './rag/pgvector-store.js';
+import { createReservaRepo } from './reserva/repo.js';
+import { registerErpReservaWorker } from './reserva/worker.js';
 import { createSdrRepo } from './sdr/repo.js';
 import { createSkillRegistry } from './skills/registry.js';
 import { registerSinaisDiarios } from './skills/sinais-job.js';
@@ -84,6 +86,31 @@ const erpWriter: ErpWriter =
 logger.info(
   { erp: env.TSE_BASE_URL ? 'api-tse' : 'simulado', conciliacao: env.ERP_CONCILIACAO },
   'escrita no ERP',
+);
+
+/**
+ * 038: a reserva escreve com credencial PRÓPRIA quando houver. O TSE grava quem
+ * pediu (`IdOperadorRespSolicitacao`), e é isso que separa, na auditoria, a
+ * reserva feita pelo robô da feita por um atendente. Sem a credencial dedicada,
+ * cai na da 036 — e o rastro fica misturado, o que é decisão consciente e não
+ * acidente.
+ */
+const reservaWriter: ErpWriter =
+  env.TSE_BASE_URL && env.TSE_RESERVA_USERNAME && env.TSE_RESERVA_PASSWORD
+    ? createTseErpApi({
+        baseUrl: env.TSE_BASE_URL,
+        username: env.TSE_RESERVA_USERNAME,
+        password: env.TSE_RESERVA_PASSWORD,
+        timeoutMs: env.TSE_TIMEOUT_MS,
+      })
+    : erpWriter;
+const reservaRepo = createReservaRepo(db);
+logger.info(
+  {
+    reserva: clientConfig.modulos.reserva,
+    operador: env.TSE_RESERVA_USERNAME ? 'dedicado' : 'compartilhado com a integração',
+  },
+  'reserva no ERP',
 );
 
 // provedor LLM (005): ausente ⇒ agente responde fallback honesto
@@ -156,6 +183,7 @@ await registerDebounceWorker({
     debounceMs: env.WA_DEBOUNCE_MS, // #46: reagendamento após turno descartado
     pagamentos: { repo: pagamentosRepo, psp, env }, // 014
     sdr: { repo: createSdrRepo(db), env }, // 015: só age na raia sem vínculo com modulos.sdr
+    reserva: { repo: reservaRepo, writer: reservaWriter, env }, // 038
     ...(anonimizacao ? { anonimizacao: anonimizacao.acumulador } : {}), // 016
   }),
   logger,
@@ -179,6 +207,8 @@ await registerCobrancaEventoWorker({ db, boss, repo: pagamentosRepo, gateway, en
 // instabilidade do TSE reexecutaria `notificarPago` e o cotista receberia
 // "pagamento confirmado" de novo
 await registerErpBaixaWorker({ db, boss, writer: erpWriter, logger });
+// 038: criar + confirmar a reserva no ERP, com read-back por chave natural
+await registerErpReservaWorker({ db, boss, writer: reservaWriter, logger });
 
 const app = buildApp({
   env,
@@ -208,6 +238,9 @@ try {
           ? env.WA_TEMPLATE_COBRANCA_PIX
           : 'off',
       sdr: clientConfig.modulos.sdr ? `alçada ${env.SDR_DESCONTO_MAX_BPS} bps` : false, // 015
+      reserva: clientConfig.modulos.reserva
+        ? `teto taxa ${env.RESERVA_TETO_TAXA_SEM_HITL_CENTAVOS} centavos`
+        : false, // 038
     },
     'server no ar',
   );

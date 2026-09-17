@@ -68,6 +68,52 @@ const GRUPOS_COTA = [
   'DIAMANTE SPECIAL',
 ] as const;
 
+/**
+ * 038 — referências da reserva. O TS Explorer tem tipo de UH e tarifa em pontos;
+ * o mock da 012 tinha só `capacidade`. Ficam no schema `tse_sim` (fora do
+ * `public`), porque nasceram do simulador e não do espelho que a 018 replica.
+ */
+const TIPOS_UH = [
+  { idtipounidadehoteleira: 1, nome: 'STANDARD', capacidade: 4 },
+  { idtipounidadehoteleira: 2, nome: 'SUPERIOR', capacidade: 6 },
+  { idtipounidadehoteleira: 3, nome: 'LUXO', capacidade: 8 },
+] as const;
+
+/** Alta temporada não é intervalo contínuo — janeiro, fevereiro, julho e dezembro. */
+const MESES_ALTA = [1, 2, 7, 12];
+const MESES_PADRAO = [3, 4, 5, 6, 8, 9, 10, 11];
+
+/**
+ * Pontos por diária e taxa de manutenção por tipo de UH. A alta temporada custa
+ * mais pontos; o LUXO em alta temporada fica BLOQUEADO (reforma), que é o caso
+ * que faz o agente dizer "esse período está fechado" com dado do ERP em vez de
+ * inventar alternativa — e a demo do contrato 10001 não passa por ele.
+ */
+const TARIFAS: readonly (readonly [number, string, number, number, boolean])[] = [
+  [1, 'PADRÃO', 800, 9_000, false],
+  [1, 'ALTA', 1_400, 14_000, false],
+  [2, 'PADRÃO', 1_000, 11_000, false],
+  [2, 'ALTA', 1_800, 17_000, false],
+  [3, 'PADRÃO', 1_300, 15_000, false],
+  [3, 'ALTA', 2_200, 22_000, true],
+];
+
+const TIPOS_PENSAO = [
+  { idtipopensao: 1, nome: 'CAFE DA MANHA', valorcentavos: 0 },
+  { idtipopensao: 2, nome: 'MEIA PENSAO', valorcentavos: 7_500 },
+  { idtipopensao: 3, nome: 'PENSAO COMPLETA', valorcentavos: 13_000 },
+] as const;
+
+/**
+ * O agente escreve no TSE como operador PRÓPRIO, separado da integração: o ERP
+ * grava `IdOperadorRespSolicitacao`, e é assim que uma reserva feita pelo robô
+ * fica distinguível de uma feita por um atendente.
+ */
+const OPERADORES = [
+  { idoperador: 1, login: 'TSE.INTEGRACAO', nome: 'INTEGRACAO TSE', idpessoa: null },
+  { idoperador: 2, login: 'AGENTE.SETA', nome: 'Agente SETA', idpessoa: null },
+] as const;
+
 const MODELOS_COTA: readonly (readonly [string, number])[] = [
   ['USO ANUAL 1 PERIODO', 1],
   ['USO ANUAL 2 PERIODOS', 2],
@@ -625,6 +671,16 @@ export async function seedData(pool: pg.Pool): Promise<SeedResumo> {
     });
   }
 
+  const tarifas: Row[] = TARIFAS.map(([tipo, periodo, pontos, taxa, bloqueado], i) => ({
+    idtarifapontos: i + 1,
+    idtipounidadehoteleira: tipo,
+    periodo,
+    meses: `{${(periodo === 'ALTA' ? MESES_ALTA : MESES_PADRAO).join(',')}}`,
+    pontospordiaria: pontos,
+    taxacentavos: taxa,
+    bloqueado,
+  }));
+
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -635,7 +691,9 @@ export async function seedData(pool: pg.Pool): Promise<SeedResumo> {
         // 035: o que o simulador escreveu aponta para contratos e parcelas que
         // estão sendo recriados — recarregar o ERP zera o TSE junto
         'tse_sim.transacaoeletronica, tse_sim.hospede, tse_sim.utilizacaocontrato, ' +
-        'tse_sim.casal, tse_sim.tipopensao, tse_sim.operador',
+        'tse_sim.casal, tse_sim.tipopensao, tse_sim.operador, ' +
+        // 038: referências da reserva — tarifa aponta para tipo de UH
+        'tse_sim.tarifapontos, tse_sim.tipounidadehoteleira',
     );
     await inserirLote(client, 'edificiohotel', ['idedificiohotel', 'nome'], edificios);
     await inserirLote(
@@ -735,6 +793,40 @@ export async function seedData(pool: pg.Pool): Promise<SeedResumo> {
         'datafinalizacao',
       ],
       chamados,
+    );
+    // 038: referências que a API de reserva precisa e o ERP do TS Explorer tem,
+    // mas o mock da 012 não tinha. Ficam no schema tse_sim, fora do public.
+    await inserirLote(
+      client,
+      'tse_sim.tipounidadehoteleira',
+      ['idtipounidadehoteleira', 'nome', 'capacidade'],
+      TIPOS_UH as unknown as Row[],
+    );
+    await inserirLote(
+      client,
+      'tse_sim.tarifapontos',
+      [
+        'idtarifapontos',
+        'idtipounidadehoteleira',
+        'periodo',
+        'meses',
+        'pontospordiaria',
+        'taxacentavos',
+        'bloqueado',
+      ],
+      tarifas,
+    );
+    await inserirLote(
+      client,
+      'tse_sim.tipopensao',
+      ['idtipopensao', 'nome', 'valorcentavos'],
+      TIPOS_PENSAO as unknown as Row[],
+    );
+    await inserirLote(
+      client,
+      'tse_sim.operador',
+      ['idoperador', 'login', 'nome', 'idpessoa'],
+      OPERADORES as unknown as Row[],
     );
     // 035: as PKs são IDENTITY e este seed grava id explícito — sem ressincronizar,
     // o próximo INSERT do simulador (ou o seed seguinte) colide com a PK

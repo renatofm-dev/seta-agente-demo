@@ -10,6 +10,7 @@ import {
   type ConversaResumo,
   type FiltroConversas,
   type MensagemThread,
+  type ReservaView,
 } from '@/lib/console-api';
 import { mesclarMensagens } from '@/lib/formatos';
 import { cn } from '@/lib/utils';
@@ -40,6 +41,7 @@ function InboxAtendimento() {
   const [temMais, setTemMais] = useState(false);
   const [carregandoMais, setCarregandoMais] = useState(false);
   const [cobrancas, setCobrancas] = useState<CobrancaView[] | null | undefined>(undefined);
+  const [reservas, setReservas] = useState<ReservaView[] | null | undefined>(undefined);
   const [contextoAberto, setContextoAberto] = useState(false);
 
   const selecionada = params.get('c');
@@ -66,6 +68,17 @@ function InboxAtendimento() {
   }, []);
 
   // aba Cobranças do painel: só as desta conversa; 404 = módulo de pagamentos desligado
+  const carregarReservas = useCallback((conversaId: string) => {
+    setReservas(undefined);
+    api
+      .reservas({ conversaId })
+      .then((r) => {
+        if (selecionadaRef.current === conversaId) setReservas(r.reservas);
+      })
+      // 404 = módulo de reserva desligado nesta instalação
+      .catch(() => setReservas(null));
+  }, []);
+
   const carregarCobrancas = useCallback((conversaId: string) => {
     api
       .cobrancas({ conversaId })
@@ -90,10 +103,11 @@ function InboxAtendimento() {
           setTemMais(d.temMais);
           marcarLida(conversaId);
           carregarCobrancas(conversaId);
+          carregarReservas(conversaId);
         })
         .catch(() => {});
     },
-    [marcarLida, carregarCobrancas],
+    [marcarLida, carregarCobrancas, carregarReservas],
   );
 
   // seleção via URL (?c=) — deep-link e histórico do browser sem trocar de página
@@ -103,6 +117,7 @@ function InboxAtendimento() {
       setMensagens([]);
       setDetalhe(null);
       setCobrancas(undefined);
+      setReservas(undefined);
       setContextoAberto(false);
       abrirConversa(selecionada);
     }
@@ -236,6 +251,7 @@ function InboxAtendimento() {
           <PainelContexto
             detalhe={detalhe}
             cobrancas={cobrancas}
+            reservas={reservas}
             aoFechar={() => setContextoAberto(false)}
           />
         </div>

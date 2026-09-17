@@ -3,10 +3,12 @@
 ## Canais
 
 - WhatsApp: canal principal para dúvidas de contrato, parcelas, boletos,
-  distrato e chamados de atendimento — e para pagar parcelas em aberto (o
-  assistente gera boleto, PIX ou link de cartão na hora).
-- Central de atendimento (telefone): reservas, agendamento de períodos de uso,
-  calendário de temporada e resgate de pontos.
+  distrato e chamados de atendimento; para pagar parcelas em aberto (o
+  assistente gera boleto, PIX ou link de cartão na hora); e para RESERVAR o
+  período de uso do contrato (o assistente consulta pontos e taxa e registra a
+  reserva).
+- Central de atendimento (telefone): troca de datas de reserva já confirmada,
+  cancelamento de reserva, calendário de temporada e resgate de pontos.
 - E-mail do financeiro: envio de comprovantes de pagamento e tratativas de
   renegociação encaminhadas pelo atendimento.
 

@@ -39,7 +39,20 @@ const env = loadEnv({
 interface Contexto {
   readonly cpfTitular: string;
   readonly idParcelaAberta: number;
+  /** 038: utilizações criadas no beforeAll, uma por caso que precisa de id. */
+  readonly idParaConfirmar: number;
+  readonly idParaCancelar: number;
+  readonly idParaLer: number;
 }
+
+/** 038: período em mês de tarifa PADRÃO — nada bloqueado no caminho feliz. */
+const RESERVA = {
+  IdContrato: CONTRATO_DEMO_INADIMPLENTE,
+  IdHotel: 1,
+  IdTipoUh: 1,
+  DataInicial: '2027-05-10',
+  DataFinal: '2027-05-13',
+} as const;
 
 interface Caso {
   readonly method: 'GET' | 'POST' | 'PUT';
@@ -119,6 +132,91 @@ const CASOS: Readonly<Record<string, Caso>> = {
       QuantidadeParcelas: 2,
     }),
   },
+  // --- 038: o ciclo da reserva ---------------------------------------------
+  'contract-usase__getting-hotels': {
+    method: 'GET',
+    path: () => `/api/utilizacaocontrato/ObterHoteis/${CONTRATO_DEMO}`,
+  },
+  'contract-usase__getting-hotel-unit-types': {
+    method: 'GET',
+    path: () => '/api/utilizacaocontrato/ObterTiposUnidadeHoteleira/1',
+  },
+  'contract-usase__getting-meal-types': {
+    method: 'GET',
+    path: () => '/api/utilizacaocontrato/ObterTiposPensao',
+  },
+  'contract-usase__getting-age-group-types': {
+    method: 'GET',
+    path: () => '/api/utilizacaocontrato/ObterTiposFaixaEtaria',
+  },
+  'contract-usase__simulate-contract-usage': {
+    method: 'GET',
+    path: () =>
+      `/api/utilizacaocontrato/SimularUtilizacaoContrato?IdContrato=${RESERVA.IdContrato}` +
+      `&IdHotel=${RESERVA.IdHotel}&IdTipoUh=${RESERVA.IdTipoUh}` +
+      `&DataInicial=${RESERVA.DataInicial}&DataFinal=${RESERVA.DataFinal}&qtdpagantespontos=2`,
+  },
+  'contract-usase__create-contract-usage': {
+    method: 'POST',
+    path: () => '/api/utilizacaocontrato/CriarUtilizacaoContrato',
+    body: () => ({
+      ...RESERVA,
+      QtdAdultos: 2,
+      QtdCriancas: 0,
+      TipoUtilizacao: 'RESERVA',
+      ListaHospedes: [
+        {
+          Nome: 'INTEGRACAO',
+          Sobrenome: 'TSE',
+          Cpf: '00015278514',
+          IdFaixaEtaria: 1,
+          HospedePrincipal: true,
+          Sexo: 'MASCULINO',
+        },
+      ],
+    }),
+  },
+  'contract-usase__confirm-contract-usage': {
+    method: 'POST',
+    path: (ctx) => `/api/utilizacaocontrato/ConfirmarUtilizacaoContrato/${ctx.idParaConfirmar}`,
+  },
+  'contract-usase__cancel-contract-usage': {
+    method: 'POST',
+    path: () => '/api/utilizacaocontrato/CancelarUtilizacaoContrato',
+    body: (ctx) => ({
+      IdUtilizacaoContrato: ctx.idParaCancelar,
+      MotivoCancelamento: 'teste de contrato',
+    }),
+  },
+  'contract-usase__getting-contract-usage-information': {
+    method: 'GET',
+    path: (ctx) => `/api/utilizacaocontrato/ObterDadosUtilizacaoContrato/${ctx.idParaLer}`,
+  },
+  'contract-usase__getting-guests': {
+    method: 'GET',
+    path: (ctx) => `/api/utilizacaocontrato/ObterHospedes/${ctx.idParaLer}`,
+  },
+  'client-area__hotels-available-for-use': {
+    method: 'GET',
+    path: () => `/api/PainelDoCliente/HoteisDisponiveisUso/${CONTRATO_DEMO}`,
+  },
+  'client-area__hotel-unit-types': {
+    method: 'GET',
+    path: () => '/api/PainelDoCliente/TiposUnidadeHoteleira/1',
+  },
+  'client-area__my-contract-usages': {
+    method: 'GET',
+    path: () =>
+      `/api/PainelDoCliente/MinhasUtilizacoesContrato?idContrato=${CONTRATO_DEMO}&paginaAtual=1`,
+  },
+  /** Devolve 200 VAZIO — é por isso que a 038 não usa este caminho. */
+  'client-area__create-contract-usage-request': {
+    method: 'GET',
+    path: () =>
+      `/api/PainelDoCliente/CriarSolicitacaoReserva?idContrato=${CONTRATO_DEMO}&qtdPagantes=2` +
+      `&dataInicial=${RESERVA.DataInicial}&dataFinal=${RESERVA.DataFinal}` +
+      '&idGrupoTabelaPontos=1&tipoUnidadeHoteleiraId=1&idHotel=1',
+  },
   'financial__alter-installment': {
     method: 'PUT',
     path: (ctx) => `/api/financeiro/ContaFinanceira/${ctx.idParcelaAberta}`,
@@ -160,10 +258,6 @@ beforeAll(async () => {
       [CONTRATO_DEMO_INADIMPLENTE],
     )
   ).rows as { idcontafinanceira: number }[];
-  ctx = {
-    cpfTitular: pessoa?.cpf ?? '',
-    idParcelaAberta: parcela?.idcontafinanceira ?? 0,
-  };
   db = criarBanco(env.TSE_SIM_DATABASE_URL);
   app = buildTseSimApp({ env, db });
   await app.ready();
@@ -174,6 +268,30 @@ beforeAll(async () => {
     payload: 'grant_type=password&username=integracao&password=integracao',
   });
   bearer = `Bearer ${(token.json() as { access_token: string }).access_token}`;
+
+  // 038: confirmar, cancelar e ler exigem uma utilização existente — uma por caso,
+  // porque confirmar e cancelar mudam o estado e não podem disputar a mesma linha
+  const criar = async (): Promise<number> => {
+    const r = await app.inject({
+      method: 'POST',
+      url: '/api/utilizacaocontrato/CriarUtilizacaoContrato',
+      headers: { authorization: bearer },
+      payload: {
+        ...RESERVA,
+        QtdAdultos: 1,
+        QtdCriancas: 0,
+        ListaHospedes: [{ Nome: 'FULANO', Sobrenome: 'DE TAL', Cpf: '00015278514' }],
+      },
+    });
+    return (r.json() as { IdUtilizacaoContrato: number }).IdUtilizacaoContrato;
+  };
+  ctx = {
+    cpfTitular: pessoa?.cpf ?? '',
+    idParcelaAberta: parcela?.idcontafinanceira ?? 0,
+    idParaConfirmar: await criar(),
+    idParaCancelar: await criar(),
+    idParaLer: await criar(),
+  };
 }, 120_000);
 
 afterAll(async () => {

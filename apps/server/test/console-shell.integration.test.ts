@@ -244,6 +244,8 @@ describe('console redesenhado — instalação e barra', () => {
       aguardandoHumano: 1,
       cobrancasAguardandoAprovacao: 1,
       leadsAguardandoAprovacao: 1,
+      // 038: conta as que esperam aprovação E as criadas sem confirmação
+      reservasAguardandoAprovacao: 0,
     });
   });
 

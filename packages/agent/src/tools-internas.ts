@@ -12,6 +12,37 @@ export const NOME_ESCALAR = 'escalar_para_humano';
 export const NOME_BUSCAR_CONHECIMENTO = 'buscar_conhecimento';
 /** 014: interceptada pelo grafo — o server inicia o fluxo de cobrança após a resposta. */
 export const NOME_INICIAR_PAGAMENTO = 'iniciar_pagamento';
+/** 038: idem, para a reserva de utilização de contrato. */
+export const NOME_INICIAR_RESERVA = 'iniciar_reserva';
+
+export function toolIniciarReserva(): ToolSpec {
+  return {
+    name: NOME_INICIAR_RESERVA,
+    entryId: 'interno.iniciar_reserva',
+    description:
+      'Inicia o fluxo de reserva: pergunta período, hotel, tipo de unidade e quantas pessoas, ' +
+      'consulta no ERP quantos pontos custa e qual a taxa de manutenção, e conduz o cliente até ' +
+      'confirmar. Use quando o cliente quiser RESERVAR, marcar, agendar ou usar a semana/período ' +
+      'dele. Não prometa disponibilidade, datas, pontos nem valores: o fluxo consulta o ERP e ' +
+      'mostra os números reais logo em seguida. Depois de chamar, responda em UMA frase curta que ' +
+      'vai verificar a disponibilidade.',
+    schema: z.object({}),
+    priceSource: false,
+    async execute() {
+      return {
+        rows: [
+          {
+            ok: true,
+            instrucao:
+              'fluxo de reserva iniciado; responda em uma frase que vai verificar a disponibilidade, sem datas nem valores',
+          },
+        ],
+        rowCount: 1,
+        truncated: false,
+      };
+    },
+  };
+}
 
 export function toolIniciarPagamento(): ToolSpec {
   return {

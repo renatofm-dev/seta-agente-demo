@@ -4,9 +4,15 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { Chip, Eyebrow } from '@/components/ui/chip';
 import { Abas } from '@/components/ui/tabela';
-import type { CobrancaView, ConversaDetalhe } from '@/lib/console-api';
+import type { CobrancaView, ConversaDetalhe, ReservaView } from '@/lib/console-api';
 import { dataCurta, dataHoraCurta, duracao, reaisDeCentavos, telefoneBonito } from '@/lib/formatos';
-import { METODO_COBRANCA, motivoLabel, STATUS_COBRANCA, STATUS_DESTINATARIO } from '@/lib/rotulos';
+import {
+  METODO_COBRANCA,
+  motivoLabel,
+  STATUS_COBRANCA,
+  STATUS_DESTINATARIO,
+  STATUS_RESERVA,
+} from '@/lib/rotulos';
 import { cn } from '@/lib/utils';
 
 /**
@@ -14,7 +20,7 @@ import { cn } from '@/lib/utils';
  * financeiro do ERP), cobranças geradas nesta conversa e a campanha de origem.
  */
 
-type Aba = 'contexto' | 'cobs' | 'origem';
+type Aba = 'contexto' | 'cobs' | 'reservas' | 'origem';
 
 function Secao({ titulo, children }: { titulo: string; children: React.ReactNode }) {
   return (
@@ -49,10 +55,13 @@ function faixaAtraso(dias: number): string {
 export function PainelContexto({
   detalhe,
   cobrancas,
+  reservas,
   aoFechar,
 }: {
   detalhe: ConversaDetalhe;
   cobrancas: CobrancaView[] | null | undefined;
+  /** 038: `undefined` = carregando, `null` = módulo desligado. */
+  reservas: ReservaView[] | null | undefined;
   aoFechar: () => void;
 }) {
   const [aba, setAba] = useState<Aba>('contexto');
@@ -79,6 +88,7 @@ export function PainelContexto({
           itens={[
             { id: 'contexto', rotulo: 'Contexto' },
             { id: 'cobs', rotulo: 'Cobranças' },
+            { id: 'reservas', rotulo: 'Reservas' },
             { id: 'origem', rotulo: 'Origem' },
           ]}
           ativa={aba}
@@ -266,6 +276,50 @@ export function PainelContexto({
               <p className="m-0 py-6 text-center text-[13px] text-text-3">
                 Nenhuma cobrança gerada nesta conversa. Ela nasce quando o cotista diz "quero
                 pagar".
+              </p>
+            )}
+          </>
+        )}
+
+        {aba === 'reservas' && (
+          <>
+            {reservas === undefined && (
+              <p className="m-0 py-6 text-center text-[13px] text-text-3">Carregando…</p>
+            )}
+            {reservas === null && (
+              <p className="m-0 py-6 text-center text-[13px] text-text-3">
+                Reservas indisponíveis nesta instalação (módulo de reserva desligado).
+              </p>
+            )}
+            {reservas?.map((r) => {
+              const s = STATUS_RESERVA[r.status];
+              return (
+                <Link
+                  key={r.id}
+                  href={`/reservas?k=${r.id}`}
+                  className="flex flex-col gap-1.5 rounded-[12px] border border-line bg-surface p-3 no-underline hover:border-line-strong"
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="font-heading text-[15px] font-semibold text-ink">
+                      {dataCurta(r.checkIn)} → {dataCurta(r.checkOut)}
+                    </span>
+                    <span className="font-mono text-[11px] text-text-3">
+                      {r.custoPontos.toLocaleString('pt-BR')} pts
+                    </span>
+                  </div>
+                  <Chip papel={s.papel} className="self-start">
+                    {s.rotulo}
+                  </Chip>
+                  <span className="text-[11.5px] text-text-3">
+                    {r.hotel ?? '—'} · {r.tipoUh ?? '—'} · taxa {reaisDeCentavos(r.taxaCentavos)}
+                  </span>
+                </Link>
+              );
+            })}
+            {reservas && reservas.length === 0 && (
+              <p className="m-0 py-6 text-center text-[13px] text-text-3">
+                Nenhuma reserva nesta conversa. Ela nasce quando o cotista diz "quero usar minha
+                semana".
               </p>
             )}
           </>

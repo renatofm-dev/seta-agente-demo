@@ -313,3 +313,36 @@ aqui é o mapa.
   `contafinanceira` e em `v_titulo`, lido pelo papel do PRODUTO (`erp_ro`).
 - **Ficou de fora:** catálogo por HTTP (037 — as leituras continuam por SQL, de propósito), reserva
   (038), lead e venda (039), 2ª via (040), apagar `conciliacao.ts` e apontar para o TSE real (041).
+
+## 038 — Reserva de utilização de contrato pelo agente
+- **Entrega:** o ato mais honesto da demo virou o mais forte. Até aqui o agente dizia que
+  "reservas são com a central" — verdade, porque o espelho SQL do TS Explorer não tem reserva
+  (012). A API tem: o cotista pede a semana, o agente pergunta o que falta, **simula pontos e taxa
+  no ERP diária a diária**, pede confirmação e **cria a utilização**, que passa a existir em
+  `MinhasUtilizacoesContrato` com o nome do operador que pediu.
+- **Onde está:** `packages/reserva` (novo, domínio puro), `packages/erp-api-tse/src/reserva.ts`,
+  `apps/tse-sim/src/rotas/utilizacao-contrato.ts` (+14 rotas), `apps/server/src/reserva/`
+  (`fluxo`, `worker`, `repo`, `tools`, `escalar`, `reservas-routes`), migração `0019`,
+  `apps/console/app/(console)/reservas/`, e a aba Reservas no painel de contexto do `/inbox`.
+- **A escrita é DUAS chamadas, não 1+N:** `CriarUtilizacaoContrato` aceita `ListaHospedes` inline,
+  então criar+hóspedes é uma coisa só. Depois vem `ConfirmarUtilizacaoContrato/{id}`.
+- **Idempotência sem referência externa.** A 036 pôde carimbar o id do PSP em `CodigoAutorizacao`;
+  aqui **não existe campo equivalente**. O reconhecimento é por **chave natural** (semana, hotel,
+  tipo de UH, lotação), o `erp_utilizacao_id` é gravado num UPDATE isolado logo após criar, e um
+  índice único parcial em `reserva` impede duas conversas na mesma semana. Falha definitiva escala
+  e **nunca cancela sozinha**: se a confirmação pegou, cancelar destruiria uma reserva real.
+- **O CPF não passa pelo modelo.** O hóspede principal é o titular, com o CPF que a plataforma já
+  tinha (014); os demais saem do parser determinístico sobre o texto cru, com DV conferido. O
+  schema do fallback por LLM **não tem campo onde caiba um CPF** — não é convenção, é a defesa.
+- **A simulação acontece antes de pedir hóspedes**, de propósito: quem não tem pontos ou pegou
+  período bloqueado descobre isso sem ter entregado nenhum dado pessoal.
+- **Persona:** as seis afirmações de que "reserva é com a central" mudaram juntas (persona,
+  personaSdr, descrição do catálogo, duas páginas da KB e o prompt-base). **A KB só muda de
+  verdade depois de `pnpm kb:ingest`** — com o índice velho o agente cita o texto antigo.
+- **Como exercitar:** `packages/reserva/test/reserva.test.ts` (33 casos puros),
+  `packages/erp-api-tse/test/reserva.test.ts` (adapter contra as fixtures) e
+  `apps/server/test/reserva.integration.test.ts` (15 casos contra o simulador da 035, incluindo o
+  read-back que adota a utilização quando a resposta se perde).
+- **Ficou de fora:** pagamento da taxa por cartão, cancelamento com multa, intercâmbio e crédito de
+  fracionamento, calendário visual no console, e o `PainelDoCliente/SimularUtilizacaoContrato` (a
+  jornada usa a simulação do OPERADOR, a única que devolve `Bloqueado` por diária).

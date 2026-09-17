@@ -20,6 +20,22 @@ export {
   redigir,
 } from './erros.js';
 export { criarHttp, type TseHttpConfig } from './http.js';
+export {
+  type CriarUtilizacaoInput,
+  CriarUtilizacaoInputSchema,
+  type DiariaSimulada,
+  diaDe,
+  type HospedeInput,
+  HospedeInputSchema,
+  mesmaReserva,
+  type OpcaoErp,
+  paraSimulacao,
+  paraUtilizacao,
+  type SimulacaoErp,
+  type SimularUtilizacaoInput,
+  SimularUtilizacaoInputSchema,
+  type UtilizacaoErp,
+} from './reserva.js';
 export { createErpSimulado, type ErpSimulado } from './simulado.js';
 export {
   type ApiConnector,

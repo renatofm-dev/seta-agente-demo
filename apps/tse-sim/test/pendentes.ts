@@ -1,19 +1,21 @@
 /**
- * Rotas da coleção que o simulador AINDA não responde (035). A lista é
+ * Rotas da coleção que o simulador AINDA não responde (035, 038). A lista é
  * explícita de propósito: é o placar do dublê, e `contrato.test.ts` garante
  * que ela só encolhe — uma rota implementada some daqui, e nenhuma fixture
  * pode ficar fora das duas listas.
  *
- * Quase tudo aqui tem dono marcado: reserva e hóspedes na 038, lead e venda na
- * 039, 2ª via em PDF na 040. `OperadorSistema/*` e `Relatorios/*` (30 rotas)
- * estão fora de escopo da frente inteira — nenhuma jornada da demo as usa.
+ * Quase tudo aqui tem dono marcado: lead e venda na 039, 2ª via em PDF na 040.
+ * `OperadorSistema/*` e `Relatorios/*` (30 rotas) estão fora de escopo da frente
+ * inteira — nenhuma jornada da demo as usa.
+ *
+ * Duas exceções conscientes da 038, sem consumidor na jornada:
+ * `PainelDoCliente/SimularUtilizacaoContrato` (a simulação que a 038 usa é a do
+ * OPERADOR, que é a única que devolve `Bloqueado` por diária) e as taxas/pensão
+ * de utilização (`AdicionarTaxaManutencao`, `AdicionarTipoPensao`,
+ * `ObterTotalReceberPorTipo`) — a taxa da reserva já sai de `CriarUtilizacaoContrato`.
  */
 export const PENDENTES: readonly string[] = [
-  // Client Area (6)
-  'client-area__create-contract-usage-request',
-  'client-area__hotel-unit-types',
-  'client-area__hotels-available-for-use',
-  'client-area__my-contract-usages',
+  // Client Area (2)
   'client-area__second-ticket',
   'client-area__simulate-contract-usage',
   // System Operator (20)
@@ -37,32 +39,22 @@ export const PENDENTES: readonly string[] = [
   'system-operator__remove-groups-permissions-of-operator',
   'system-operator__reset-password',
   'system-operator__revoke-access-to-companies',
-  // Contract Usase (25)
+  // Contract Usase (15)
   'contract-usase__add-guest',
   'contract-usase__add-instalments',
   'contract-usase__add-meal-type',
-  'contract-usase__cancel-contract-usage',
-  'contract-usase__confirm-contract-usage',
   'contract-usase__create-cancellation-fee',
-  'contract-usase__create-contract-usage',
   'contract-usase__get-block-code',
   'contract-usase__get-company',
   'contract-usase__get-market-code',
-  'contract-usase__getting-age-group-types',
-  'contract-usase__getting-contract-usage-information',
   'contract-usase__getting-contract-usage-of-fractionation-credit',
   'contract-usase__getting-credit-card-brands',
-  'contract-usase__getting-guests',
-  'contract-usase__getting-hotel-unit-types',
-  'contract-usase__getting-hotels',
   'contract-usase__getting-installments-types',
   'contract-usase__getting-interchange-contracts',
-  'contract-usase__getting-meal-types',
   'contract-usase__getting-payment-types',
   'contract-usase__getting-total-receivable-by-contract-usage-id',
   'contract-usase__perform-instalments-payment',
   'contract-usase__remove-guest',
-  'contract-usase__simulate-contract-usage',
   // Aproach Control (3)
   'aproach-control__create-lead',
   'aproach-control__getting-lead',

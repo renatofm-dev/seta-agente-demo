@@ -52,6 +52,19 @@ module.exports = {
       },
     },
     {
+      name: 'reserva-nao-importa-erp',
+      comment:
+        'reserva (038) é máquina de estados pura: recebe do server o que já foi lido, e nunca fala com o ERP nem com o catálogo',
+      severity: 'error',
+      from: { path: '^packages/reserva' },
+      to: {
+        path: [
+          '^packages/(erp-connector|erp-api-tse|query-catalog|agent|guardrails|cobranca)',
+          '^@seta/(erp-connector|erp-api-tse|query-catalog|agent|guardrails|cobranca)',
+        ],
+      },
+    },
+    {
       name: 'anonimizacao-so-conhece-ai-provider',
       comment:
         'anonimizacao (016) é camada de texto sobre o port AIProvider; nunca vê catálogo, ERP, agent ou guardrails',

@@ -19,6 +19,8 @@ export interface Instalacao {
     atendimento: boolean;
     pagamentos: boolean;
     sdr: boolean;
+    /** 038: reserva de utilização de contrato pelo agente. */
+    reserva: boolean;
   };
   limites: {
     maxToolCallsPorTurno: number;
@@ -32,6 +34,8 @@ export interface Instalacao {
     diasVencimento: number;
     descontoMaxBps: number;
     maxPropostasDia: number;
+    /** 038: acima disto a taxa de manutenção da reserva espera aprovação. */
+    tetoTaxaReservaCentavos: number;
   };
   canal: { gateway: 'meta' | 'log-only'; metaConfigurada: boolean; simulador: boolean };
   psp: { nome: string; ambiente: string } | null;
@@ -39,11 +43,75 @@ export interface Instalacao {
   campanhas: { metaConversaoBps: number };
 }
 
+// --- Reservas (038) ---
+
+export type StatusReserva =
+  | 'aguardando_aprovacao'
+  | 'criando'
+  | 'criada'
+  | 'confirmada'
+  | 'falha'
+  | 'cancelada'
+  | 'recusada';
+
+export interface HospedeReservaView {
+  nome: string;
+  sobrenome: string | null;
+  cpf: string | null;
+  principal: boolean;
+}
+
+export interface ReservaView {
+  id: string;
+  conversaId: string;
+  contratoId: string;
+  status: StatusReserva;
+  checkIn: string;
+  checkOut: string;
+  idHotel: number;
+  hotel: string | null;
+  idTipoUh: number;
+  tipoUh: string | null;
+  adultos: number;
+  criancas: number;
+  hospedes: HospedeReservaView[];
+  custoPontos: number;
+  taxaCentavos: number;
+  /** `IdUtilizacaoContrato` no TSE — existe a partir de `criada`. */
+  erpUtilizacaoId: string | null;
+  motivo: string | null;
+  aprovadoPor: string | null;
+  aprovadoEm: string | null;
+  criadoEm: string;
+  atualizadoEm: string;
+}
+
+export interface ReservasResposta {
+  reservas: ReservaView[];
+  contagens: Partial<Record<StatusReserva, number>>;
+}
+
+export interface EscritaErp {
+  chave: string;
+  estado: 'pendente' | 'confirmada' | 'falha';
+  erpId: string | null;
+  tentativas: number;
+  erro: string | null;
+  atualizadoEm: string;
+}
+
+export interface ReservaDetalhe {
+  reserva: ReservaView;
+  escrita: EscritaErp | null;
+}
+
 /** Badges da barra superior. */
 export interface Resumo {
   aguardandoHumano: number;
   cobrancasAguardandoAprovacao: number;
   leadsAguardandoAprovacao: number;
+  /** 038: aguardando aprovação OU criadas e não confirmadas. */
+  reservasAguardandoAprovacao: number;
 }
 
 export interface PessoaEquipe {
@@ -649,6 +717,23 @@ export const api = {
     fetch(`/api/console/cobrancas/${id}`).then((r) => json<CobrancaDetalhe>(r)),
   aprovarCobranca: (id: string) =>
     post(`/api/console/cobrancas/${id}/aprovar`).then((r) => json<{ ok: boolean }>(r)),
+  // --- Reservas (038) ---
+  reservas: (filtro?: { status?: StatusReserva; conversaId?: string }) => {
+    const params = new URLSearchParams();
+    if (filtro?.status) params.set('status', filtro.status);
+    if (filtro?.conversaId) params.set('conversaId', filtro.conversaId);
+    const qs = params.toString();
+    return fetch(`/api/console/reservas${qs ? `?${qs}` : ''}`).then((r) =>
+      json<ReservasResposta>(r),
+    );
+  },
+  reserva: (id: string) =>
+    fetch(`/api/console/reservas/${id}`).then((r) => json<ReservaDetalhe>(r)),
+  aprovarReserva: (id: string) =>
+    post(`/api/console/reservas/${id}/aprovar`).then((r) => json<{ ok: boolean }>(r)),
+  recusarReserva: (id: string, motivo: string) =>
+    post(`/api/console/reservas/${id}/recusar`, { motivo }).then((r) => json<{ ok: boolean }>(r)),
+
   recusarCobranca: (id: string, motivo: string) =>
     post(`/api/console/cobrancas/${id}/recusar`, { motivo }).then((r) => json<{ ok: boolean }>(r)),
   simularPagamento: (id: string) =>

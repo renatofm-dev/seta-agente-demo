@@ -4,8 +4,10 @@ export {
   NOME_BUSCAR_CONHECIMENTO,
   NOME_ESCALAR,
   NOME_INICIAR_PAGAMENTO,
+  NOME_INICIAR_RESERVA,
   toolEscalarParaHumano,
   toolIniciarPagamento,
+  toolIniciarReserva,
 } from './tools-internas.js';
 export type {
   AgentRuntime,

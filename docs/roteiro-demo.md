@@ -6,7 +6,9 @@ se a Meta falhar no dia.
 
 ## Checklist pré-demo (30 min antes)
 
-- [ ] `demo-seed.sh` rodado (idempotente — pode repetir na hora).
+- [ ] `demo-seed.sh` rodado (idempotente — pode repetir na hora). **Inclui
+      `kb:ingest`**: sem reindexar, o RAG ainda responde que reserva é com a
+      central e o agente se contradiz no Ato 6.
 - [ ] Janela de 24h ABERTA: mandar "oi" do número de teste e receber resposta.
 - [ ] Fila limpa: nenhum ticket pendurado no inbox (resolver sobras de ensaio).
 - [ ] Dois browsers logados: `atendente@demo.seta` (inbox) e `curador@demo.seta`
@@ -22,10 +24,13 @@ Enviar do celular, nesta ordem:
    → saldo devedor e parcelas reais do ERP mock (tool `saldo_contrato`).
 2. **"qual é a minha cota? em que andar fica?"**
    → torre, andar, UH e capacidade (tool `minha_cota`).
-3. **"quero reservar minha semana de janeiro"**
-   → agente ADMITE não saber e escala: reserva/calendário NÃO existe no
-   espelho do TS Explorer — limitação REAL do domínio, não encenada.
+3. **"posso trocar a data de uma reserva que já confirmei?"**
+   → agente ADMITE não saber e escala: troca de data e calendário de temporada
+   seguem com a central — limitação REAL do domínio, não encenada.
    Narrar: "ele não inventa — regra inegociável do prompt + guardrails".
+   (Até a 038 quem fazia esse papel era "quero reservar minha semana". Agora ele
+   RESERVA — é o Ato 6 —, e a prova de honestidade mudou de âncora em vez de
+   sumir: é o momento mais persuasivo da demo.)
 
 Bônus de política (008): **"como funciona o distrato?"** → resposta citando
 "Cancelamento e distrato" (KB via RAG). Bônus de dado: do número **…0003**,
@@ -89,6 +94,30 @@ browser do atendente:
     emite o link; do número **…0003** (distrato em análise) "quero pagar"
     bloqueia e escala. E **"quero comprar mais uma cota"** vai para o comercial
     com texto próprio, não mais "outro canal".
+
+## Ato 6 — Reserva de ponta a ponta (038, ~3 min)
+
+Do número **…0001** (em dia), com a página **Reservas** aberta no browser do
+atendente. É o ato que era, até agora, o exemplo de limitação:
+
+17. **"quero usar minha semana em maio"** → o agente pergunta o período.
+18. **"de 10/05 a 13/05"** → lista as torres; **"1"** → lista os tipos de
+    unidade; **"1"** → pergunta quantas pessoas; **"2 adultos"**.
+19. → **a simulação vem do ERP**: pontos da diária e taxa de manutenção, período
+    a período. Narrar: "esses pontos e essa taxa não são nossos — vieram do
+    `SimularUtilizacaoContrato` do TS Explorer, diária a diária".
+20. **"sim"** → "estou registrando a reserva". Em segundos chega **"Reserva
+    confirmada! … (nº 12)"**, e na página **Reservas** ela aparece como
+    *Confirmada* com o número do ERP. Conferir no banco do ERP:
+    `select idutilizacao, status from tse_sim.utilizacaocontrato;`
+21. Bônus de honestidade: pedir **janeiro num tipo LUXO** → o agente diz que o
+    período está bloqueado **citando a data** e não oferece alternativa
+    inventada. Bônus de HITL: com `RESERVA_TETO_TAXA_SEM_HITL_CENTAVOS` baixo, a
+    reserva cai em **"Aguardando aprovação"** e só vai ao ERP depois do clique
+    do atendente.
+
+Narrar no fim: "a reserva existe no ERP com o nome do operador do agente — o
+sistema do cliente sabe distinguir o que o robô fez do que uma pessoa fez."
 
 Fechamento: "tudo isso rodando numa VPS de €4, com o LLM atrás de um port —
 levar para dentro de casa é trocar duas variáveis de ambiente."
