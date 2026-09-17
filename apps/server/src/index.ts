@@ -230,6 +230,16 @@ const app = buildApp({
   wa: { db, boss },
   console: { auth, executor, registry, provider, templateApi },
   pagamentos: { repo: pagamentosRepo, psp },
+  // 015b: as rotas de decisão da proposta precisam do fluxo SDR inteiro
+  sdr: {
+    db,
+    executor,
+    repo: createSdrRepo(db),
+    provider,
+    env,
+    logger,
+    venda: { repo: vendaRepo, boss, pspNome: psp.nome },
+  },
 });
 
 try {
