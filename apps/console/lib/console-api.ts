@@ -105,6 +105,52 @@ export interface ReservaDetalhe {
   escrita: EscritaErp | null;
 }
 
+// --- Vendas (045) ---
+
+export type StatusVenda =
+  | 'sinal_emitido'
+  | 'sinal_pago'
+  | 'registrando'
+  | 'registrada'
+  | 'falha'
+  | 'cancelada';
+
+export interface VendaView {
+  id: string;
+  conversaId: string;
+  status: StatusVenda;
+  /** O CPF chega MASCARADO do server — o console nunca vê o documento inteiro. */
+  comprador: { nome: string; cpf: string };
+  cotaCodigo: string;
+  valorCentavos: number;
+  sinalCentavos: number;
+  erpContratoId: string | null;
+  motivo: string | null;
+  criadoEm: string;
+}
+
+export interface VendasResposta {
+  vendas: VendaView[];
+}
+
+export interface VendaDetalhe extends VendaView {
+  erpPessoaId: string | null;
+  erpCasalId: string | null;
+  escrita: { estado: string; tentativas: number; erro: string | null } | null;
+  cobranca: {
+    status: string;
+    metodo: string;
+    valorCentavos: number;
+    urlFatura: string | null;
+    pagoEm: string | null;
+  } | null;
+  proposta: {
+    valorTabelaCentavos: number;
+    valorOfertadoCentavos: number;
+    status: string;
+  } | null;
+}
+
 /** Badges da barra superior. */
 export interface Resumo {
   aguardandoHumano: number;
@@ -729,6 +775,16 @@ export const api = {
   },
   reserva: (id: string) =>
     fetch(`/api/console/reservas/${id}`).then((r) => json<ReservaDetalhe>(r)),
+
+  // --- Vendas (045) ---
+  vendas: (filtro?: { status?: StatusVenda; conversaId?: string }) => {
+    const params = new URLSearchParams();
+    if (filtro?.status) params.set('status', filtro.status);
+    if (filtro?.conversaId) params.set('conversaId', filtro.conversaId);
+    const qs = params.toString();
+    return fetch(`/api/console/vendas${qs ? `?${qs}` : ''}`).then((r) => json<VendasResposta>(r));
+  },
+  venda: (id: string) => fetch(`/api/console/vendas/${id}`).then((r) => json<VendaDetalhe>(r)),
   aprovarReserva: (id: string) =>
     post(`/api/console/reservas/${id}/aprovar`).then((r) => json<{ ok: boolean }>(r)),
   recusarReserva: (id: string, motivo: string) =>
