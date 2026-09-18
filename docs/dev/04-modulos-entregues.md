@@ -425,3 +425,31 @@ aqui é o mapa.
   o sinal de aprendizado).
 - **Ficou de fora:** papel `comercial` e permissão por papel (032) — qualquer sessão do console
   decide, como na aprovação de cobrança da 014.
+
+## 015c — Guardrail da raia SDR: percentual por extenso
+- **Entrega:** "Consigo aplicar **três** por cento pra fechar hoje" chegava ao lead. `preco.ts`
+  barra percentual, mas `RE_PERCENTUAL` exige dígito — sem `\d+` no texto não havia rede nenhuma, e
+  a raia que negocia por ofício era justamente a exposta.
+- **Onde está:** `packages/guardrails/src/sdr-percentual.ts` (novo) e uma linha no
+  `turno-handler.ts` que monta os hooks por raia.
+- **Hook próprio, `preco.ts` intocado.** Mexer no `RE_PERCENTUAL` mudaria a raia do cotista junto, e
+  a lacuna lá é decisão consciente da 006: o classificador de intenção pega `negociar_preco` antes
+  de o agente responder. O teste que documentava a lacuna continua no lugar — virou a metade
+  "cotista" de um par que mostra a decisão inteira.
+- **A condição é `clienteId === ''`, não `sdrDeps`.** A 045 abriu o SDR para o cotista, e usar as
+  deps ligaria o hook na raia onde o vocabulário aparece legitimamente (a KB fala em "abatimento do
+  frete"). Este hook é ABSOLUTO — não faz a distinção por rastreabilidade que `preco.ts` faz — e na
+  raia do cotista escalaria toda citação de política.
+- **`rewrite` antes de `escalate`, mas só com valor de tool.** Havendo `valor_minimo_centavos` no
+  turno, o percentual vira o piso em reais e a conversa segue. Sem o piso à mão, reescrever
+  significaria inventar número: aí escala.
+- **O trigger é o mesmo da alçada** (`desconto_acima_alcada`): do ponto de vista da operação é a
+  mesma coisa — o agente tentou negociar fora da alçada — e um motivo novo cegaria a métrica de HITL
+  por motivo no console e no relatório.
+- **Como exercitar:** `packages/guardrails/test/guardrails.test.ts` (6 casos, incluindo o par das
+  duas raias com a MESMA frase e os falsos positivos que não podem cair: "são cem metros da praia")
+  e `apps/server/test/sdr.integration.test.ts` (o turno completo — sem o hook, o teste falha com o
+  rascunho chegando ao lead).
+- **Ficou de fora:** alterar `RE_PERCENTUAL` ou a raia do cotista, detectar percentual em mensagens
+  do LEAD (é entrada, e a máquina já trata "10%" como pedido abaixo do piso) e vocabulário por
+  cliente no `client.yaml` (032).
