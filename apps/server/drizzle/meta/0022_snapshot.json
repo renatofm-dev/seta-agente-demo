@@ -1,6 +1,6 @@
 {
-  "id": "bfad01a1-be8a-4b56-b904-f2a1c1e110ce",
-  "prevId": "b9e3aff3-2e44-414d-8986-61dfe344b7b4",
+  "id": "99ed6147-09eb-419d-904a-88953576a54a",
+  "prevId": "52005ba2-b855-4240-9886-81e3f9e46914",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -1866,6 +1866,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "valor_acordado_centavos": {
+          "name": "valor_acordado_centavos",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
         "perfil": {
           "name": "perfil",
           "type": "jsonb",
@@ -2738,6 +2744,13 @@
           "type": "text",
           "primaryKey": false,
           "notNull": false
+        },
+        "origem": {
+          "name": "origem",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'agente'"
         },
         "aprovado_por": {
           "name": "aprovado_por",
