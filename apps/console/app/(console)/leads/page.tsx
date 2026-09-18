@@ -3,10 +3,11 @@
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
-import { buttonVariants } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { Vazio } from '@/components/ui/card';
 import { Chip, Eyebrow } from '@/components/ui/chip';
 import { Drawer, LinhaTempo } from '@/components/ui/drawer';
+import { ModalMotivo } from '@/components/ui/modal-motivo';
 import { PageHeader, Pagina } from '@/components/ui/page-header';
 import { Filtros, Linha, Tabela } from '@/components/ui/tabela';
 import { api, type LeadDetalhe, type LeadView, type PerfilLead } from '@/lib/console-api';
@@ -20,7 +21,7 @@ import {
 } from '@/lib/formatos';
 import { estadoLead, STATUS_PROPOSTA } from '@/lib/rotulos';
 import { cn } from '@/lib/utils';
-import { useInstalacao } from '../layout';
+import { useInstalacao, useResumo } from '../layout';
 
 /**
  * Leads (design 5.5, leitura da 015a): quem perguntou preço sem vínculo, o
@@ -38,6 +39,18 @@ function grupoDe(l: LeadView): Filtro {
   if (l.status === 'perdido') return 'perdidos';
   if (l.status === 'proposta') return 'proposta';
   return 'qualificando';
+}
+
+/**
+ * 015b: "180000,00" / "180.000,00" / "180000" → centavos. Devolve null no que
+ * não for número — o botão fica desabilitado em vez de mandar lixo ao server,
+ * que valida de novo contra piso e tabela.
+ */
+function centavosDoTexto(texto: string): number | null {
+  const limpo = texto.trim().replaceAll('.', '').replace(',', '.');
+  if (!/^\d+(\.\d{1,2})?$/.test(limpo)) return null;
+  const n = Math.round(Number(limpo) * 100);
+  return Number.isSafeInteger(n) && n > 0 ? n : null;
 }
 
 function perfilTexto(p: PerfilLead): string {
@@ -58,8 +71,21 @@ function pedidoTexto(l: LeadView): string {
   return '—';
 }
 
-function DrawerLead({ item, aoFechar }: { item: LeadView; aoFechar: () => void }) {
+function DrawerLead({
+  item,
+  aoFechar,
+  aoMudar,
+}: {
+  item: LeadView;
+  aoFechar: () => void;
+  aoMudar: (msg: string | null) => void;
+}) {
   const [detalhe, setDetalhe] = useState<LeadDetalhe | null>(null);
+  // 015b: estado dos três botões
+  const [ocupado, setOcupado] = useState(false);
+  const [recusando, setRecusando] = useState(false);
+  const [contrapondo, setContrapondo] = useState(false);
+  const [valorContra, setValorContra] = useState('');
   useEffect(() => {
     setDetalhe(null);
     api
@@ -70,6 +96,33 @@ function DrawerLead({ item, aoFechar }: { item: LeadView; aoFechar: () => void }
 
   const estado = estadoLead(item.status, item.proposta);
   const p = item.proposta;
+
+  /** Os três caminhos da decisão; o server valida de novo e pode devolver 400/409. */
+  async function decidir(qual: 'aprovar' | 'recusar' | 'contrapor', motivo?: string) {
+    if (!p) return;
+    setOcupado(true);
+    try {
+      if (qual === 'aprovar') {
+        await api.aprovarProposta(item.id, p.id);
+        aoMudar('Aprovado — o lead já foi avisado.');
+      } else if (qual === 'recusar') {
+        await api.recusarProposta(item.id, p.id, motivo ?? '');
+        aoMudar('Recusado — o lead recebeu o valor do piso.');
+      } else {
+        const centavos = centavosDoTexto(valorContra);
+        if (centavos === null) return;
+        await api.contrapropor(item.id, p.id, centavos);
+        aoMudar('Contra-proposta enviada ao lead.');
+        setContrapondo(false);
+        setValorContra('');
+      }
+    } catch (err) {
+      aoMudar(err instanceof Error ? err.message : String(err));
+    } finally {
+      setOcupado(false);
+      setRecusando(false);
+    }
+  }
   const bpsAbaixo =
     p?.valorPedidoCentavos !== null &&
     p?.valorPedidoCentavos !== undefined &&
@@ -151,9 +204,56 @@ function DrawerLead({ item, aoFechar }: { item: LeadView; aoFechar: () => void }
             )}
           </div>
           {p.status === 'aguardando_aprovacao' && (
-            <div className="rounded-[10px] border border-info-2/25 bg-info-2/8 px-3 py-2.5 text-[12.5px] text-info">
-              A proposta espera o comercial. Aprovar, contra-propor e recusar pelo console chegam
-              com a spec 015b — até lá, responda o lead pela conversa.
+            <div className="flex flex-col gap-2">
+              <div className="rounded-[10px] border border-info-2/25 bg-info-2/8 px-3 py-2.5 text-[12.5px] text-info">
+                O lead está esperando. Decida aqui e ele recebe a resposta no WhatsApp.
+              </div>
+              {contrapondo ? (
+                <div className="flex flex-col gap-2 rounded-[10px] border border-line p-2.5">
+                  <label
+                    htmlFor="contraproposta"
+                    className="text-[11px] tracking-wide text-text-3 uppercase"
+                  >
+                    Contra-proposta (entre {reaisDeCentavos(p.valorMinimoCentavos)} e{' '}
+                    {reaisDeCentavos(p.valorTabelaCentavos)})
+                  </label>
+                  <input
+                    id="contraproposta"
+                    inputMode="decimal"
+                    placeholder="180000,00"
+                    value={valorContra}
+                    onChange={(e) => setValorContra(e.target.value)}
+                    className="rounded-[8px] border border-line bg-surface px-2.5 py-1.5 text-sm"
+                  />
+                  <div className="flex gap-2">
+                    <Button
+                      disabled={ocupado || centavosDoTexto(valorContra) === null}
+                      onClick={() => decidir('contrapor')}
+                    >
+                      Enviar ao lead
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      onClick={() => setContrapondo(false)}
+                      disabled={ocupado}
+                    >
+                      Cancelar
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex flex-wrap gap-2">
+                  <Button disabled={ocupado} onClick={() => decidir('aprovar')}>
+                    Aprovar {reaisDeCentavos(p.valorPedidoCentavos ?? 0)}
+                  </Button>
+                  <Button variant="ghost" disabled={ocupado} onClick={() => setContrapondo(true)}>
+                    Contra-proposta
+                  </Button>
+                  <Button variant="ghost" disabled={ocupado} onClick={() => setRecusando(true)}>
+                    Recusar
+                  </Button>
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -162,6 +262,15 @@ function DrawerLead({ item, aoFechar }: { item: LeadView; aoFechar: () => void }
           {pedidoTexto(item)} · sem negociação registrada.
         </div>
       )}
+
+      <ModalMotivo
+        aberto={recusando}
+        titulo="Recusar o valor pedido"
+        descricao="O lead recebe o valor do piso e pode aceitar. O motivo fica no histórico."
+        rotuloConfirmar="Recusar"
+        aoConfirmar={(motivo) => decidir('recusar', motivo)}
+        aoFechar={() => setRecusando(false)}
+      />
 
       <div className="flex flex-col gap-2">
         <Eyebrow>Histórico</Eyebrow>
@@ -200,6 +309,7 @@ function LeadsConteudo() {
   const router = useRouter();
   const params = useSearchParams();
   const instalacao = useInstalacao();
+  const { recarregar: recarregarResumo } = useResumo();
   const [leads, setLeads] = useState<LeadView[] | null>(null);
   const [filtro, setFiltro] = useState<Filtro>('todos');
   const [erro, setErro] = useState<string | null>(null);
@@ -227,6 +337,15 @@ function LeadsConteudo() {
   );
   const item = l ? (todos.find((x) => x.id === l) ?? null) : null;
   const fechar = useCallback(() => router.replace('/leads'), [router]);
+  // 015b: a decisão muda o lead E o badge da barra superior
+  const aoMudar = useCallback(
+    (msg: string | null) => {
+      setErro(msg);
+      recarregar();
+      recarregarResumo();
+    },
+    [recarregar, recarregarResumo],
+  );
 
   return (
     <div
@@ -295,7 +414,7 @@ function LeadsConteudo() {
       </Pagina>
       {item && (
         <div className="fixed top-14 right-0 bottom-0 z-30 w-[400px] max-w-full shadow-[-12px_0_32px_rgba(20,20,26,.12)] xl:static xl:z-auto xl:w-auto xl:shadow-none">
-          <DrawerLead item={item} aoFechar={fechar} />
+          <DrawerLead item={item} aoFechar={fechar} aoMudar={aoMudar} />
         </div>
       )}
     </div>

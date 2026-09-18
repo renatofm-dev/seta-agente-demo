@@ -119,6 +119,32 @@ export const TEXTO_NAO_ENTENDI =
 
 export const TEXTO_SEM_INTERESSE = 'Tudo bem! Se mudar de ideia, é só me chamar por aqui. 🙂';
 
+// --- 015b: a decisão do humano volta para a conversa ------------------------
+
+/**
+ * Os três textos que o lead recebe quando alguém decide no console. Valem as
+ * mesmas regras de sempre: fala-se em VALOR, nunca em percentual, e nenhuma das
+ * palavras que o guardrail de preço barra aparece aqui (o teste de varredura
+ * cobre estes três junto com o resto).
+ */
+export function textoAprovado(valorCentavos: number): string {
+  return (
+    `Boa notícia! Falei com a equipe e consegui fechar em ${formatarReais(valorCentavos)}. ` +
+    'Seguimos? 🙂'
+  );
+}
+
+export function textoRecusadoHumano(pisoCentavos: number): string {
+  return (
+    `Conversei com a equipe e nesse valor não consigo fechar. O melhor que tenho é ` +
+    `${formatarReais(pisoCentavos)}. Quer seguir com esse?`
+  );
+}
+
+export function textoContraproposta(valorCentavos: number): string {
+  return `Consegui uma condição melhor com a equipe: ${formatarReais(valorCentavos)}. Fechamos?`;
+}
+
 // --- 045: fechamento com sinal por PIX --------------------------------------
 
 /**

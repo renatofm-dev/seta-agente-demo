@@ -391,3 +391,37 @@ aqui é o mapa.
 - **Ficou de fora:** a **015b** (aprovar proposta abaixo do piso no console — quem pede abaixo da
   alçada continua parando sem resposta), assinatura de contrato, parcelamento negociado na
   conversa e prospecção ativa.
+
+## 015b — SDR: aprovar, recusar ou contra-propor pelo console
+- **Entrega:** o lead que pedia abaixo do piso ficava **sem resposta nenhuma**. A proposta entrava
+  em `aguardando_aprovacao`, a tela de Leads mostrava os três botões com a nota "chegam com a
+  015b", e o lead esperava alguém lembrar de falar com ele pela conversa. Agora um humano decide no
+  console e a decisão **volta para o WhatsApp**.
+- **Onde está:** `packages/sdr` (ações `aprovar_humano`/`recusar_humano`/`contrapropor_humano`,
+  três textos novos), `apps/server/src/sdr/leads-routes.ts` (as duas rotas),
+  `apps/server/src/sdr/fluxo.ts` (`aplicarDecisaoHumana`), migração `0021`, e os botões ligados em
+  `apps/console/app/(console)/leads/page.tsx`.
+- **Aprovar leva ao fechamento, não ao agendamento.** A pré-spec é de 08/09, antes da 045: aprovar
+  agora leva ao mesmo destino do aceite (o PIX do sinal). Aprovar um valor e não deixar o lead pagar
+  seria aprovação que não serve para nada. Com a 045 desligada, volta a cair em `agendamento`.
+- **O valor decidido tem campo próprio.** `valorOfertadoCentavos` só sabia derivar `tabela` ou
+  `piso` — um valor aprovado ABAIXO do piso não cabia em nenhum dos dois, e a derivação teria
+  devolvido o piso, cobrando do lead um valor que ninguém aprovou.
+  `fluxo_sdr.valor_acordado_centavos` guarda o que o humano decidiu e vence a derivação.
+- **Recusar não encerra**: devolve o lead para `oferta` no piso, e a decisão passa a ser dele. O
+  rascunho previa `encerrado:recusado`; os critérios de aceite já descreviam o contrário, e manter o
+  lead vivo é melhor.
+- **As três decisões partem de `encerrado`**, e por isso entram ANTES do guard de fluxo encerrado em
+  `transicionar` — é de `encerrado:aguardando_aprovacao` que elas saem. A máquina recusa aplicá-las
+  em qualquer outro estado: aprovar um fluxo que já seguiu adiante seria reabrir conversa alheia.
+- **Trava de concorrência**: `UPDATE ... WHERE status = 'aguardando_aprovacao'` — dois atendentes
+  clicando juntos, só um decide; o outro leva 409. E a contraproposta é validada contra a faixa
+  ANTES de decidir, para que um 400 não consuma a pendência.
+- **A contraproposta cria proposta NOVA** com `origem: 'humano'`, deixando a original `recusada`. As
+  duas no histórico contam a negociação inteira, e o distiller consegue separar o que a máquina
+  ofertou do que uma pessoa digitou.
+- **Como exercitar:** `apps/server/test/sdr-aprovacao.integration.test.ts` (8 casos: os três
+  caminhos, 409 na segunda decisão, 400 fora da faixa que não queima a pendência, 401 sem sessão e
+  o sinal de aprendizado).
+- **Ficou de fora:** papel `comercial` e permissão por papel (032) — qualquer sessão do console
+  decide, como na aprovação de cobrança da 014.

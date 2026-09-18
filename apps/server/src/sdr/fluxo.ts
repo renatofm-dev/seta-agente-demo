@@ -27,6 +27,7 @@ import type { Db } from '../db/index.js';
 import { cobranca, fluxoSdr, venda as vendaTabela } from '../db/schema.js';
 import type { Env } from '../env.js';
 import type { Comprador, VendaRepo } from '../venda/repo.js';
+import { enqueueOutbound } from '../wa/outbox.js';
 import {
   escalarTicketSdr,
   TRIGGER_DESCONTO_ACIMA_ALCADA,
@@ -107,6 +108,7 @@ function estadoDe(row: FluxoSdrRow): EstadoFluxo {
     naoEntendi: row.naoEntendi,
     encerramento: (row.encerramento as EstadoFluxo['encerramento']) ?? null,
     comprador: (row.comprador as EstadoFluxo['comprador']) ?? null,
+    valorAcordadoCentavos: row.valorAcordadoCentavos ?? null,
   };
 }
 
@@ -127,6 +129,7 @@ async function salvarEstado(
       oferta: estado.oferta,
       naoEntendi: estado.naoEntendi,
       comprador: estado.comprador,
+      valorAcordadoCentavos: estado.valorAcordadoCentavos,
       ...(extras.propostaId !== undefined ? { propostaId: extras.propostaId } : {}),
       atualizadoEm: new Date(),
     })
@@ -498,4 +501,75 @@ async function emitirSinal(
 function dataMaisDias(dias: number): string {
   const d = new Date(Date.now() + dias * 86_400_000);
   return new Intl.DateTimeFormat('sv-SE', { timeZone: 'America/Sao_Paulo' }).format(d);
+}
+
+/**
+ * 015b — a decisão do console volta para a conversa.
+ *
+ * Roda FORA do turno do agente: não há mensagem do lead para responder, é um
+ * clique de atendente que precisa virar WhatsApp. Por isso as mensagens saem
+ * pelo `outbox` (que cuida da janela de 24 h e do template, se preciso) em vez
+ * do caminho normal do turno.
+ *
+ * A chave do outbox carrega o id do fluxo e a etapa de destino: clicar duas
+ * vezes no mesmo botão não manda a mesma mensagem duas vezes.
+ */
+export async function aplicarDecisaoHumana(
+  deps: SdrFluxoDeps,
+  conversaId: string,
+  acao: Acao,
+): Promise<{ aplicada: boolean }> {
+  const fluxo = await deps.repo.fluxoDaConversa(conversaId);
+  if (!fluxo) {
+    deps.logger.warn({ conversaId }, '015b: decisão sem fluxo SDR — nada a fazer');
+    return { aplicada: false };
+  }
+  const estado = estadoDe(fluxo);
+  const contexto = await contextoFluxo(deps, {
+    conversaId,
+    turnoId: '',
+    waId: '',
+    session: { traceId: newTraceId(), clienteId: '' } as SessionCtx,
+    textoUsuario: '',
+  });
+  const t = transicionar(estado, acao, contexto);
+  if (t.efeito === 'nenhum' && t.mensagens.length === 0) {
+    // a máquina recusou (fluxo não estava aguardando aprovação)
+    return { aplicada: false };
+  }
+
+  if (t.efeito === 'emitir_sinal') {
+    await emitirSinal(
+      deps,
+      {
+        conversaId,
+        turnoId: '',
+        waId: fluxo.waId ?? '',
+        session: { traceId: newTraceId(), clienteId: '' } as SessionCtx,
+        textoUsuario: '',
+      },
+      fluxo,
+      t.estado,
+      contexto,
+    );
+  }
+  await salvarEstado(deps.db, fluxo.id, t.estado);
+
+  const boss = deps.venda?.boss;
+  if (boss) {
+    let seq = 0;
+    for (const texto of t.mensagens) {
+      seq += 1;
+      await enqueueOutbound(
+        { db: deps.db, boss },
+        {
+          conversaId,
+          chave: `sdr:${fluxo.id}:${t.estado.etapa}:${seq}`,
+          texto,
+          autor: 'bot',
+        },
+      );
+    }
+  }
+  return { aplicada: true };
 }
