@@ -22,6 +22,7 @@ import type { PagamentosRepo } from './pagamentos/repo.js';
 import { webhookPspRoutes } from './pagamentos/webhook-routes.js';
 import { relatoriosRoutes } from './relatorios-routes.js';
 import { reservasRoutes } from './reserva/reservas-routes.js';
+import type { SdrFluxoDeps } from './sdr/fluxo.js';
 import { leadsRoutes } from './sdr/leads-routes.js';
 import { vendasRoutes } from './venda/vendas-routes.js';
 import { devRoutes } from './wa/dev-routes.js';
@@ -66,6 +67,12 @@ export interface BuildAppOptions {
   readonly console?: ConsoleDeps;
   /** Sem deps de pagamentos, nem webhook nem /api/console/cobrancas existem. */
   readonly pagamentos?: PagamentosDeps;
+  /**
+   * 015b: sem isto, `/api/console/leads` continua só leitura — aprovar,
+   * recusar e contrapropor não são registrados. É o degrau que mantém a 015a
+   * funcionando sozinha.
+   */
+  readonly sdr?: SdrFluxoDeps;
 }
 
 export function buildApp({
@@ -74,6 +81,7 @@ export function buildApp({
   wa,
   console: consoleDeps,
   pagamentos,
+  sdr,
 }: BuildAppOptions): App {
   const app = fastify({
     loggerInstance: createLogger({ name: 'server', level: env.LOG_LEVEL }),
@@ -132,7 +140,7 @@ export function buildApp({
         },
       });
       // Leads (015): leitura das tabelas do SDR; ações ficam com a 015b
-      app.register(leadsRoutes, { db: wa.db, auth: consoleDeps.auth });
+      app.register(leadsRoutes, { db: wa.db, auth: consoleDeps.auth, sdr }); // 015b
       app.register(disparosRoutes, {
         db: wa.db,
         boss: wa.boss,

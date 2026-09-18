@@ -14,6 +14,13 @@ type NovaProposta = typeof propostaSdr.$inferInsert;
 
 export interface SdrRepo {
   fluxoAtivo(conversaId: string): Promise<FluxoSdrRow | null>;
+  /**
+   * 015b: o último fluxo da conversa, ATIVO OU NÃO. A decisão do console parte
+   * de um fluxo `encerrado:aguardando_aprovacao` — `fluxoAtivo` o esconde de
+   * propósito (ele não deve consumir turno), mas é exatamente ele que o
+   * atendente está decidindo.
+   */
+  fluxoDaConversa(conversaId: string): Promise<(FluxoSdrRow & { waId: string | null }) | null>;
   /** Lead por wa_id; cria como `novo` se não existir. */
   garantirLead(waId: string, conversaId: string, traceId: string): Promise<LeadRow>;
   atualizarLead(
@@ -43,6 +50,17 @@ export function createSdrRepo(db: Db): SdrRepo {
         .where(and(eq(fluxoSdr.conversaId, conversaId), ne(fluxoSdr.etapa, 'encerrado')))
         .limit(1);
       return f ?? null;
+    },
+
+    async fluxoDaConversa(conversaId) {
+      const [f] = await db
+        .select({ fluxo: fluxoSdr, waId: lead.waId })
+        .from(fluxoSdr)
+        .innerJoin(lead, eq(lead.id, fluxoSdr.leadId))
+        .where(eq(fluxoSdr.conversaId, conversaId))
+        .orderBy(desc(fluxoSdr.criadoEm))
+        .limit(1);
+      return f ? { ...f.fluxo, waId: f.waId } : null;
     },
 
     async garantirLead(waId, conversaId, traceId) {

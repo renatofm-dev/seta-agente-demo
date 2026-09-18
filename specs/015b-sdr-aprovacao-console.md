@@ -1,7 +1,26 @@
 # 015b — SDR: aprovar ou recusar a proposta acima da alçada pelo console
 
-> **Pré-spec** (rascunho de 08/09/2026): ainda não executada. Depende da 015a (no `main`).
-> Item P-25 do roadmap, marco M1. Ao executar, revisar as premissas contra o código do momento.
+> **Entregue em 17/09/2026.** O que saiu está em
+> [`docs/dev/04-modulos-entregues.md`](../docs/dev/04-modulos-entregues.md).
+>
+> **O que mudou desde o rascunho de 08/09** — a 045 entrou no meio e alterou duas premissas:
+>
+> 1. **Aprovar não leva mais a `agendamento`.** Com a venda ponta a ponta, aprovar leva ao MESMO
+>    destino do aceite (`dados` → `fechamento`, ou seja, o PIX do sinal). Aprovar um valor e não
+>    deixar o lead pagar seria aprovação que não serve para nada. Com a 045 desligada, o
+>    comportamento volta a ser o desta pré-spec.
+> 2. **O valor decidido precisou de campo próprio.** `valorOfertadoCentavos` só sabia derivar
+>    `tabela` ou `piso`; um valor aprovado abaixo do piso — ou uma contraproposta no meio da faixa —
+>    não cabia em nenhum dos dois. `fluxo_sdr.valor_acordado_centavos` guarda o que o humano
+>    decidiu, e vence a derivação.
+>
+> Uma terceira coisa que o rascunho previa como `encerrado:recusado` virou outra: **recusar devolve
+> o lead para `oferta` no piso**, com a bola com ele. É o que os critérios de aceite já descreviam
+> ("nova resposta do lead aceitando o piso segue para agendamento") e é melhor que encerrar — o
+> lead continua vivo.
+>
+> **Pré-spec** (rascunho de 08/09/2026). Depende da 015a (no `main`).
+> Item P-25 do roadmap, marco M1.
 
 ## Objetivo
 Hoje, quando o lead pede um valor abaixo do piso (tabela − 3%), a máquina do SDR encerra em
