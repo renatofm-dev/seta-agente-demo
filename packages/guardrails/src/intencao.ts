@@ -26,10 +26,7 @@ const IntencaoSchema = z.enum(INTENCOES);
  * `enviar_segunda_via` — não há fluxo próprio, e não deveria haver: pedir um
  * arquivo que já existe não é uma conversa de várias etapas.
  */
-export type IntencaoQueEscala = Exclude<
-  Intencao,
-  'outro' | 'pagar' | 'reservar' | 'segunda_via'
->;
+export type IntencaoQueEscala = Exclude<Intencao, 'outro' | 'pagar' | 'reservar' | 'segunda_via'>;
 
 export const TRIGGER_POR_INTENCAO: Readonly<Record<IntencaoQueEscala, string>> = {
   negociar_preco: 'negociacao_preco',
