@@ -10,10 +10,13 @@ import {
   TEXTO_SEM_INTERESSE,
   textoAgendado,
   textoAlcada,
+  textoAprovado,
+  textoContraproposta,
   textoLimiteDia,
   textoLista,
   textoOfertaPiso,
   textoOfertaTabela,
+  textoRecusadoHumano,
   textoSinalEmitido,
 } from './render.js';
 import {
@@ -59,6 +62,7 @@ const ESTADO_INICIAL: EstadoFluxo = {
   naoEntendi: 0,
   encerramento: null,
   comprador: null,
+  valorAcordadoCentavos: null,
 };
 
 function encerrar(estado: EstadoFluxo, encerramento: EstadoFluxo['encerramento']): EstadoFluxo {
@@ -177,6 +181,64 @@ function oferta(estado: EstadoFluxo, acao: Acao, ctx: ContextoFluxo): Transicao 
 }
 
 /**
+ * 015b — um humano decidiu a proposta que estava acima da alçada.
+ *
+ * Aprovar leva ao MESMO destino do aceite (`dados` / `fechamento`, ou
+ * `agendamento` com a venda desligada): aprovar um valor e não deixar o lead
+ * pagar seria aprovação que não serve para nada. Recusar e contrapropor voltam
+ * para `oferta`, com a bola no lead — ele ainda pode aceitar.
+ */
+function decisaoHumana(estado: EstadoFluxo, acao: Acao, ctx: ContextoFluxo): Transicao {
+  if (estado.encerramento !== 'aguardando_aprovacao') {
+    // nada a decidir: já foi decidido, ou o fluxo nunca esteve na alçada
+    return { estado, mensagens: [], efeito: 'nenhum' };
+  }
+  const cota = cotaEscolhida(estado);
+  const piso = cota ? pisoCentavos(cota.valorTabelaCentavos, ctx.descontoMaxBps) : 0;
+
+  switch (acao.tipo) {
+    case 'aprovar_humano': {
+      const base: EstadoFluxo = {
+        ...estado,
+        etapa: 'oferta',
+        encerramento: null,
+        naoEntendi: 0,
+        valorAcordadoCentavos: acao.centavos,
+      };
+      const seguir = aceitar(base, ctx);
+      // a mensagem do aceite é a do humano; o resto da transição é o do fluxo
+      return { ...seguir, mensagens: [textoAprovado(acao.centavos), ...seguir.mensagens] };
+    }
+    case 'contrapropor_humano':
+      return {
+        estado: {
+          ...estado,
+          etapa: 'oferta',
+          encerramento: null,
+          naoEntendi: 0,
+          valorAcordadoCentavos: acao.centavos,
+        },
+        mensagens: [textoContraproposta(acao.centavos)],
+        efeito: 'ofertar',
+      };
+    default:
+      // recusado: volta ao piso e a decisão é do lead
+      return {
+        estado: {
+          ...estado,
+          etapa: 'oferta',
+          encerramento: null,
+          naoEntendi: 0,
+          oferta: 'piso',
+          valorAcordadoCentavos: null,
+        },
+        mensagens: [textoRecusadoHumano(piso)],
+        efeito: 'ofertar',
+      };
+  }
+}
+
+/**
  * 045: o aceite. Na raia do cotista o comprador já é conhecido (nome e CPF do
  * cadastro) e o fluxo salta direto para o sinal — o CPF nunca é pedido nem
  * trafega pela conversa. No lead frio, passa por `dados`.
@@ -213,6 +275,19 @@ function irParaFechamento(estado: EstadoFluxo, ctx: ContextoFluxo): Transicao {
 }
 
 export function transicionar(estado: EstadoFluxo, acao: Acao, ctx: ContextoFluxo): Transicao {
+  /**
+   * 015b: as decisões do console vêm ANTES do guard de fluxo encerrado — é
+   * justamente de `encerrado:aguardando_aprovacao` que elas partem. Só saem
+   * daí: aplicar uma aprovação a um fluxo em qualquer outro estado seria
+   * reabrir uma conversa que já seguiu adiante.
+   */
+  if (
+    acao.tipo === 'aprovar_humano' ||
+    acao.tipo === 'recusar_humano' ||
+    acao.tipo === 'contrapropor_humano'
+  ) {
+    return decisaoHumana(estado, acao, ctx);
+  }
   if (estado.etapa === 'encerrado') return { estado, mensagens: [], efeito: 'nenhum' };
   if (acao.tipo === 'cancelar') {
     return {

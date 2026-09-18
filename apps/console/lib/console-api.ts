@@ -778,6 +778,21 @@ export const api = {
   reserva: (id: string) =>
     fetch(`/api/console/reservas/${id}`).then((r) => json<ReservaDetalhe>(r)),
 
+  // --- 015b: decidir a proposta acima da alçada ---
+  aprovarProposta: (leadId: string, propostaId: string) =>
+    post(`/api/console/leads/${leadId}/propostas/${propostaId}/aprovar`).then((r) =>
+      json<{ ok: boolean }>(r),
+    ),
+  recusarProposta: (leadId: string, propostaId: string, motivo: string) =>
+    post(`/api/console/leads/${leadId}/propostas/${propostaId}/recusar`, { motivo }).then((r) =>
+      json<{ ok: boolean }>(r),
+    ),
+  contrapropor: (leadId: string, propostaId: string, contrapropostaCentavos: number) =>
+    post(`/api/console/leads/${leadId}/propostas/${propostaId}/recusar`, {
+      motivo: 'contra-proposta do comercial',
+      contrapropostaCentavos,
+    }).then((r) => json<{ ok: boolean; propostaId?: string }>(r)),
+
   // --- Vendas (045) ---
   vendas: (filtro?: { status?: StatusVenda; conversaId?: string }) => {
     const params = new URLSearchParams();

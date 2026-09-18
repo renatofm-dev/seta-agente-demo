@@ -1,19 +1,29 @@
-import { asc, desc, eq, sql } from 'drizzle-orm';
+import { newTraceId } from '@seta/observability';
+import { and, asc, desc, eq, sql } from 'drizzle-orm';
 import type { FastifyPluginCallback, FastifyReply, FastifyRequest } from 'fastify';
 import { ZodError, z } from 'zod';
-import { type Auth, sessaoDaRequest } from '../auth.js';
+import { type Auth, type SessaoConsole, sessaoDaRequest } from '../auth.js';
 import type { Db } from '../db/index.js';
-import { fluxoSdr, lead, propostaSdr } from '../db/schema.js';
+import { fluxoSdr, lead, propostaSdr, sinalAprendizado } from '../db/schema.js';
+import { aplicarDecisaoHumana, type SdrFluxoDeps } from './fluxo.js';
 
 /**
- * Leitura dos leads da 015 para a tela Leads do console (só leitura). Aprovar,
- * recusar e contra-propor mexem no fluxo SDR e avisam o lead — ficam com a
- * 015b; aqui a tela mostra o que o agente registrou.
+ * Leads da 015 no console — e, com a **015b**, a decisão da proposta que passou
+ * da alçada.
+ *
+ * Até aqui a tela mostrava a proposta `aguardando_aprovacao` e parava: o lead
+ * ficava **sem resposta nenhuma** até alguém falar com ele pela conversa. Agora
+ * um humano decide, o lead é avisado pelo WhatsApp e a decisão fica no trace.
+ *
+ * Molde de `pagamentos/cobrancas-routes.ts`: UPDATE condicional no status como
+ * trava de concorrência (404 × 409), efeito só depois do commit.
  */
 
 export interface LeadsRoutesOpts {
   readonly db: Db;
   readonly auth: Auth;
+  /** 015b: ausente ⇒ as rotas de decisão não são registradas (a 015a segue só leitura). */
+  readonly sdr?: SdrFluxoDeps | null;
 }
 
 interface PerfilLead {
@@ -44,11 +54,21 @@ function propostaView(p: PropostaRow) {
     descontoBps: p.descontoBps,
     valorPedidoCentavos: p.valorPedidoCentavos,
     motivo: p.motivo,
+    origem: p.origem,
     aprovadoPor: p.aprovadoPor,
+    aprovadoEm: p.aprovadoEm,
     criadoEm: p.criadoEm,
     atualizadoEm: p.atualizadoEm,
   };
 }
+
+const sessoes = new WeakMap<FastifyRequest, SessaoConsole>();
+const ParamsDecisao = z.object({ id: z.uuid(), pid: z.uuid() });
+const BodyRecusa = z.object({
+  motivo: z.string().min(3).max(280),
+  /** Presente ⇒ contraproposta; ausente ⇒ recusa simples, o lead volta ao piso. */
+  contrapropostaCentavos: z.number().int().positive().optional(),
+});
 
 export const leadsRoutes: FastifyPluginCallback<LeadsRoutesOpts> = (app, opts, done) => {
   const { db } = opts;
@@ -56,6 +76,7 @@ export const leadsRoutes: FastifyPluginCallback<LeadsRoutesOpts> = (app, opts, d
   app.addHook('preHandler', async (req: FastifyRequest, reply: FastifyReply) => {
     const sessao = await sessaoDaRequest(opts.auth, req.headers);
     if (!sessao) return reply.code(401).send({ erro: 'não autenticado' });
+    sessoes.set(req, sessao);
   });
 
   app.setErrorHandler((err, req, reply) => {
@@ -169,5 +190,155 @@ export const leadsRoutes: FastifyPluginCallback<LeadsRoutesOpts> = (app, opts, d
     };
   });
 
+  // --- 015b: a decisão humana ------------------------------------------------
+
+  const sdr = opts.sdr;
+  if (!sdr) {
+    done();
+    return;
+  }
+
+  /**
+   * Tira a proposta de `aguardando_aprovacao` com um UPDATE condicional — é a
+   * trava de concorrência: dois atendentes clicando juntos, só um decide. O
+   * efeito na conversa vem DEPOIS, e só para quem ganhou a corrida.
+   */
+  async function decidir(
+    propostaId: string,
+    leadId: string,
+    campos: Partial<typeof propostaSdr.$inferInsert>,
+  ) {
+    const [linha] = await db
+      .update(propostaSdr)
+      .set({ ...campos, atualizadoEm: new Date() })
+      .where(
+        and(
+          eq(propostaSdr.id, propostaId),
+          eq(propostaSdr.leadId, leadId),
+          eq(propostaSdr.status, 'aguardando_aprovacao'),
+        ),
+      )
+      .returning();
+    return linha ?? null;
+  }
+
+  /** O que o console decidiu vira sinal de aprendizado — o distiller lê daqui. */
+  async function registrarSinal(
+    conversaId: string,
+    decisao: string,
+    por: string,
+    dados: Record<string, unknown>,
+  ) {
+    await db.insert(sinalAprendizado).values({
+      id: newTraceId(),
+      tipo: 'decisao_humana_sdr',
+      conversaId,
+      payload: { decisao, por, ...dados },
+    });
+  }
+
+  app.post('/api/console/leads/:id/propostas/:pid/aprovar', async (req, reply) => {
+    const { id, pid } = ParamsDecisao.parse(req.params);
+    const sessao = sessoes.get(req);
+    if (!sessao) return reply.code(401).send({ erro: 'não autenticado' });
+
+    const proposta = await decidir(pid, id, {
+      status: 'aceita',
+      aprovadoPor: sessao.userId,
+      aprovadoEm: new Date(),
+    });
+    if (!proposta) return reply.code(409).send(await porqueNao(db, pid, id));
+
+    // o valor aprovado é o que o LEAD pediu — é isso que o humano aceitou
+    const centavos = proposta.valorPedidoCentavos ?? proposta.valorOfertadoCentavos;
+    await db
+      .update(propostaSdr)
+      .set({ valorOfertadoCentavos: centavos })
+      .where(eq(propostaSdr.id, pid));
+    await aplicarDecisaoHumana(sdr, proposta.conversaId, { tipo: 'aprovar_humano', centavos });
+    await registrarSinal(proposta.conversaId, 'aprovada', sessao.userId, {
+      propostaId: pid,
+      valorCentavos: centavos,
+    });
+    return reply.code(202).send({ ok: true });
+  });
+
+  app.post('/api/console/leads/:id/propostas/:pid/recusar', async (req, reply) => {
+    const { id, pid } = ParamsDecisao.parse(req.params);
+    const body = BodyRecusa.parse(req.body);
+    const sessao = sessoes.get(req);
+    if (!sessao) return reply.code(401).send({ erro: 'não autenticado' });
+
+    // a contraproposta é validada contra a proposta ORIGINAL, antes de decidir:
+    // 400 por valor fora da faixa não pode consumir a aprovação pendente
+    const [atual] = await db.select().from(propostaSdr).where(eq(propostaSdr.id, pid));
+    if (!atual) return reply.code(404).send({ erro: 'proposta inexistente' });
+    const contra = body.contrapropostaCentavos;
+    if (contra !== undefined) {
+      if (contra < atual.valorMinimoCentavos || contra > atual.valorTabelaCentavos) {
+        return reply.code(400).send({
+          erro: `contraproposta fora da faixa (${atual.valorMinimoCentavos}..${atual.valorTabelaCentavos})`,
+        });
+      }
+    }
+
+    const proposta = await decidir(pid, id, {
+      status: 'recusada',
+      motivo: body.motivo,
+      aprovadoPor: sessao.userId,
+      aprovadoEm: new Date(),
+    });
+    if (!proposta) return reply.code(409).send(await porqueNao(db, pid, id));
+
+    if (contra === undefined) {
+      await aplicarDecisaoHumana(sdr, proposta.conversaId, { tipo: 'recusar_humano' });
+      await registrarSinal(proposta.conversaId, 'recusada', sessao.userId, {
+        propostaId: pid,
+        motivo: body.motivo,
+      });
+      return reply.code(202).send({ ok: true });
+    }
+
+    // contraproposta: proposta NOVA, com origem `humano` — a original fica
+    // recusada, e as duas no histórico contam a negociação inteira
+    const nova = await db
+      .insert(propostaSdr)
+      .values({
+        id: newTraceId(),
+        leadId: proposta.leadId,
+        fluxoId: proposta.fluxoId,
+        conversaId: proposta.conversaId,
+        cotaId: proposta.cotaId,
+        cotaCodigo: proposta.cotaCodigo,
+        referencia: `${proposta.referencia}:humano:${Date.now()}`,
+        valorTabelaCentavos: proposta.valorTabelaCentavos,
+        valorMinimoCentavos: proposta.valorMinimoCentavos,
+        valorOfertadoCentavos: contra,
+        descontoBps: proposta.descontoBps,
+        status: 'ofertada',
+        origem: 'humano',
+        aprovadoPor: sessao.userId,
+        aprovadoEm: new Date(),
+      })
+      .returning();
+    await aplicarDecisaoHumana(sdr, proposta.conversaId, {
+      tipo: 'contrapropor_humano',
+      centavos: contra,
+    });
+    await registrarSinal(proposta.conversaId, 'contraproposta', sessao.userId, {
+      propostaId: pid,
+      novaPropostaId: nova[0]?.id,
+      valorCentavos: contra,
+    });
+    return reply.code(202).send({ ok: true, propostaId: nova[0]?.id });
+  });
+
   done();
 };
+
+/** 404 × 409: a diferença entre "não existe" e "já foi decidida". */
+async function porqueNao(db: Db, propostaId: string, leadId: string) {
+  const [p] = await db.select().from(propostaSdr).where(eq(propostaSdr.id, propostaId));
+  if (!p || p.leadId !== leadId) return { erro: 'proposta inexistente' };
+  return { erro: `proposta não está aguardando aprovação (${p.status})` };
+}

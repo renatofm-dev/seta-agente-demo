@@ -412,6 +412,8 @@ export const fluxoSdr = pgTable(
      * aqui porque o ERP exige CPF para criar pessoa, casal e venda.
      */
     comprador: jsonb('comprador'),
+    /** 015b: valor decidido por um humano (aprovação ou contraproposta). */
+    valorAcordadoCentavos: integer('valor_acordado_centavos'),
     perfil: jsonb('perfil').notNull().default({}),
     opcoes: jsonb('opcoes').notNull().default([]),
     escolha: integer('escolha'),
@@ -467,6 +469,14 @@ export const propostaSdr = pgTable(
     valorPedidoCentavos: integer('valor_pedido_centavos'),
     status: text('status', { enum: STATUS_PROPOSTA_SDR }).notNull(),
     motivo: text('motivo'),
+    /**
+     * 015b: quem fez a oferta. `agente` é a máquina dentro da alçada; `humano`
+     * é a contraproposta digitada no console. O distiller usa isso para
+     * aprender o padrão de aprovação — misturar as duas cegaria o sinal.
+     */
+    origem: text('origem', { enum: ['agente', 'humano'] })
+      .notNull()
+      .default('agente'),
     aprovadoPor: text('aprovado_por'),
     aprovadoEm: timestamp('aprovado_em', { withTimezone: true }),
     criadoEm: timestamp('criado_em', { withTimezone: true }).notNull().defaultNow(),
@@ -577,9 +587,12 @@ export const sinalAprendizado = pgTable('sinal_aprendizado', {
   tipo: text('tipo', {
     // verdict_guardrail: nome da spec 009 (#36); rejeicao_proposta: feedback do
     // curador — auditável, mas FORA do clustering do distiller;
-    // feedback_atendente: 👍/👎 do atendente sobre um turno (console › Aprendizado)
+    // feedback_atendente: 👍/👎 do atendente sobre um turno (console › Aprendizado);
+    // decisao_humana_sdr (015b): aprovar/recusar/contrapropor uma proposta acima
+    // da alçada — é o padrão de aprovação comercial que o distiller pode aprender
     enum: [
       'correcao_hitl',
+      'decisao_humana_sdr',
       'verdict_guardrail',
       'escalonamento',
       'resolucao_limpa',
