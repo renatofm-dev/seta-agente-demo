@@ -313,6 +313,36 @@ describe('040: o cotista pede a 2ª via e o boleto chega', () => {
     expect(msgs.at(-1)?.anexoNome).toBe(enviados[0]?.doc.filename);
   }, 30_000);
 
+  /**
+   * O turno inteiro, começando pelo CLASSIFICADOR — que é por onde a frase do
+   * roteiro entra de verdade, e onde a 040 quase morreu: "me manda a segunda
+   * via do meu boleto" caía em `pagar` (a descrição daquela categoria dizia
+   * "pede boleto"), o turno terminava no fluxo de cobrança e a tool nunca era
+   * alcançada, com a spec inteira implementada e testada por baixo.
+   *
+   * O que ESTE caso prova é a outra metade: que `segunda_via` não é
+   * interceptada por nenhum ramo de fluxo e chega ao agente. Ele **não**
+   * pegaria a regressão original — sem a categoria, `segunda_via` não faz parse
+   * e o classificador cai em `outro`, que vai para o agente do mesmo jeito.
+   * Quem trava a regressão é `guardrails.test.ts`, com a âncora de que a linha
+   * `- pagar:` do prompt não pode mais falar em boleto.
+   */
+  it('a frase do roteiro chega ao agente, não ao fluxo de cobrança', async () => {
+    fake
+      .respondeTexto('segunda_via') // classificador — a categoria da 040
+      .chamaTool('enviar_segunda_via', { titulo_id: tituloComBoleto })
+      .respondeTexto('Claro! Já estou te enviando o boleto.');
+
+    await enviarPeloSimulador('me manda a segunda via do meu boleto');
+    await aguardarTurno();
+
+    const linhas = await linhasOutbox();
+    // o fluxo de cobrança responderia "Encontrei N parcela(s) em aberto"
+    expect(linhas[0]?.texto).not.toMatch(/parcela\(s\) em aberto/);
+    expect(linhas).toHaveLength(2);
+    expect(linhas[1]?.anexo).toMatchObject({ contaFinanceiraId: tituloComBoleto });
+  }, 30_000);
+
   it('reprocessar a MESMA linha não manda o boleto duas vezes', async () => {
     fake
       .respondeTexto('outro')
