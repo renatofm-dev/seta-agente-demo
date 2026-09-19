@@ -96,6 +96,40 @@ sequenceDiagram
 | 9 | Webhook do **Asaas** pelo mesmo túnel (`seta-dev` → `/webhooks/asaas`) | 184–224 | Só com `ASAAS_API_KEY` + `ASAAS_WEBHOOK_TOKEN` + `ASAAS_WEBHOOK_EMAIL`. Best-effort: falha aqui não derruba o teste do WhatsApp. Ver [`asaas-setup.md`](../asaas-setup.md). |
 | 10 | `wait` no túnel. **`Ctrl+C`** → `limpar()` | 53–78, 232 | Esvazia o override (`override_callback_uri: ""`), desliga o webhook do Asaas, mata o túnel e o grupo do `pnpm dev` (se foi o script que subiu). Por isso o número **nunca fica apontando para uma URL morta**. |
 
+### Quando o `Ctrl+C` não acontece
+
+Terminal fechado, `kill -9`, ou um túnel subido por fora do script: o `trap` não
+roda, e o que sobra ligado apontando para o nada é o **webhook do Asaas** (o
+override da Meta some junto com o túnel de qualquer jeito).
+
+Isso não é barulho inofensivo. O `seta-dev` entrega **`SEQUENTIALLY`**: o
+primeiro evento que falha **segura todos os seguintes**, o Asaas manda e-mail de
+erro de sincronização e, se insistir, marca o webhook como `interrupted` — e aí
+reativar vira passo manual no painel.
+
+Duas defesas no script, as duas por **nome** (`seta-dev`) e não por variável
+deste processo, que é justamente o que não sobrevive a um `kill -9`:
+
+- **no boot**, avisa se achar um `seta-dev` ligado (e o registro do passo 9
+  reaponta para o túnel novo);
+- **no `limpar()`**, se `$ASAAS_WEBHOOK_ID` estiver vazio, procura na conta antes
+  de desistir — é o caso de uma sessão anterior que morreu sem limpar.
+
+Para desligar à mão, sem subir túnel nenhum:
+
+```bash
+set -a; . ./.env; set +a
+ID=$(curl -s "$ASAAS_BASE_URL/webhooks?limit=100" -H "access_token: $ASAAS_API_KEY" \
+  | python3 -c 'import sys,json; print(next((w["id"] for w in json.load(sys.stdin)["data"] if w["name"]=="seta-dev"), ""))')
+curl -s -X PUT "$ASAAS_BASE_URL/webhooks/$ID" -H "access_token: $ASAAS_API_KEY" \
+  -H "Content-Type: application/json" -d '{"enabled":false}'
+```
+
+A fila acumulada **não se perde e não duplica**: quando o webhook voltar a
+apontar para um túnel vivo, o backlog replaya em ordem, e `evento_psp` dedupa
+pelo id do evento (`onConflictDoNothing`) com `marcarProcessado` em UPDATE
+condicional. É rajada de log, não problema de dado.
+
 ## Pré-requisitos
 
 - `brew install cloudflared` (macOS). Em Linux, o pacote `cloudflared` da Cloudflare; `dig`
