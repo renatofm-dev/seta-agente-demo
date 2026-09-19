@@ -39,6 +39,8 @@ const env = loadEnv({
 interface Contexto {
   readonly cpfTitular: string;
   readonly idParcelaAberta: number;
+  /** 040: parcela com `linhadigitavel` — a única que tem 2ª via. */
+  readonly idParcelaComBoleto: number;
   /** 038: utilizações criadas no beforeAll, uma por caso que precisa de id. */
   readonly idParaConfirmar: number;
   readonly idParaCancelar: number;
@@ -65,6 +67,13 @@ interface Caso {
   /** `/token` é a única rota anônima; as demais exigem bearer. */
   readonly anonima?: true;
   readonly form?: true;
+  /**
+   * 040: a resposta é ARQUIVO, não JSON. A fixture do fornecedor guarda só a
+   * forma (`contentType`, `bodyBytes`, `sha256`) — o boleto do exemplo é de
+   * gente real e ficou fora do repo (035). Então o que se confere aqui é a
+   * forma: status, content-type e que o corpo é mesmo um PDF.
+   */
+  readonly binario?: true;
 }
 
 const CONTRATO_DEMO = String(CONTRATO_DEMO_INADIMPLENTE);
@@ -92,6 +101,11 @@ const CASOS: Readonly<Record<string, Caso>> = {
   'client-area__get-tax-dpnu-contract': {
     method: 'GET',
     path: () => `/api/PainelDoCliente/ObterTaxasDPNU/${CONTRATO_DEMO}`,
+  },
+  'client-area__second-ticket': {
+    method: 'GET',
+    path: (ctx) => `/api/PainelDoCliente/SegundaViaBoleto/${ctx.idParcelaComBoleto}`,
+    binario: true,
   },
   'contract-usase__getting-contracts-by-cpf': {
     method: 'GET',
@@ -321,6 +335,13 @@ beforeAll(async () => {
       [CONTRATO_DEMO_INADIMPLENTE],
     )
   ).rows as { idcontafinanceira: number }[];
+  // 040: a 2ª via só existe onde há boleto — `linhadigitavel` é o que diz isso
+  const [comBoleto] = (
+    await admin.query(
+      'SELECT idcontafinanceira FROM contafinanceira WHERE idcontrato = $1 AND linhadigitavel IS NOT NULL ORDER BY idcontafinanceira LIMIT 1',
+      [CONTRATO_DEMO_INADIMPLENTE],
+    )
+  ).rows as { idcontafinanceira: number }[];
   db = criarBanco(env.TSE_SIM_DATABASE_URL);
   app = buildTseSimApp({ env, db });
   await app.ready();
@@ -382,6 +403,7 @@ beforeAll(async () => {
   ctx = {
     cpfTitular: pessoa?.cpf ?? '',
     idParcelaAberta: parcela?.idcontafinanceira ?? 0,
+    idParcelaComBoleto: comBoleto?.idcontafinanceira ?? 0,
     idParaConfirmar: await criar(),
     idParaCancelar: await criar(),
     idParaLer: await criar(),
@@ -420,6 +442,14 @@ describe('contrato: o simulador responde na forma do TS Explorer', () => {
           : {}),
       });
       expect(resposta.statusCode, `${nome}: ${resposta.body.slice(0, 300)}`).toBe(fixture.status);
+      if (caso.binario) {
+        expect(resposta.headers['content-type']).toContain(fixture.contentType);
+        // a fixture prova a PROCEDÊNCIA do exemplo sem carregar os bytes dele
+        expect(fixture.bodySha256).toMatch(/^[0-9a-f]{64}$/);
+        expect(fixture.bodyBytes).toBeGreaterThan(0);
+        expect(resposta.rawPayload.subarray(0, 5).toString('latin1')).toBe('%PDF-');
+        return;
+      }
       expect(resposta.headers['content-type']).toContain('application/json');
       const erros = conferirForma(forma(fixture.body), forma(resposta.json()));
       expect(erros, `${nome}\n  ${erros.join('\n  ')}`).toEqual([]);
@@ -436,8 +466,8 @@ describe('contrato: o placar de cobertura', () => {
     expect(PENDENTES.filter((n) => !nomes.includes(n))).toEqual([]);
   });
 
-  it('PENDENTES só encolhe (035 entregou 30 das 89 rotas da coleção)', () => {
-    expect(PENDENTES.length).toBeLessThanOrEqual(59);
+  it('PENDENTES só encolhe (a 040 tirou a 2ª via em PDF da lista)', () => {
+    expect(PENDENTES.length).toBeLessThanOrEqual(39);
   });
 });
 

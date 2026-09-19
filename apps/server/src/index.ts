@@ -187,13 +187,16 @@ await registerDebounceWorker({
     pagamentos: { repo: pagamentosRepo, psp, env }, // 014
     sdr: { repo: createSdrRepo(db), env }, // 015: só age na raia sem vínculo com modulos.sdr
     reserva: { repo: reservaRepo, writer: reservaWriter, env }, // 038
+    anexos: erpWriter, // 040: a 2ª via em PDF sai pela credencial da integração
     venda: { repo: vendaRepo, pspNome: psp.nome }, // 045
     ...(anonimizacao ? { anonimizacao: anonimizacao.acumulador } : {}), // 016
   }),
   logger,
 });
-await registerOutboxWorker({ db, boss, gateway, logger });
-await registerOutboxSweeper({ db, boss, gateway, logger });
+// 040: o worker do outbox resolve o anexo no instante do envio (ERP → Meta),
+// e o PDF não encosta em disco nem em coluna nenhuma no caminho
+await registerOutboxWorker({ db, boss, gateway, logger, anexos: erpWriter });
+await registerOutboxSweeper({ db, boss, gateway, logger, anexos: erpWriter });
 await registerDisparoWorker({ db, boss, gateway, logger }); // 013
 // 014: emissão no PSP e eventos do webhook
 await registerCobrancaEmitirWorker({

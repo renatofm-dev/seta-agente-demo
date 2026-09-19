@@ -58,7 +58,14 @@ import type { SdrRepo } from '../sdr/repo.js';
 import type { VendaRepo } from '../venda/repo.js';
 import type { TurnoHandler, TurnoPronto } from './debounce.js';
 import { agendarDebounce } from './inbound.js';
-import { enqueueOutbound, enviarJobOutbound, inserirOutbound } from './outbox.js';
+import {
+  type AnexoDaLinha,
+  enqueueOutbound,
+  enviarJobOutbound,
+  inserirOutbound,
+  type ResolvedorAnexo,
+} from './outbox.js';
+import { type PedidoSegundaVia, toolEnviarSegundaVia } from './segunda-via.js';
 import { aplicarTransicao, garantirTicket } from './tickets.js';
 
 /**
@@ -88,6 +95,11 @@ export interface AgentTurnoHandlerDeps {
   readonly debounceMs?: number;
   /** 014: fluxo de cobrança; ausente ⇒ turno igual ao de antes da 014. */
   readonly pagamentos?: PagamentosTurnoDeps;
+  /**
+   * 040: quem busca o boleto no ERP. Ausente ⇒ a tool de 2ª via nem aparece
+   * para o modelo — melhor não oferecer do que oferecer e falhar na entrega.
+   */
+  readonly anexos?: ResolvedorAnexo;
   /** 016: acumulador do decorator de anonimização — drenado para o trace do turno. */
   readonly anonimizacao?: { consumir(traceId: string): TraceEvento | null };
   /** 015: agente SDR da raia sem vínculo; ausente ⇒ lead frio escala como antes. */
@@ -169,10 +181,19 @@ type ResultadoComFusao = ResultadoTurno & {
  * - senão → 'enviado'.
  * O processInbound (transacional) e o aplicarTransicao serializam com isto.
  */
+/**
+ * 040: o turno pode sair com um DOCUMENTO no meio das mensagens. A saída deixa
+ * de ser só texto, e uma string continua valendo como atalho para "texto puro".
+ */
+type SaidaDoTurno = string | { readonly texto: string; readonly anexo: AnexoDaLinha };
+
+const comoSaida = (s: SaidaDoTurno): { texto: string; anexo?: AnexoDaLinha } =>
+  typeof s === 'string' ? { texto: s } : { texto: s.texto, anexo: s.anexo };
+
 async function enfileirarComFusao(
   deps: AgentTurnoHandlerDeps,
   t: TurnoPronto,
-  textos: readonly string[],
+  textos: readonly SaidaDoTurno[],
   opts: { ignorarPendentes?: boolean; seqInicial?: number } = {},
 ): Promise<FusaoResultado> {
   const seqInicial = opts.seqInicial ?? 1;
@@ -228,13 +249,10 @@ async function enfileirarComFusao(
     // 014: um turno pode sair em N mensagens (ex.: explicação + código PIX);
     // seq crescente na mesma transação, jobs após o commit — na ordem
     const outboxIds: string[] = [];
-    for (const [i, texto] of textos.entries()) {
-      const inserido = await inserirOutbound(tx, {
-        conversaId: t.conversaId,
-        turnoId: t.id,
-        seq: seqInicial + i,
-        texto,
-      });
+    for (const [i, saida] of textos.entries()) {
+      const { texto, anexo } = comoSaida(saida);
+      const base = { conversaId: t.conversaId, turnoId: t.id, seq: seqInicial + i, texto };
+      const inserido = await inserirOutbound(tx, anexo ? { ...base, anexo } : base);
       if (inserido.outboxId) outboxIds.push(inserido.outboxId);
     }
     return { resultado: 'enviado' as const, outboxIds };
@@ -356,13 +374,14 @@ async function processarComAgente(
     fusao.textoEnviado = fusao.resultado === 'enviado' ? texto : null;
   };
   // 014: N mensagens do fluxo de cobrança num turno só
-  const enviarVarias = async (textos: readonly string[], seqInicial = 1) => {
+  const enviarVarias = async (textos: readonly SaidaDoTurno[], seqInicial = 1) => {
     if (textos.length === 0) return;
     fusao.resultado = await enfileirarComFusao(deps, t, textos, {
       seqInicial,
       ignorarPendentes: seqInicial > 1,
     });
-    fusao.textoEnviado = fusao.resultado === 'enviado' ? textos.join('\n\n') : null;
+    fusao.textoEnviado =
+      fusao.resultado === 'enviado' ? textos.map((x) => comoSaida(x).texto).join('\n\n') : null;
   };
 
   // 014: agente de cobrança — só com o módulo ligado, vínculo e deps presentes
@@ -684,6 +703,20 @@ async function processarComAgente(
   }));
 
   const provider = deps.provider;
+  /**
+   * 040: a tool não envia o boleto — ela anota aqui o que verificou, e o
+   * servidor entrega depois da frase do agente. Mutável de propósito, como o
+   * `fusao` acima: é o canal de volta de um efeito que acontece FORA do turno
+   * do modelo, e o PDF nunca chega perto do prompt.
+   *
+   * Só na raia do cotista com módulo financeiro: sem vínculo não há contrato
+   * de sessão para validar o `titulo_id` contra, e a tool não existiria com
+   * segurança.
+   */
+  const pedidosSegundaVia: PedidoSegundaVia[] = [];
+  const segundaViaDisponivel =
+    deps.clientConfig.modulos.financeiro && clienteId !== '' && deps.anexos !== undefined;
+
   const tools = [
     ...buildToolSpecs(deps.catalog, deps.executor, {
       modulosHabilitados: deps.clientConfig.modulos,
@@ -701,6 +734,14 @@ async function processarComAgente(
           toolIniciarReserva(),
           toolHoteisDisponiveis(reservaDeps.writer),
           toolMinhasReservas(reservaDeps.repo),
+        ]
+      : []),
+    // 040: 2ª via de boleto em PDF
+    ...(segundaViaDisponivel
+      ? [
+          toolEnviarSegundaVia({ executor: deps.executor, session }, (p) =>
+            pedidosSegundaVia.push(p),
+          ),
         ]
       : []),
   ];
@@ -783,14 +824,39 @@ async function processarComAgente(
   // Só se a frase do agente realmente saiu (turno fundido/descartado ⇒ nada).
   let fluxoIniciado: ResultadoFluxo | null = null;
   const textoAgente = fusao.textoEnviado;
+  /**
+   * `seq` é chave de dedupe (`turnoId:seq`), então cada mensagem extra do turno
+   * consome um número. Contar quantas saíram — em vez de assumir uma por fluxo,
+   * como o `fluxoIniciado ? 3 : 2` fazia — é o que garante que um turno com
+   * pagamento (que sai em 2+ mensagens) e reserva juntos não colida e perca
+   * silenciosamente a segunda.
+   */
+  let proximaSeq = 2;
   if (resultado.fluxoPagamentoSolicitado && fluxoDeps && fusao.resultado === 'enviado') {
     fluxoIniciado = await iniciarFluxo(fluxoDeps, ctxFluxo);
-    await enviarVarias(fluxoIniciado.mensagens, 2);
+    await enviarVarias(fluxoIniciado.mensagens, proximaSeq);
+    proximaSeq += fluxoIniciado.mensagens.length;
   }
   let reservaIniciada: ResultadoFluxoReserva | null = null;
   if (resultado.fluxoReservaSolicitado && reservaDeps && fusao.resultado === 'enviado') {
     reservaIniciada = await iniciarFluxoReserva(reservaDeps, ctxFluxo);
-    await enviarVarias(reservaIniciada.mensagens, fluxoIniciado ? 3 : 2);
+    await enviarVarias(reservaIniciada.mensagens, proximaSeq);
+    proximaSeq += reservaIniciada.mensagens.length;
+  }
+  /**
+   * 040: o documento sai DEPOIS da frase do agente, e só se ela saiu. Turno
+   * fundido ou descartado (#46) não entrega boleto: a resposta que o anunciava
+   * nem foi enviada, e o arquivo chegando sozinho seria um não-sequitur no
+   * WhatsApp de alguém.
+   */
+  let legendasEnviadas: readonly string[] = [];
+  if (pedidosSegundaVia.length > 0 && fusao.resultado === 'enviado') {
+    await enviarVarias(
+      pedidosSegundaVia.map((p) => ({ texto: p.legenda, anexo: p.anexo })),
+      proximaSeq,
+    );
+    proximaSeq += pedidosSegundaVia.length;
+    if (fusao.resultado === 'enviado') legendasEnviadas = pedidosSegundaVia.map((p) => p.legenda);
   }
   const escalado =
     (resultado.escalado ||
@@ -813,9 +879,20 @@ async function processarComAgente(
       resultado.tokensEntrada + usageExtra.entrada + (reservaIniciada?.tokensEntrada ?? 0),
     tokensSaida: resultado.tokensSaida + usageExtra.saida + (reservaIniciada?.tokensSaida ?? 0),
     fusao: fusao.resultado,
+    /**
+     * O trace guarda o que o contato REALMENTE recebeu. `fusao.textoEnviado`
+     * sozinho não serve quando o turno saiu em várias mensagens: ele guarda só
+     * a última — que, com a 040, seria a legenda do boleto, sem a frase do
+     * agente que a anunciou.
+     */
     respostaEnviada:
-      fluxoIniciado || reservaIniciada
-        ? [textoAgente, ...(fluxoIniciado?.mensagens ?? []), ...(reservaIniciada?.mensagens ?? [])]
+      fluxoIniciado || reservaIniciada || legendasEnviadas.length > 0
+        ? [
+            textoAgente,
+            ...(fluxoIniciado?.mensagens ?? []),
+            ...(reservaIniciada?.mensagens ?? []),
+            ...legendasEnviadas,
+          ]
             .filter((s) => s)
             .join('\n\n')
         : fusao.textoEnviado,

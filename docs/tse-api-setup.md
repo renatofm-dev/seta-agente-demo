@@ -43,6 +43,11 @@ real — cedente, CPF, código de barras de gente de verdade — e nenhuma regra
 bytes de PDF. A fixture guarda `contentType`, `bodyBytes` e o `sha256` do exemplo, que é a FORMA de
 que a [040](../specs/040-segunda-via-pdf.md) precisa; o documento fica fora.
 
+A **040** (entregue em 17/09/2026) fez exatamente isso: o dublê **gera** um boleto sintético de uma
+página, com tarja de *documento simulado*, em `apps/tse-sim/src/boleto-pdf.ts`. Ela também escolheu
+o 404 para os casos sem arquivo, que a coleção não exemplifica — divergência consciente, registrada
+em `divergencias.integration.test.ts` e a confirmar com o fornecedor junto com a D10.
+
 ## 2. Autenticação
 
 ```

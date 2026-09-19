@@ -167,3 +167,94 @@ describe('D10: o painel resolve escopo pelo dono do token?', () => {
     expect((r.json() as { IdContrato: number }[])[0]?.IdContrato).toBe(CONTRATO_DEMO_INADIMPLENTE);
   });
 });
+
+/**
+ * 040 — a 2ª via em PDF, e o que a coleção do fornecedor NÃO diz sobre ela.
+ *
+ * A coleção só tem o caso feliz (200, `application/pdf`). Erro não tem exemplo
+ * nenhum, então o dublê escolheu 404 no envelope do ASP.NET para os três casos
+ * em que não existe arquivo — e registra a escolha aqui, para quem for ligar no
+ * TSE real (041) saber que este é um ponto a confirmar, não um comportamento
+ * observado.
+ */
+describe('040: a 2ª via em PDF', () => {
+  async function idComBoleto(): Promise<number> {
+    const { rows } = await admin.query<{ idcontafinanceira: number }>(
+      `SELECT idcontafinanceira FROM contafinanceira
+        WHERE idcontrato = $1 AND linhadigitavel IS NOT NULL
+        ORDER BY idcontafinanceira LIMIT 1`,
+      [CONTRATO_DEMO_INADIMPLENTE],
+    );
+    return rows[0]?.idcontafinanceira ?? 0;
+  }
+
+  it('devolve PDF de verdade, com o content-type do fornecedor', async () => {
+    const app = await appComEscopo('qualquer');
+    const r = await app.inject({
+      method: 'GET',
+      url: `/api/PainelDoCliente/SegundaViaBoleto/${await idComBoleto()}`,
+      headers: { authorization: await bearerDe(app) },
+    });
+    expect(r.statusCode).toBe(200);
+    expect(r.headers['content-type']).toContain('application/pdf');
+    expect(r.rawPayload.subarray(0, 5).toString('latin1')).toBe('%PDF-');
+    expect(r.rawPayload.length).toBeGreaterThan(500);
+  });
+
+  it('o papel diz que é simulado — e traz o valor e o vencimento da parcela', async () => {
+    const app = await appComEscopo('qualquer');
+    const id = await idComBoleto();
+    const r = await app.inject({
+      method: 'GET',
+      url: `/api/PainelDoCliente/SegundaViaBoleto/${id}`,
+      headers: { authorization: await bearerDe(app) },
+    });
+    const papel = r.rawPayload.toString('latin1');
+    expect(papel).toContain('DOCUMENTO SIMULADO');
+    expect(papel).toContain(String(CONTRATO_DEMO_INADIMPLENTE));
+  });
+
+  it('parcela SEM boleto responde 404 — divergência consciente, a coleção não tem o caso', async () => {
+    const app = await appComEscopo('qualquer');
+    const { rows } = await admin.query<{ idcontafinanceira: number }>(
+      `SELECT idcontafinanceira FROM contafinanceira
+        WHERE linhadigitavel IS NULL ORDER BY idcontafinanceira LIMIT 1`,
+    );
+    const r = await app.inject({
+      method: 'GET',
+      url: `/api/PainelDoCliente/SegundaViaBoleto/${rows[0]?.idcontafinanceira ?? 0}`,
+      headers: { authorization: await bearerDe(app) },
+    });
+    expect(r.statusCode).toBe(404);
+    expect(r.json()).toMatchObject({ Message: expect.stringMatching(/boleto/i) });
+  });
+
+  it('parcela inexistente responde 404, não 500', async () => {
+    const app = await appComEscopo('qualquer');
+    const r = await app.inject({
+      method: 'GET',
+      url: '/api/PainelDoCliente/SegundaViaBoleto/99999999',
+      headers: { authorization: await bearerDe(app) },
+    });
+    expect(r.statusCode).toBe(404);
+  });
+
+  it('no escopo `token`, o boleto de outro contrato não sai — a D10 também vale aqui', async () => {
+    const app = await appComEscopo('token');
+    const r = await app.inject({
+      method: 'GET',
+      url: `/api/PainelDoCliente/SegundaViaBoleto/${await idComBoleto()}`,
+      headers: { authorization: await bearerDe(app) },
+    });
+    expect(r.statusCode).toBe(404);
+  });
+
+  it('sem bearer não há boleto', async () => {
+    const app = await appComEscopo('qualquer');
+    const r = await app.inject({
+      method: 'GET',
+      url: `/api/PainelDoCliente/SegundaViaBoleto/${await idComBoleto()}`,
+    });
+    expect(r.statusCode).toBe(401);
+  });
+});

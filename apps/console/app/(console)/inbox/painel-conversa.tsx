@@ -69,6 +69,20 @@ function Balao({ m }: { m: MensagemThread }) {
       >
         {texto}
       </div>
+      {/* 040: o console não serve o PDF — ele registra que o arquivo foi
+          entregue e qual. Os bytes vivem só entre o ERP e a Meta. */}
+      {m.anexoNome && (
+        <div
+          className={cn(
+            'flex items-center gap-1.5 border px-3 py-1.5 font-mono text-[11px] text-text-2',
+            b.classe,
+            'rounded-[10px]',
+          )}
+        >
+          <span aria-hidden>📎</span>
+          <span className="break-all">{m.anexoNome}</span>
+        </div>
+      )}
       <div className="flex justify-end gap-1.5 pr-1 font-mono text-[10px] text-text-3">
         {hora(m.criadoEm)}
         <Checks status={m.status} />

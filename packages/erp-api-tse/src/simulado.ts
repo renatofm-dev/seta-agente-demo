@@ -34,6 +34,8 @@ export interface ErpSimulado extends ErpWriter {
   readonly transacoes: readonly { input: RegistrarPagamentoInput; transacaoId: string }[];
   /** Semeia uma parcela para o read-back encontrar. */
   semear(p: ParcelaErp): void;
+  /** 040: o PDF que `obterSegundaVia` vai devolver para esta parcela. */
+  semearBoleto(contaFinanceiraId: string, bytes: Uint8Array): void;
   /** 038: hotéis, tipos de UH e a tarifa que a simulação devolve. */
   semearReserva(cfg: {
     hoteis?: OpcaoErp[];
@@ -70,6 +72,7 @@ export function createErpSimulado(): ErpSimulado {
   const leads: CasalErp[] = [];
   const vendas: { contratoId: number; input: VendaInput }[] = [];
   const parcelas = new Map<string, ParcelaErp>();
+  const boletos = new Map<string, Uint8Array>();
   let seq = 0;
   // 038
   const utilizacoes: UtilizacaoErp[] = [];
@@ -84,6 +87,22 @@ export function createErpSimulado(): ErpSimulado {
   return {
     fornecedor: 'tse',
     transacoes,
+
+    semearBoleto(contaFinanceiraId, bytes) {
+      boletos.set(contaFinanceiraId, bytes);
+    },
+
+    /**
+     * 040: sem nada semeado NÃO HÁ 2ª via — e `null` aqui é a resposta certa,
+     * não um buraco. Este writer é o de memória: quem desenha o boleto é o
+     * dublê do fornecedor (`apps/tse-sim`), porque desenhar boleto é trabalho
+     * do ERP e o produto não pode saber fazer isso. Para ver a 2ª via na demo,
+     * aponte `TSE_BASE_URL` para o simulador.
+     */
+    async obterSegundaVia(contaFinanceiraId) {
+      const bytes = boletos.get(contaFinanceiraId);
+      return bytes ? { bytes, mime: 'application/pdf' } : null;
+    },
 
     semear(p) {
       parcelas.set(p.contaFinanceiraId, p);

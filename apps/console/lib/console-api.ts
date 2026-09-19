@@ -229,6 +229,8 @@ export interface MensagemThread {
   atendenteId: string | null;
   atendenteNome: string | null;
   texto: string;
+  /** 040: nome do arquivo entregue junto — `null` quando a mensagem é só texto. */
+  anexoNome: string | null;
   status: 'recebida' | 'pendente' | 'enviada' | 'entregue' | 'lida' | 'falha';
   criadoEm: string;
 }

@@ -1,4 +1,4 @@
-import { OutboundTextSchema } from './index.js';
+import { type OutboundDocument, OutboundDocumentSchema, OutboundTextSchema } from './index.js';
 import { type OutboundTemplate, OutboundTemplateSchema, payloadDeTemplate } from './template.js';
 
 /**
@@ -23,6 +23,12 @@ export interface OutboundGateway {
   send(msg: { to: string; body: string }, janela: JanelaInfo): Promise<{ waMessageId: string }>;
   /** #013: envio de template — dispensa janela (Meta cobra por conversa iniciada). */
   sendTemplate(msg: OutboundTemplate): Promise<{ waMessageId: string }>;
+  /**
+   * 040: documento (hoje, boleto em PDF). EXIGE janela aberta, como `send` —
+   * arquivo livre fora das 24h não existe na Cloud API. Não é limitação nossa:
+   * fora da janela só template aprovado passa.
+   */
+  sendDocument(msg: OutboundDocument, janela: JanelaInfo): Promise<{ waMessageId: string }>;
 }
 
 function exigirJanelaAberta(to: string, janela: JanelaInfo): void {
@@ -64,6 +70,35 @@ export function createMetaGateway(config: MetaGatewayConfig): OutboundGateway {
     return waMessageId;
   };
 
+  /**
+   * Upload de mídia: o arquivo vira `media_id` na Meta e só o id viaja na
+   * mensagem. É o caminho escolhido pela 040 em vez de link público assinado —
+   * o boleto traz nome, CPF e valor, e com upload NENHUMA URL nossa serve esse
+   * conteúdo, nem por pouco tempo. O id vale 30 dias lá; aqui é usado em
+   * seguida, no mesmo job.
+   */
+  const uploadMedia = async (d: OutboundDocument): Promise<string> => {
+    const form = new FormData();
+    form.set('messaging_product', 'whatsapp');
+    form.set('type', d.mime);
+    // cópia do buffer: `Blob` não aceita view com offset sem levar o buffer inteiro
+    form.set('file', new Blob([new Uint8Array(d.bytes)], { type: d.mime }), d.filename);
+    const res = await fetchFn(
+      `https://graph.facebook.com/${versao}/${config.phoneNumberId}/media`,
+      {
+        method: 'POST',
+        headers: { authorization: `Bearer ${config.accessToken}` },
+        body: form,
+      },
+    );
+    if (!res.ok) {
+      throw new Error(`Graph API media ${res.status}: ${(await res.text()).slice(0, 300)}`);
+    }
+    const corpo = (await res.json()) as { id?: string };
+    if (!corpo.id) throw new Error('Graph API sem media id na resposta');
+    return corpo.id;
+  };
+
   return {
     async send(msg, janela) {
       const valida = OutboundTextSchema.parse(msg);
@@ -79,6 +114,24 @@ export function createMetaGateway(config: MetaGatewayConfig): OutboundGateway {
     async sendTemplate(msg) {
       const valida = OutboundTemplateSchema.parse(msg);
       const waMessageId = await postMessages(payloadDeTemplate(valida));
+      return { waMessageId };
+    },
+    async sendDocument(msg, janela) {
+      const valida = OutboundDocumentSchema.parse(msg);
+      // a janela é checada ANTES do upload: sem ela o envio não vai acontecer,
+      // e subir o arquivo para a Meta assim mesmo deixaria o PDF lá à toa
+      exigirJanelaAberta(valida.to, janela);
+      const mediaId = await uploadMedia(valida);
+      const waMessageId = await postMessages({
+        messaging_product: 'whatsapp',
+        to: valida.to,
+        type: 'document',
+        document: {
+          id: mediaId,
+          filename: valida.filename,
+          ...(valida.caption ? { caption: valida.caption } : {}),
+        },
+      });
       return { waMessageId };
     },
   };
@@ -120,6 +173,26 @@ export function createLogGateway(logger: LogGatewayLogger): OutboundGateway {
           pedido: valida.botao?.orderDetails.referenceId ?? null,
         },
         'template simulado (log-only)',
+      );
+      return { waMessageId };
+    },
+    async sendDocument(msg, janela) {
+      const valida = OutboundDocumentSchema.parse(msg);
+      exigirJanelaAberta(valida.to, janela);
+      seq += 1;
+      const waMessageId = `sim-doc-${Date.now()}-${seq}`;
+      logger.info(
+        {
+          to: valida.to,
+          waMessageId,
+          filename: valida.filename,
+          mime: valida.mime,
+          bytes: valida.bytes.length,
+          // os BYTES ficam de fora, sempre: é um boleto com nome, CPF e valor,
+          // e o log estruturado vai para arquivo
+          caption: valida.caption ?? null,
+        },
+        'documento simulado (log-only)',
       );
       return { waMessageId };
     },

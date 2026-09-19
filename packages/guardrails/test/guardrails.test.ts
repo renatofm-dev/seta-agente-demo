@@ -220,6 +220,37 @@ describe('classificador de intenção', () => {
     expect(intencaoEscala('comprar_cota')).toBe(true);
     expect(intencaoEscala('tema_sensivel')).toBe(true);
   });
+
+  /**
+   * 040 — a mesma armadilha da 038, achada do mesmo jeito: rodando o roteiro de
+   * verdade, não em revisão.
+   *
+   * "me manda a segunda via do meu boleto" caía em `pagar`, porque a descrição
+   * daquela categoria dizia literalmente "pede boleto". O turno terminava no
+   * fluxo de cobrança, o agente nunca respondia, e a tool `enviar_segunda_via`
+   * era inalcançável pela porta da frente — com a 040 inteira implementada e
+   * testada por baixo dela.
+   *
+   * A diferença é real e vale uma categoria: `pagar` GERA cobrança nova no PSP;
+   * `segunda_via` entrega um DOCUMENTO que já existe no ERP.
+   */
+  it('segunda_via é uma categoria e NÃO escala — segue para o agente', async () => {
+    const fake = createFakeProvider().respondeTexto('segunda_via');
+    const r = await classificarIntencao(fake, 'me manda a segunda via do meu boleto', []);
+    expect(r.intencao).toBe('segunda_via');
+    expect(intencaoEscala(r.intencao)).toBe(false);
+  });
+
+  it('o prompt separa pedir ARQUIVO de pedir cobrança nova', async () => {
+    const fake = createFakeProvider().respondeTexto('segunda_via');
+    await classificarIntencao(fake, 'perdi o boleto, reenvia por favor', []);
+    const prompt = fake.requests[0]?.messages[0]?.content ?? '';
+    expect(prompt).toContain('segunda_via');
+    expect(prompt).toContain('pedido de ARQUIVO');
+    // a âncora que causou o defeito: `pagar` não pode mais dizer "pede boleto"
+    const linhaPagar = prompt.split('\n').find((l) => l.startsWith('- pagar:')) ?? '';
+    expect(linhaPagar).not.toContain('boleto');
+  });
 });
 
 describe('#34: valores sem o símbolo R$', () => {

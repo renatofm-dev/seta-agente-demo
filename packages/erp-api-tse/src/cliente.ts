@@ -67,13 +67,16 @@ export function codigoAutorizacao(referencia: string, max = CODIGO_AUTORIZACAO_M
 /** Teto de páginas no read-back: contrato da demo tem 110 parcelas (11 páginas). */
 const MAX_PAGINAS = 50;
 
+/** `%PDF` — o cabeçalho que separa um boleto de uma página de erro com 200. */
+const PDF_MAGIC = [0x25, 0x50, 0x44, 0x46] as const;
+
 export interface TseErpApi extends ErpWriter {
   /** Exposto para a 037 plugar o catálogo; a 036 não usa de fora. */
   readonly api: ApiConnector;
 }
 
 export function createTseErpApi(config: TseHttpConfig): TseErpApi {
-  const { api } = criarHttp(config);
+  const { api, baixar } = criarHttp(config);
 
   /**
    * 045: função LOCAL, não método — `criarLead` a chama duas vezes (antes e
@@ -289,6 +292,32 @@ export function createTseErpApi(config: TseHttpConfig): TseErpApi {
         query: { idContrato: contratoId, paginaAtual: 1 },
       });
       return MinhasUtilizacoesSchema.parse(json).SaldoPontosGeral;
+    },
+
+    /**
+     * 040 — a 2ª via em PDF.
+     *
+     * Duas coisas que o 200 desta rota NÃO prova, e que por isso viram null:
+     * um corpo vazio, e um corpo que não é PDF. O ASP.NET responde HTML de erro
+     * com 200 em alguns caminhos, e mandar isso ao WhatsApp como se fosse boleto
+     * é pior do que dizer que não deu — o cotista abriria um arquivo quebrado
+     * sem ninguém ficar sabendo.
+     *
+     * O 404 é resposta de negócio (não há boleto para a parcela), não falha:
+     * `ErpBusinessError` vira `null` aqui; indisponibilidade segue subindo.
+     */
+    async obterSegundaVia(contaFinanceiraId) {
+      const id = z.coerce.number().int().positive().parse(contaFinanceiraId);
+      let baixa: Awaited<ReturnType<typeof baixar>>;
+      try {
+        baixa = await baixar({ path: `/api/PainelDoCliente/SegundaViaBoleto/${id}` });
+      } catch (err) {
+        if (err instanceof ErpBusinessError) return null;
+        throw err;
+      }
+      if (baixa.bytes.length === 0) return null;
+      if (!PDF_MAGIC.every((b, i) => baixa.bytes[i] === b)) return null;
+      return { bytes: baixa.bytes, mime: 'application/pdf' };
     },
 
     async lerParcela(contaFinanceiraId, contratoId) {

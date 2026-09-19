@@ -4,8 +4,8 @@
  * que ela só encolhe — uma rota implementada some daqui, e nenhuma fixture
  * pode ficar fora das duas listas.
  *
- * Quase tudo aqui tem dono marcado: a 2ª via em PDF é da 040. O ciclo
- * comercial (lead, pessoa e venda) saiu daqui na 045.
+ * O ciclo comercial (lead, pessoa e venda) saiu daqui na 045, e a 2ª via em
+ * PDF na 040.
  * `OperadorSistema/*` e `Relatorios/*` (30 rotas) estão fora de escopo da frente
  * inteira — nenhuma jornada da demo as usa.
  *
@@ -16,8 +16,7 @@
  * `ObterTotalReceberPorTipo`) — a taxa da reserva já sai de `CriarUtilizacaoContrato`.
  */
 export const PENDENTES: readonly string[] = [
-  // Client Area (2)
-  'client-area__second-ticket',
+  // Client Area (1)
   'client-area__simulate-contract-usage',
   // System Operator (20)
   'system-operator__active-or-inactive-operator',

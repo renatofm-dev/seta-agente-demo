@@ -191,6 +191,7 @@ function criarHubConsole(db: Db, avisar: (obj: unknown, msg: string) => void): H
             direcao: m.direcao,
             autor: m.autor,
             texto: m.texto,
+            anexoNome: m.anexoNome, // 040
             status: m.status,
             criadoEm: m.criadoEm,
           })}\n\n`,

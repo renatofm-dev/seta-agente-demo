@@ -19,7 +19,7 @@ export {
   erroDeResposta,
   redigir,
 } from './erros.js';
-export { criarHttp, type TseHttpConfig } from './http.js';
+export { type Baixa, type Baixar, criarHttp, type TseHttpConfig } from './http.js';
 export {
   type CriarUtilizacaoInput,
   CriarUtilizacaoInputSchema,
@@ -40,6 +40,7 @@ export { createErpSimulado, type ErpSimulado } from './simulado.js';
 export {
   type ApiConnector,
   centavosParaReais,
+  type DocumentoErp,
   type ErpWriter,
   MEIO_PAGAMENTO_TSE,
   METODOS,

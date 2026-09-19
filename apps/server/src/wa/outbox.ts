@@ -1,3 +1,4 @@
+import type { DocumentoErp } from '@seta/erp-api-tse';
 import { newTraceId } from '@seta/observability';
 import {
   JanelaFechadaError,
@@ -8,6 +9,7 @@ import {
 import { eq, sql } from 'drizzle-orm';
 import type { PgBoss } from 'pg-boss';
 import type { Logger } from 'pino';
+import { z } from 'zod';
 import { FILA_OUTBOX, FILA_OUTBOX_SWEEP, OUTBOX_RETRY_LIMIT } from '../boss.js';
 import type { Db } from '../db/index.js';
 import { conversa, mensagem, outbox } from '../db/schema.js';
@@ -58,6 +60,21 @@ export type OutboundItem =
        * do envio. Sem ele, janela fechada continua virando ticket (014).
        */
       readonly template?: TemplateDaLinha;
+      /** 040: manda como DOCUMENTO, com o `texto` de legenda. */
+      readonly anexo?: AnexoDaLinha;
+    }
+  | {
+      /**
+       * 040: documento do bot DENTRO de um turno — a 2ª via sai como seq 2..n
+       * logo depois da frase do agente, e o dedupe por turno+seq é o que faz
+       * um reprocesso do turno não mandar o boleto duas vezes.
+       */
+      readonly conversaId: string;
+      readonly turnoId: string;
+      readonly seq: number;
+      readonly texto: string;
+      readonly autor?: 'bot';
+      readonly anexo: AnexoDaLinha;
     };
 
 /**
@@ -73,6 +90,51 @@ export type TemplateDaLinha = Omit<OutboundTemplate, 'to'>;
 
 /** JSONB é fronteira de entrada: valida na leitura, nunca confia na coluna. */
 const TemplateDaLinhaSchema = OutboundTemplateSchema.omit({ to: true });
+
+/**
+ * 040: o DESCRITOR do anexo. A linha diz o que buscar e com que nome entregar;
+ * os bytes só existem entre o ERP e a Meta, dentro do job.
+ *
+ * Buscar na hora do envio (e não na hora de enfileirar) é o que faz o retry do
+ * pg-boss continuar valendo: cada tentativa pega o arquivo de novo, em vez de
+ * reenviar um `media_id` que a Meta já pode ter expirado.
+ */
+export const AnexoDaLinhaSchema = z.object({
+  tipo: z.literal('segunda_via'),
+  /** `idcontafinanceira` — o mesmo `titulo_id` de `v_titulo`. */
+  contaFinanceiraId: z.string().min(1),
+  filename: z.string().min(1).max(240),
+});
+export type AnexoDaLinha = z.infer<typeof AnexoDaLinhaSchema>;
+
+/**
+ * Quem sabe buscar o arquivo. É um port estreito de propósito: o worker do
+ * outbox não precisa (nem deve) enxergar o `ErpWriter` inteiro.
+ */
+export interface ResolvedorAnexo {
+  obterSegundaVia(contaFinanceiraId: string): Promise<DocumentoErp | null>;
+}
+
+/**
+ * O ERP respondeu que NÃO TEM o arquivo. É resposta, não instabilidade: não se
+ * re-tenta, marca a linha e chama humano — o mesmo tratamento terminal que a
+ * janela fechada recebe, e pelo mesmo motivo (tentar de novo não muda nada).
+ */
+/**
+ * Texto fixo, não rascunho de LLM — como os de `packages/cobranca`. Diz o que
+ * houve sem prometer prazo, porque quem vai resolver é a pessoa do outro lado
+ * do ticket, e ela é que sabe quando.
+ */
+export const TEXTO_ANEXO_INDISPONIVEL =
+  'Não consegui gerar o arquivo do seu boleto agora — o sistema não devolveu o documento. ' +
+  'Já avisei um atendente, que vai te enviar em seguida. Desculpe pela demora!';
+
+export class AnexoIndisponivelError extends Error {
+  constructor(readonly contaFinanceiraId: string) {
+    super(`ERP não devolveu a 2ª via da conta financeira ${contaFinanceiraId}`);
+    this.name = 'AnexoIndisponivelError';
+  }
+}
 
 export async function inserirOutbound(
   db: Pick<Db, 'insert'>,
@@ -94,6 +156,7 @@ export async function inserirOutbound(
       atendenteId: semTurno && item.autor === 'atendente' ? item.atendenteId : null,
       texto: item.texto,
       template: semTurno && item.autor !== 'atendente' ? (item.template ?? null) : null,
+      anexo: 'anexo' in item ? (item.anexo ?? null) : null,
     })
     .onConflictDoNothing({ target: outbox.dedupeKey })
     .returning();
@@ -117,6 +180,8 @@ export async function enqueueOutbound(
 export interface OutboxWorkerDeps extends OutboxDeps {
   readonly gateway: OutboundGateway;
   readonly logger: Logger;
+  /** 040: sem ele, linha com anexo não é enviada como texto — escala. */
+  readonly anexos?: ResolvedorAnexo;
 }
 
 export async function registerOutboxWorker(deps: OutboxWorkerDeps): Promise<void> {
@@ -158,11 +223,33 @@ export async function enviarLinha(
   const [conv] = await deps.db.select().from(conversa).where(eq(conversa.id, linha.conversaId));
   if (!conv) throw new Error(`outbox ${outboxId} sem conversa`);
 
+  /**
+   * 040: `parse`, não `safeParse` — descritor corrompido NÃO pode cair de volta
+   * em texto puro. O cotista receberia a legenda ("segue o boleto da parcela
+   * 3") sem boleto nenhum, e ninguém ficaria sabendo. Lançar aqui manda o caso
+   * para o caminho de falha, que acaba em ticket.
+   */
+  const anexo = linha.anexo === null ? null : AnexoDaLinhaSchema.parse(linha.anexo);
+
   try {
-    const { waMessageId } = await deps.gateway.send(
-      { to: conv.waId, body: linha.texto },
-      { expiraEm: conv.janelaExpiraEm },
-    );
+    const janela = { expiraEm: conv.janelaExpiraEm };
+    let waMessageId: string;
+    if (anexo) {
+      const doc = await (deps.anexos?.obterSegundaVia(anexo.contaFinanceiraId) ?? null);
+      if (!doc) throw new AnexoIndisponivelError(anexo.contaFinanceiraId);
+      ({ waMessageId } = await deps.gateway.sendDocument(
+        {
+          to: conv.waId,
+          bytes: doc.bytes,
+          mime: doc.mime,
+          filename: anexo.filename,
+          caption: linha.texto,
+        },
+        janela,
+      ));
+    } else {
+      ({ waMessageId } = await deps.gateway.send({ to: conv.waId, body: linha.texto }, janela));
+    }
     await deps.db.transaction(async (tx) => {
       await tx
         .update(outbox)
@@ -181,11 +268,41 @@ export async function enviarLinha(
         atendenteId: linha.atendenteId,
         waMessageId,
         texto: linha.texto,
+        anexoNome: anexo?.filename ?? null,
         status: 'enviada',
         turnoId: linha.turnoId,
       });
     });
   } catch (err) {
+    /**
+     * 040: o ERP não tem o arquivo. Re-tentar não faz o boleto aparecer, então
+     * é terminal — e vai para humano, nunca para o silêncio.
+     */
+    if (err instanceof AnexoIndisponivelError) {
+      await deps.db
+        .update(outbox)
+        .set({ status: 'falha', atualizadoEm: new Date() })
+        .where(eq(outbox.id, outboxId));
+      /**
+       * Aqui o ticket sozinho não basta, e é o que separa este caso do #29: o
+       * agente ACABOU de dizer "já estou te enviando". Sumir depois de prometer
+       * é a pior versão do silêncio — pior do que nunca ter oferecido. Então
+       * entra uma mensagem honesta, dedupada pelo id da linha que falhou, e o
+       * humano assume por cima dela.
+       */
+      await enqueueOutbound(deps, {
+        conversaId: conv.id,
+        chave: `anexo-indisponivel:${outboxId}`,
+        texto: TEXTO_ANEXO_INDISPONIVEL,
+        autor: 'bot',
+      });
+      await marcarTicketPorFalha(deps, conv.id, 'ERP não devolveu o boleto pedido pelo cotista');
+      deps.logger.error(
+        { outboxId, contaFinanceiraId: err.contaFinanceiraId },
+        'outbox: 2ª via indisponível no ERP — linha em falha',
+      );
+      return;
+    }
     if (err instanceof JanelaFechadaError) {
       // Envio LIVRE fora da janela de 24h não existe na Meta (só template aprovado — 013 usa
       // nos disparos e no aviso de pagamento).
@@ -210,6 +327,7 @@ export async function enviarLinha(
             autor: linha.autor,
             waMessageId,
             texto: linha.texto,
+            anexoNome: null,
             status: 'enviada',
             turnoId: linha.turnoId,
           });

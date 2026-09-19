@@ -22,7 +22,28 @@ export interface TseHttpConfig {
 /** Só GET re-tenta; escrita nunca (a decisão de repetir é do worker). */
 const TENTATIVAS_GET = 3;
 
-export function criarHttp(cfg: TseHttpConfig): { api: ApiConnector; token: TokenStore } {
+/**
+ * 040: uma rota do TSE devolve ARQUIVO, não JSON (`SegundaViaBoleto` manda PDF).
+ * Fica fora do `ApiConnector` de propósito: aquele port é a leitura genérica
+ * que a 037 vai plugar no catálogo, e catálogo não serve arquivo.
+ */
+export interface Baixa {
+  readonly status: number;
+  readonly bytes: Uint8Array;
+  readonly contentType: string;
+  readonly latencyMs: number;
+}
+
+export type Baixar = (
+  r: { path: string; query?: Record<string, Scalar> },
+  o?: { timeoutMs?: number },
+) => Promise<Baixa>;
+
+export function criarHttp(cfg: TseHttpConfig): {
+  api: ApiConnector;
+  token: TokenStore;
+  baixar: Baixar;
+} {
   const fetchFn = cfg.fetchFn ?? fetch;
   const base = cfg.baseUrl.replace(/\/+$/, '');
   const timeoutPadrao = cfg.timeoutMs ?? 15_000;
@@ -121,5 +142,45 @@ export function criarHttp(cfg: TseHttpConfig): { api: ApiConnector; token: Token
     },
   };
 
-  return { api, token };
+  /**
+   * GET binário. Mesmo token, mesmo timeout e a MESMA classificação de erro do
+   * `request` — o que muda é que o corpo vira bytes e o `accept` pede o arquivo.
+   *
+   * Sem retry, ao contrário do GET de JSON: o consumidor é o worker do outbox,
+   * que já tem backoff exponencial do pg-boss por cima. Repetir aqui dentro
+   * multiplicaria as tentativas sem que ninguém tivesse pedido.
+   */
+  const baixar: Baixar = async (r, o) => {
+    const inicio = Date.now();
+    const bearer = await token.obter();
+    let res: Response;
+    try {
+      res = await fetchFn(url(r.path, r.query), {
+        method: 'GET',
+        headers: {
+          authorization: `Bearer ${bearer}`,
+          'user-agent': userAgent,
+          accept: 'application/pdf, application/octet-stream, */*',
+        },
+        signal: AbortSignal.timeout(o?.timeoutMs ?? timeoutPadrao),
+      });
+    } catch (err) {
+      throw new ErpUnavailableError(
+        `TSE sem resposta em GET ${r.path}: ${err instanceof Error ? err.message : err}`,
+      );
+    }
+    if (!res.ok) {
+      // o corpo do erro aqui é JSON (o envelope do ASP.NET), não o arquivo —
+      // ler como texto é o que deixa `erroDeResposta` classificar direito
+      throw erroDeResposta(`GET ${r.path}`, res.status, await res.text());
+    }
+    return {
+      status: res.status,
+      bytes: new Uint8Array(await res.arrayBuffer()),
+      contentType: res.headers.get('content-type') ?? '',
+      latencyMs: Date.now() - inicio,
+    };
+  };
+
+  return { api, token, baixar };
 }

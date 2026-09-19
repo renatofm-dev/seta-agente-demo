@@ -48,6 +48,7 @@ autônomo sobre WhatsApp, rodando local (repo privado + homelab), fora da org se
 | 045 | Venda de ponta a ponta (sinal por PIX + contrato no ERP; absorve a 039) | ✅ 17/09/2026 — lead frio e cotista compram, e o contrato nasce no TSE |
 | 015b | Aprovar/recusar/contra-propor a proposta acima da alçada pelo console | ✅ 17/09/2026 — o lead deixa de ficar sem resposta |
 | 015c | Guardrail do percentual por extenso na raia SDR | ✅ 17/09/2026 — "três por cento" deixa de chegar ao lead |
+| 040 | 2ª via de boleto em PDF pelo WhatsApp | ✅ 17/09/2026 — o boleto chega como arquivo, e o PDF não é armazenado em lugar nenhum |
 
 A ordem, o calendário e as decisões pendentes estão em **[`docs/roadmap.md`](../docs/roadmap.md)**;
 o mapa técnico do que cada spec entregou está em
@@ -81,7 +82,6 @@ executa em M2, antes de M4).
 | [034](034-multi-instancia.md) multi-instância | M5 | 021 |
 | [037](037-catalogo-http.md) catálogo por HTTP (`source: api`) | **Demo** | ✅035, ✅036, **D10** |
 | ~~[039](039-sdr-escreve-no-erp.md) SDR escreve lead e venda no ERP~~ | — | **absorvida pela ✅045** |
-| [040](040-segunda-via-pdf.md) 2ª via de boleto em PDF | **Demo** | ✅036, 033 (fatia fina) |
 | [041](041-tse-real-e-fim-da-conciliacao.md) TSE real e fim da conciliação | **Demo** | 037, ambiente do TSE |
 | [044](044-cobranca-proativa.md) cobrança proativa | **Pagamentos** | ✅042, ✅043 |
 
@@ -116,10 +116,10 @@ escrita e isolada, para que a resposta custe uma função. A 036 acrescentou a m
 **não existe endpoint de baixa para PIX ou boleto** na coleção.
 
 **Se o objetivo é liberar a demo**, a fila muda de ordem: 036 e 037 são encanamento invisível (a
-conversa responde igual antes e depois). O que APARECE na demo é a 038 (entregue), a **040** (o
-boleto em PDF chega no WhatsApp) e a **045** (o lead do SDR deixa de morrer na nossa tabela — e
-agora paga o sinal por PIX e vira contrato no ERP). **A 045 foi entregue em 17/09/2026**; sobra a
-040.
+conversa responde igual antes e depois). O que APARECE na demo é a 038, a **045** (o lead do SDR
+deixa de morrer na nossa tabela — paga o sinal por PIX e vira contrato no ERP) e a **040** (o
+boleto em PDF chega no WhatsApp). **As três foram entregues** — 038 em 16/09, 045 e 040 em 17/09.
+A demo ponta a ponta está fechada; o que sobra da frente é encanamento (037) e o TSE real (041).
 
 **A 038 foi entregue em 16/09/2026** e trocou o ato mais honesto da demo pelo mais forte: o que era
 *"o agente admite não saber reservar"* virou *"o agente reserva, e a utilização existe no ERP com o
