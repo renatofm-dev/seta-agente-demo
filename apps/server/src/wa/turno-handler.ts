@@ -14,6 +14,7 @@ import { TEXTO_INTERESSE_COMPRA } from '@seta/cobranca';
 import type { ErpWriter } from '@seta/erp-api-tse';
 import {
   classificarIntencao,
+  guardrailPercentualSdr,
   guardrailPreco,
   intencaoEscala,
   TRIGGER_POR_INTENCAO,
@@ -779,9 +780,28 @@ async function processarComAgente(
         'motivo. Continue ajudando normalmente em qualquer outro assunto.'
       : personaBase) + personaExtra;
 
+  /**
+   * 015c: na raia do SDR entra um hook a mais. `preco.ts` barra percentual só
+   * com dígito — "aplico três por cento" passa —, e o agente comercial é
+   * justamente o que negocia. A raia do cotista fica exatamente como estava:
+   * lá o classificador de intenção pega `negociar_preco` antes de responder.
+   *
+   * A condição é `clienteId === ''`, NÃO `sdrDeps` — a 045 abriu o SDR para o
+   * cotista também, e usar as deps aqui ligaria o hook na raia errada. Ali o
+   * vocabulário proibido aparece legitimamente: a KB fala em "abatimento do
+   * frete", e `preco.ts` trata isso com rastreabilidade justamente para não
+   * escalar toda citação de política. Este hook é ABSOLUTO e não faria essa
+   * distinção.
+   *
+   * O cotista COMPRANDO não fica descoberto: ali o fluxo de venda é
+   * determinístico e consome o turno antes do LLM — não há rascunho para barrar.
+   */
+  const comercialSemVinculo = sdrDeps !== null && clienteId === '';
   const runtime = createAgentRuntime({
     provider: deps.provider,
-    guardrails: [guardrailPreco()],
+    guardrails: comercialSemVinculo
+      ? [guardrailPreco(), guardrailPercentualSdr()]
+      : [guardrailPreco()],
   });
   const resultado = await runtime.processarTurno({
     session,

@@ -116,3 +116,9 @@ export {
   TRIGGER_POR_INTENCAO,
 } from './intencao.js';
 export { extrairValoresMonetarios, guardrailPreco } from './preco.js';
+export {
+  guardrailPercentualSdr,
+  RE_PERCENTUAL_EXTENSO,
+  TRIGGER_PERCENTUAL_SDR,
+  VOCABULARIO_PROIBIDO_SDR,
+} from './sdr-percentual.js';

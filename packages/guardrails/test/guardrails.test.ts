@@ -4,6 +4,7 @@ import {
   classificarIntencao,
   extrairValoresMonetarios,
   type GuardrailCtx,
+  guardrailPercentualSdr,
   guardrailPreco,
   intencaoEscala,
   runBeforeReply,
@@ -338,16 +339,17 @@ describe('015: alçada de desconto do SDR', () => {
     }
   });
 
-  // LACUNA CONHECIDA, travada aqui de propósito: RE_PERCENTUAL exige dígito
-  // (/\d+(?:[.,]\d+)?\s?(?:%|por\s?cento)/), então percentual POR EXTENSO passa —
-  // em qualquer contexto, inclusive sem tool nenhuma no turno. "aplicar" também
-  // não está no RE_CONDICAO_ESPECIAL, então não há segunda rede.
-  // O comentário do preco.ts documenta o extenso para VALORES; para PERCENTUAIS
-  // não estava documentado. Na raia do cotista o classificador de intenção
-  // (negociar_preco) pega antes; na raia do SDR, que negocia, isto é exposição
-  // real. Se o RE_PERCENTUAL for corrigido, estes casos passam a escalar e este
-  // teste deve ser invertido.
-  it('LACUNA: percentual por extenso NÃO é barrado', async () => {
+  /**
+   * A lacuna do `preco.ts` CONTINUA aqui, e continua deliberada: `RE_PERCENTUAL`
+   * exige dígito, então percentual por extenso passa na raia do cotista. A 006
+   * decidiu conviver com isso porque ali o classificador de intenção pega
+   * `negociar_preco` antes de o agente responder.
+   *
+   * O que a **015c** fez foi cobrir a raia onde isso era exposição real — a do
+   * SDR, que negocia por ofício — com um hook PRÓPRIO, sem tocar neste regex.
+   * Os dois testes abaixo são as duas metades da mesma decisão.
+   */
+  it('raia do cotista: percentual por extenso segue passando (decisão da 006)', async () => {
     expect(
       await g.beforeReply?.('Aplico três por cento e fecho em R$ 202.002,50.', ctxOferta()),
     ).toEqual(ALLOW);
@@ -397,5 +399,86 @@ describe('015: alçada de desconto do SDR', () => {
     expect(await g.beforeReply?.('Fecho em R$ 202.002,50 à vista.', ctx)).toMatchObject({
       tipo: 'escalate',
     });
+  });
+});
+
+/**
+ * 015c — a mesma frase, nas duas raias. É o par que dá sentido à spec: o que
+ * passa na raia do cotista (por decisão da 006) é barrado na do SDR, que
+ * negocia por ofício e nunca pode falar em percentual.
+ */
+describe('015c: percentual na raia do SDR', () => {
+  const sdr = guardrailPercentualSdr();
+  const cotista = guardrailPreco();
+
+  const TABELA = 20_825_000;
+  const PISO = 20_200_250;
+  const ctxOferta = (): GuardrailCtx => ({
+    ...CTX_VAZIO,
+    textoUsuario: 'consegue melhorar esse valor?',
+    toolResults: [
+      {
+        nome: 'condicoes_cota',
+        priceSource: true,
+        rows: [{ valor_tabela_centavos: TABELA, valor_minimo_centavos: PISO }],
+      },
+    ],
+  });
+
+  it('percentual por EXTENSO é barrado no SDR e passa no cotista — o par da decisão', async () => {
+    const draft = 'Consigo aplicar dez por cento pra fechar hoje.';
+    expect(await sdr.beforeReply?.(draft, CTX_VAZIO)).toMatchObject({
+      tipo: 'escalate',
+      trigger: 'desconto_acima_alcada',
+    });
+    // a raia do cotista NÃO muda: é a lacuna que a 006 aceitou de propósito
+    expect(await cotista.beforeReply?.(draft, CTX_VAZIO)).toEqual(ALLOW);
+  });
+
+  it('todas as grafias do extenso caem', async () => {
+    const drafts = [
+      'aplico três por cento',
+      'dez porcento pra você',
+      'consigo vinte e cinco por cento',
+      'meio por cento de ajuste',
+      'dois e meio por cento',
+      'fecho com 3% hoje', // dígito também, para não depender da ordem dos hooks
+    ];
+    for (const d of drafts) {
+      expect(await sdr.beforeReply?.(d, CTX_VAZIO), d).toMatchObject({ tipo: 'escalate' });
+    }
+  });
+
+  it('com o piso na tool, vira rewrite com VALOR em vez de escalar', async () => {
+    const v = await sdr.beforeReply?.('Aplico três por cento e fechamos.', ctxOferta());
+    expect(v).toMatchObject({ tipo: 'rewrite' });
+    // o valor do patch é o piso da TOOL, não um número inventado
+    expect((v as { patch: string }).patch).toContain('R$ 202.002,50');
+    expect((v as { patch: string }).patch).not.toMatch(/%|por cento/i);
+  });
+
+  it('vocabulário de desconto sem valor de tool escala', async () => {
+    for (const d of ['posso dar um desconto', 'faço por menos', 'é uma cortesia da casa']) {
+      expect(await sdr.beforeReply?.(d, CTX_VAZIO), d).toMatchObject({ tipo: 'escalate' });
+    }
+  });
+
+  it('valor em reais, sem percentual nem vocabulário, passa', async () => {
+    expect(await sdr.beforeReply?.('Consigo por R$ 202.002,50 à vista.', ctxOferta())).toEqual(
+      ALLOW,
+    );
+    expect(await sdr.beforeReply?.('A cota está R$ 208.250,00.', ctxOferta())).toEqual(ALLOW);
+  });
+
+  it('não confunde palavra que contém um número por extenso', async () => {
+    // "cemitério", "sétimo", "dozena" não são percentuais; o \b e o sufixo
+    // "por cento" é que decidem
+    for (const d of [
+      'o sétimo andar tem vista',
+      'são cem metros da praia',
+      'reserva de dez dias',
+    ]) {
+      expect(await sdr.beforeReply?.(d, CTX_VAZIO), d).toEqual(ALLOW);
+    }
   });
 });
