@@ -180,7 +180,7 @@ export function mensagensEmitida(d: DadosEmissao): string[] {
       const msgs = [
         `${prefixo}Seu PIX está pronto! ⚡\nValor: ${valor} — válido até ${formatarData(d.vencimento)}` +
           `\nPague pelo link: ${d.urlFatura}` +
-          (d.pixCopiaCola ? '\nOu use o código copia-e-cola da próxima mensagem.' : ''),
+          (d.pixCopiaCola ? '\nOu use o código copia-e-cola do PIX.' : ''),
       ];
       if (d.pixCopiaCola) msgs.push(d.pixCopiaCola);
       return msgs;
