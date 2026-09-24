@@ -3,6 +3,7 @@ import { z } from 'zod';
 import type { Autenticador, Sessao } from '../auth.js';
 import { boletoPdf } from '../boleto-pdf.js';
 import type { Consulta } from '../db.js';
+import { EMPRESA } from '../empresa.js';
 import { agoraTse, dataTse, decimal, diasEntre, hojeTse, instanteTse } from '../pascal.js';
 import { exigirBearer } from '../plugin-bearer.js';
 
@@ -22,7 +23,6 @@ import { exigirBearer } from '../plugin-bearer.js';
  * fixo e declaradamente fictício. Trocar por um resort de verdade seria colocar
  * no PDF exatamente o tipo de dado que a 035 decidiu manter fora do repo.
  */
-const CEDENTE = 'RESORT DEMONSTRACAO MULTIPROPRIEDADE LTDA';
 
 /** O TSE pagina de 10 em 10 (deduzido do exemplo: 4 páginas sobre 10 itens). */
 const POR_PAGINA = 10;
@@ -382,7 +382,7 @@ export function painelDoClienteRoutes(
         return reply.code(404).send({ Message: 'Nao ha boleto gerado para esta parcela.' });
       }
       const pdf = boletoPdf({
-        cedente: CEDENTE,
+        cedente: EMPRESA,
         sacado: linha.sacado,
         sacadoCpf: linha.cpf,
         nossoNumero: `14${String(id).padStart(15, '0')}-9`,
