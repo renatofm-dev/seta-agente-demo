@@ -1,0 +1,47 @@
+id: financeiro.parcela_por_numero
+version: 1
+description: >-
+  A parcela EM ABERTO de número N do contrato da sessão, com a situação do
+  boleto dela: id, número da parcela, total de parcelas, valor em centavos,
+  vencimento, origem, forma de pagamento e a linha digitável (nula quando não
+  há boleto gerado). Entrada de VERIFICAÇÃO da 2ª via — o agente não a chama;
+  quem chama é o servidor, que recebe do agente o NÚMERO da parcela (o que o
+  cotista fala) e resolve aqui qual linha é. O agente nunca manipula o id.
+entities: [titulo]
+modules: [financeiro]
+params:
+  contrato_id:
+    type: string
+    source: session
+    description: Contrato vinculado à sessão (nunca vem do modelo).
+  parcela:
+    type: string
+    source: agent
+    description: >-
+      Número da parcela como o cotista fala ("20"). Comparado como texto para
+      que entrada não numérica simplesmente não case, em vez de estourar.
+sql: >-
+  SELECT id, parcela, total_parcelas, valor_centavos, vencimento, origem,
+         meio_pagamento, linha_digitavel, status
+  FROM v_titulo
+  WHERE contrato_id = :contrato_id AND parcela::text = :parcela
+    AND status <> 'pago'
+  ORDER BY vencimento ASC
+limits:
+  timeout_ms: 3000
+  max_rows: 5
+output:
+  columns:
+    - id
+    - parcela
+    - total_parcelas
+    - valor_centavos
+    - vencimento
+    - origem
+    - meio_pagamento
+    - linha_digitavel
+    - status
+  masking: {}
+tool:
+  expose: false
+  name: parcela_por_numero

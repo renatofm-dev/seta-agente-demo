@@ -3,8 +3,9 @@ version: 1
 description: >-
   Próximas parcelas A VENCER do contrato da sessão (até 5, da mais próxima
   para a mais distante): id, origem, número da parcela, total de parcelas,
-  valor em centavos e vencimento. Uso interno do fluxo de pagamento (014) e
-  da conciliação — não é exposta ao modelo; o modelo usa proxima_parcela.
+  valor em centavos e vencimento. Usada pelo fluxo de pagamento (014), pela
+  conciliação e pelo agente quando o cotista quer escolher UMA parcela (040:
+  2ª via do boleto) — sem ela o modelo só enxerga a próxima e as vencidas.
 entities: [titulo]
 modules: [financeiro]
 params:
@@ -25,5 +26,5 @@ output:
   columns: [id, origem, parcela, total_parcelas, valor_centavos, vencimento]
   masking: {}
 tool:
-  expose: false
+  expose: true
   name: proximas_parcelas
