@@ -61,6 +61,20 @@ export const STATUS_VENDA: Record<StatusVenda, { rotulo: string; papel: Papel }>
   cancelada: { rotulo: 'Cancelada', papel: 'off' },
 };
 
+/**
+ * 046: a assinatura do contrato. `pendente` é warn, não info: o contrato existe
+ * no ERP e ainda não foi aceito por ninguém — é o tipo de pendência que some
+ * da vista se ninguém olhar.
+ */
+export const ESTADO_ASSINATURA: Record<
+  'pendente' | 'assinada' | 'recusada',
+  { rotulo: string; papel: Papel }
+> = {
+  pendente: { rotulo: 'Aguardando assinatura', papel: 'warn' },
+  assinada: { rotulo: 'Assinada', papel: 'ok' },
+  recusada: { rotulo: 'Recusada', papel: 'risk' },
+};
+
 export const STATUS_LEAD: Record<StatusLead, { rotulo: string; papel: Papel }> = {
   novo: { rotulo: 'Novo', papel: 'info' },
   qualificando: { rotulo: 'Qualificando', papel: 'info' },
