@@ -84,6 +84,7 @@ executa em M2, antes de M4).
 | ~~[039](039-sdr-escreve-no-erp.md) SDR escreve lead e venda no ERP~~ | — | **absorvida pela ✅045** |
 | [041](041-tse-real-e-fim-da-conciliacao.md) TSE real e fim da conciliação | **Demo** | 037, ambiente do TSE |
 | [044](044-cobranca-proativa.md) cobrança proativa | **Pagamentos** | ✅042, ✅043 |
+| [046](046-contrato-para-assinar.md) contrato vira documento e é assinado | **Demo** | ✅045, ✅040 |
 
 
 ### A frente "demo ponta a ponta" (035–041)
