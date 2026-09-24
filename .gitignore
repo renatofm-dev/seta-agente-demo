@@ -22,3 +22,10 @@ coverage/
 
 # guia pessoal de teste local (não versionar)
 /TESTANDO-LOCAL.md
+
+# Coleção CRUA da API do TSE (decisão da 035): os exemplos trazem e-mails do
+# fornecedor, CPFs e um access_token. O que o repo versiona é o contrato
+# sanitizado em `apps/tse-sim/contrato/`, com o sha256 do original; a coleção
+# original vive fora do repo, em `~/.seta/`.
+*postman_collection*.json
+*postman_environment*.json

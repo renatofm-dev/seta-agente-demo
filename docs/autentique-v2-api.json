@@ -1,0 +1,840 @@
+{
+	"info": {
+		"_postman_id": "9f7279b0-fe9e-4b08-b4ef-55bacc3d71c4",
+		"name": "Autentique v2",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "Criar documento",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Authorization",
+						"value": "Bearer {{accessToken}}",
+						"description": "Substitua a variável \"{{accessToken}}\" com o seu token de API",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "formdata",
+					"formdata": [
+						{
+							"key": "operations",
+							"value": "{\"query\":\"mutation CreateDocumentMutation($document: DocumentInput!, $signers: [SignerInput!]!, $file: Upload!) {createDocument(document: $document, signers: $signers, file: $file) {id name refusable sortable created_at signatures { public_id name email created_at action { name } link { short_link } user { id name email }}}}\", \"variables\":{\"document\": {\"name\": \"Contrato de teste\"},\"signers\": [{\"email\": \"troque-esse-email-que-e-publico@tuamaeaquelaursa.com\",\"action\": \"SIGN\"}],\"file\":null}}",
+							"type": "text"
+						},
+						{
+							"key": "map",
+							"value": "{\"file\": [\"variables.file\"]}",
+							"type": "text"
+						},
+						{
+							"key": "file",
+							"type": "file",
+							"src": []
+						}
+					]
+				},
+				"url": {
+					"raw": "https://api.autentique.com.br/v2/graphql",
+					"protocol": "https",
+					"host": [
+						"api",
+						"autentique",
+						"com",
+						"br"
+					],
+					"path": [
+						"v2",
+						"graphql"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Resgatar documento",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"description": "Substitua a variável \"{{accessToken}}\" com o seu token de API",
+						"key": "Authorization",
+						"type": "text",
+						"value": "Bearer {{accessToken}}"
+					},
+					{
+						"key": "Content-Type",
+						"name": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"query\": \"query { document(id: \\\"ID_DO_DOCUMENTO\\\") { id name refusable sortable created_at files { original signed } signatures { public_id name email created_at action { name } link { short_link } user { id name email } email_events { sent opened delivered refused reason } viewed { ...event } signed { ...event } rejected { ...event } } } } fragment event on Event { ip port reason created_at geolocation { country countryISO state stateISO city zipcode latitude longitude } }\",\n    \"variables\": {}\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "https://api.autentique.com.br/v2/graphql",
+					"protocol": "https",
+					"host": [
+						"api",
+						"autentique",
+						"com",
+						"br"
+					],
+					"path": [
+						"v2",
+						"graphql"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Listar documentos",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"description": "Substitua a variável \"{{accessToken}}\" com o seu token de API",
+						"key": "Authorization",
+						"type": "text",
+						"value": "Bearer {{accessToken}}"
+					},
+					{
+						"key": "Content-Type",
+						"name": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"query\": \"query { documents(limit: 60, page: 1) { total data { id name refusable sortable created_at signatures { public_id name email created_at action { name } link { short_link } user { id name email } viewed { created_at } signed { created_at } rejected { created_at } } files { original signed } } } }\",\n    \"variables\": {}\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "https://api.autentique.com.br/v2/graphql",
+					"protocol": "https",
+					"host": [
+						"api",
+						"autentique",
+						"com",
+						"br"
+					],
+					"path": [
+						"v2",
+						"graphql"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Excluir documento",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"description": "Substitua a variável \"{{accessToken}}\" com o seu token de API",
+						"key": "Authorization",
+						"type": "text",
+						"value": "Bearer {{accessToken}}"
+					},
+					{
+						"key": "Content-Type",
+						"name": "Content-Type",
+						"type": "text",
+						"value": "application/json"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"query\": \"mutation { deleteDocument(id: \\\"ID_DO_DOCUMENTO\\\") }\",\n    \"variables\": {}\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "https://api.autentique.com.br/v2/graphql",
+					"protocol": "https",
+					"host": [
+						"api",
+						"autentique",
+						"com",
+						"br"
+					],
+					"path": [
+						"v2",
+						"graphql"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Assinar documento",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"description": "Substitua a variável \"{{accessToken}}\" com o seu token de API",
+						"key": "Authorization",
+						"type": "text",
+						"value": "Bearer {{accessToken}}"
+					},
+					{
+						"key": "Content-Type",
+						"name": "Content-Type",
+						"type": "text",
+						"value": "application/json"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"query\": \"mutation { signDocument(id: \\\"ID_DO_DOCUMENTO\\\") }\",\n    \"variables\": {}\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "https://api.autentique.com.br/v2/graphql",
+					"protocol": "https",
+					"host": [
+						"api",
+						"autentique",
+						"com",
+						"br"
+					],
+					"path": [
+						"v2",
+						"graphql"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Criar pasta",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"description": "Substitua a variável \"{{accessToken}}\" com o seu token de API",
+						"key": "Authorization",
+						"type": "text",
+						"value": "Bearer {{accessToken}}"
+					},
+					{
+						"key": "Content-Type",
+						"name": "Content-Type",
+						"type": "text",
+						"value": "application/json"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"query\": \"mutation CreateFolderMutation($folder: FolderInput!) { createFolder(folder: $folder) { id name type created_at } }\",\n    \"variables\": {\n\t\t\"folder\": {\n\t\t\t\"name\": \"Contratos assinados\"\n\t\t}\n\t}\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "https://api.autentique.com.br/v2/graphql",
+					"protocol": "https",
+					"host": [
+						"api",
+						"autentique",
+						"com",
+						"br"
+					],
+					"path": [
+						"v2",
+						"graphql"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Resgatar pasta",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"description": "Substitua a variável \"{{accessToken}}\" com o seu token de API",
+						"key": "Authorization",
+						"type": "text",
+						"value": "Bearer {{accessToken}}"
+					},
+					{
+						"key": "Content-Type",
+						"name": "Content-Type",
+						"type": "text",
+						"value": "application/json"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"query\": \"query { folder(id: \\\"ID_DA_PASTA\\\") { id name type created_at } }\",\n    \"variables\": {}\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "https://api.autentique.com.br/v2/graphql",
+					"protocol": "https",
+					"host": [
+						"api",
+						"autentique",
+						"com",
+						"br"
+					],
+					"path": [
+						"v2",
+						"graphql"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Listar pastas",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"description": "Substitua a variável \"{{accessToken}}\" com o seu token de API",
+						"key": "Authorization",
+						"type": "text",
+						"value": "Bearer {{accessToken}}"
+					},
+					{
+						"key": "Content-Type",
+						"name": "Content-Type",
+						"type": "text",
+						"value": "application/json"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"query\": \"query { folders(limit: 60, page: 1) { total data { id name type created_at } } }\",\n    \"variables\": {}\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "https://api.autentique.com.br/v2/graphql",
+					"protocol": "https",
+					"host": [
+						"api",
+						"autentique",
+						"com",
+						"br"
+					],
+					"path": [
+						"v2",
+						"graphql"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Excluir pasta",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"description": "Substitua a variável \"{{accessToken}}\" com o seu token de API",
+						"key": "Authorization",
+						"type": "text",
+						"value": "Bearer {{accessToken}}"
+					},
+					{
+						"key": "Content-Type",
+						"name": "Content-Type",
+						"type": "text",
+						"value": "application/json"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"query\": \"mutation { deleteFolder(id: \\\"ID_DA_PASTA\\\") }\",\n    \"variables\": {}\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "https://api.autentique.com.br/v2/graphql",
+					"protocol": "https",
+					"host": [
+						"api",
+						"autentique",
+						"com",
+						"br"
+					],
+					"path": [
+						"v2",
+						"graphql"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Mover documento para pasta",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"description": "Substitua a variável \"{{accessToken}}\" com o seu token de API",
+						"key": "Authorization",
+						"type": "text",
+						"value": "Bearer {{accessToken}}"
+					},
+					{
+						"key": "Content-Type",
+						"name": "Content-Type",
+						"type": "text",
+						"value": "application/json"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"query\": \"mutation { moveDocumentToFolder(document_id: \\\"ID_DO_DOCUMENTO\\\", folder_id: \\\"ID_DA_PASTA_DE_DESTINO\\\") }\",\n    \"variables\": {}\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "https://api.autentique.com.br/v2/graphql",
+					"protocol": "https",
+					"host": [
+						"api",
+						"autentique",
+						"com",
+						"br"
+					],
+					"path": [
+						"v2",
+						"graphql"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Listar documentos de pasta",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"description": "Substitua a variável \"{{accessToken}}\" com o seu token de API",
+						"key": "Authorization",
+						"type": "text",
+						"value": "Bearer {{accessToken}}"
+					},
+					{
+						"key": "Content-Type",
+						"name": "Content-Type",
+						"type": "text",
+						"value": "application/json"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"query\": \"query { documentsByFolder(folder_id: \\\"ID_DA_PASTA\\\", limit: 60, page: 1) { total data { id name created_at files { original signed } signatures { public_id name email action { name } viewed { created_at } signed { created_at } rejected { created_at } } } } }\",\n    \"variables\": {}\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "https://api.autentique.com.br/v2/graphql",
+					"protocol": "https",
+					"host": [
+						"api",
+						"autentique",
+						"com",
+						"br"
+					],
+					"path": [
+						"v2",
+						"graphql"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Adicionar signatário",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"description": "Substitua a variável \"{{accessToken}}\" com o seu token de API",
+						"key": "Authorization",
+						"type": "text",
+						"value": "Bearer {{accessToken}}"
+					},
+					{
+						"key": "Content-Type",
+						"name": "Content-Type",
+						"type": "text",
+						"value": "application/json"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"query\": \"mutation CreateSignerMutation($id: UUID!, $signer: SignerInput!) { createSigner(document_id: $id, signer: $signer) { public_id } }\",\n    \"variables\": {\n        \"id\": \"ID_DOCUMENTO\",\n        \"signer\": {\n            \"action\": \"SIGN\",\n            \"email\": \"troque-esse-email-que-e-publico@tuamaeaquelaursa.com\"\n        }\n    }\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "https://api.autentique.com.br/v2/graphql",
+					"protocol": "https",
+					"host": [
+						"api",
+						"autentique",
+						"com",
+						"br"
+					],
+					"path": [
+						"v2",
+						"graphql"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Exemplo do envio do Webhook",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "User-Agent",
+						"value": "GuzzleHttp/6.5.5 curl/7.68.0 PHP/7.4.3",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "urlencoded",
+					"urlencoded": [
+						{
+							"key": "partes[0][uuid]",
+							"value": "2f664427ff5711ea8f0742010a9e0014",
+							"type": "text"
+						},
+						{
+							"key": "partes[0][nome]",
+							"value": "João Teste",
+							"type": "text"
+						},
+						{
+							"key": "partes[0][email]",
+							"value": "troque-esse-email-que-e-publico@tuamaeaquelaursa.com",
+							"type": "text"
+						},
+						{
+							"key": "partes[0][cpf]",
+							"value": "18461401026",
+							"type": "text"
+						},
+						{
+							"key": "partes[0][nascimento]",
+							"value": "1995-11-24",
+							"type": "text"
+						},
+						{
+							"key": "partes[0][empresa]",
+							"value": "",
+							"type": "text"
+						},
+						{
+							"key": "partes[0][ordem]",
+							"value": "1",
+							"type": "text"
+						},
+						{
+							"key": "partes[0][assinatura][formato]",
+							"value": "s",
+							"type": "text"
+						},
+						{
+							"key": "partes[0][assinatura][imagem]",
+							"value": "",
+							"type": "text"
+						},
+						{
+							"key": "partes[0][funcao]",
+							"value": "assinar",
+							"type": "text"
+						},
+						{
+							"key": "partes[0][created]",
+							"value": "2020-09-25 14:47:31",
+							"type": "text"
+						},
+						{
+							"key": "partes[0][visualizado][created]",
+							"value": "2020-09-25 14:48:11",
+							"type": "text"
+						},
+						{
+							"key": "partes[0][visualizado][ipv4]",
+							"value": "179.233.14.136",
+							"type": "text"
+						},
+						{
+							"key": "partes[0][visualizado][geotrack][country]",
+							"value": "Brazil",
+							"type": "text"
+						},
+						{
+							"key": "partes[0][visualizado][geotrack][countryISO]",
+							"value": "BR",
+							"type": "text"
+						},
+						{
+							"key": "partes[0][visualizado][geotrack][state]",
+							"value": "Rio Grande do Sul",
+							"type": "text"
+						},
+						{
+							"key": "partes[0][visualizado][geotrack][stateISO]",
+							"value": "RS",
+							"type": "text"
+						},
+						{
+							"key": "partes[0][visualizado][geotrack][city]",
+							"value": "Erechim",
+							"type": "text"
+						},
+						{
+							"key": "partes[0][visualizado][geotrack][zipcode]",
+							"value": "99700",
+							"type": "text"
+						},
+						{
+							"key": "partes[0][visualizado][geotrack][latitude]",
+							"value": "-27.6769",
+							"type": "text"
+						},
+						{
+							"key": "partes[0][visualizado][geotrack][longitude]",
+							"value": "-52.2594",
+							"type": "text"
+						},
+						{
+							"key": "partes[0][assinado][created]",
+							"value": "2020-09-25 14:49:49",
+							"type": "text"
+						},
+						{
+							"key": "partes[0][assinado][ipv4]",
+							"value": "179.233.14.136",
+							"type": "text"
+						},
+						{
+							"key": "partes[0][assinado][geotrack][country]",
+							"value": "Brazil",
+							"type": "text"
+						},
+						{
+							"key": "partes[0][assinado][geotrack][countryISO]",
+							"value": "BR",
+							"type": "text"
+						},
+						{
+							"key": "partes[0][assinado][geotrack][state]",
+							"value": "Rio Grande do Sul",
+							"type": "text"
+						},
+						{
+							"key": "partes[0][assinado][geotrack][stateISO]",
+							"value": "RS",
+							"type": "text"
+						},
+						{
+							"key": "partes[0][assinado][geotrack][city]",
+							"value": "Erechim",
+							"type": "text"
+						},
+						{
+							"key": "partes[0][assinado][geotrack][zipcode]",
+							"value": "99700",
+							"type": "text"
+						},
+						{
+							"key": "partes[0][assinado][geotrack][latitude]",
+							"value": "-27.6769",
+							"type": "text"
+						},
+						{
+							"key": "partes[0][assinado][geotrack][longitude]",
+							"value": "-52.2594",
+							"type": "text"
+						},
+						{
+							"key": "partes[0][mail][sent]",
+							"value": "2020-09-25 14:47:31",
+							"type": "text"
+						},
+						{
+							"key": "partes[0][mail][delivered]",
+							"value": "2020-09-25 14:47:34",
+							"type": "text"
+						},
+						{
+							"key": "documento[uuid]",
+							"value": "8d927bd405668cdf952abe0c3994bbce7b26cdb7302c49774",
+							"type": "text"
+						},
+						{
+							"key": "documento[nome]",
+							"value": "Documento Teste",
+							"type": "text"
+						},
+						{
+							"key": "documento[rejeitavel]",
+							"value": "0",
+							"type": "text"
+						},
+						{
+							"key": "documento[ordenavel]",
+							"value": "0",
+							"type": "text"
+						},
+						{
+							"key": "documento[created]",
+							"value": "2020-09-25 14:47:29",
+							"type": "text"
+						},
+						{
+							"key": "documento[updated]",
+							"value": "2020-09-25 14:49:49",
+							"type": "text"
+						},
+						{
+							"key": "documento[assinatura]",
+							"value": "",
+							"type": "text"
+						},
+						{
+							"key": "documento[publicado]",
+							"value": "2020-09-25 14:47:31",
+							"type": "text"
+						},
+						{
+							"key": "documento[disponivel]",
+							"value": "1",
+							"type": "text"
+						},
+						{
+							"key": "organizacao",
+							"value": "1",
+							"type": "text"
+						},
+						{
+							"key": "remetente[nome]",
+							"value": "John Doe",
+							"type": "text"
+						},
+						{
+							"key": "remetente[empresa]",
+							"value": "Autentique",
+							"type": "text"
+						},
+						{
+							"key": "remetente[email]",
+							"value": "john-doe@tuamaeaquelaursa.com",
+							"type": "text"
+						},
+						{
+							"key": "remetente[cpf]",
+							"value": "83608965009",
+							"type": "text"
+						},
+						{
+							"key": "remetente[nascimento]",
+							"value": "1990-12-06",
+							"type": "text"
+						},
+						{
+							"key": "arquivo[original]",
+							"value": "https://storage.googleapis.com/d6e/ca2485d9e4bc5e2e8d6c8f18b95d3141/wFLlmBcT2fsTgUCa03VfvhDRIO6Ux6ww5ctdduBu.original.pdf",
+							"type": "text"
+						},
+						{
+							"key": "arquivo[assinado]",
+							"value": "https://api.autentique.com.br/documentos/8d927bd405668cdf952abe0c3994bbce7b26cdb7302c49774/assinado.pdf",
+							"type": "text"
+						}
+					]
+				},
+				"url": {
+					"raw": ""
+				}
+			},
+			"response": []
+		}
+	],
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		},
+		{
+			"listen": "test",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		}
+	],
+	"variable": [
+		{
+			"key": "accessToken",
+			"value": ""
+		}
+	]
+}
