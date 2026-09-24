@@ -351,9 +351,13 @@ describe('outbox', () => {
         .where(eq(outbox.dedupeKey, `${t.id}:1`));
       return linha?.status === 'janela_fechada';
     });
-    // #29 (e spec 004): a janela fechada também MARCA o ticket p/ um humano
-    await aguardar(async () => (await db.select().from(ticket)).length === 1);
-    const [tk] = await db.select().from(ticket);
+    // #29 (e spec 004): a janela fechada também MARCA o ticket p/ um humano.
+    // Filtrado pela conversa DESTE teste: a tabela é compartilhada com os outros
+    // arquivos da suíte, e ler `from(ticket)` inteiro faz o resultado depender
+    // de quem rodou em paralelo — foi exatamente assim que este teste quebrou.
+    const meusTickets = () => db.select().from(ticket).where(eq(ticket.conversaId, conv.id));
+    await aguardar(async () => (await meusTickets()).length === 1);
+    const [tk] = await meusTickets();
     expect(tk?.status).toBe('aguardando_humano');
     expect(tk?.motivoEscalonamento).toContain('janela');
   }, 15_000);
@@ -419,7 +423,73 @@ describe('outbox', () => {
     // a thread mostra o texto que o cotista viu, e NENHUM ticket é aberto
     const msgs = await db.select().from(mensagem).where(eq(mensagem.conversaId, conv.id));
     expect(msgs.some((m) => m.texto.includes('R$ 1.141,00'))).toBe(true);
-    expect(await db.select().from(ticket)).toHaveLength(0);
+    expect(await db.select().from(ticket).where(eq(ticket.conversaId, conv.id))).toHaveLength(0);
+  }, 15_000);
+
+  it('janela ABERTA com template na linha ⇒ sai o card, não o texto', async () => {
+    /**
+     * Decisão do Renato em 24/09, depois do card não aparecer no teste de
+     * campo: o template é o que sai, não o plano B do reengajamento. Com a
+     * janela aberta — que é sempre o caso na demo, porque o cliente acabou de
+     * escrever — o cotista recebia texto puro, sem o botão de copiar o código;
+     * o único elemento tocável da conversa acabava sendo o domínio que mora
+     * dentro do BR Code do PIX, que não abre nada.
+     */
+    const [conv] = await db
+      .insert(conversa)
+      .values({
+        id: '01990a5d-ac96-774b-bcce-b302099a8060',
+        waId: '5511999990007',
+        janelaExpiraEm: new Date(Date.now() + 3_600_000),
+      })
+      .returning();
+    if (!conv) throw new Error('setup incompleto');
+    const antes = templatesEnviados.length;
+
+    await enqueueOutbound(
+      { db, boss },
+      {
+        conversaId: conv.id,
+        chave: 'cobranca:teste-janela-aberta:1',
+        texto: 'Seu PIX de R$ 2.000,00 está pronto.',
+        autor: 'bot',
+        template: {
+          nome: 'cobranca_pix',
+          idioma: 'pt_BR',
+          variaveis: ['R$ 2.000,00', '27/09/2026', 'https://sandbox.asaas.com/i/xyz'],
+          botao: {
+            tipo: 'order_details',
+            indice: 0,
+            orderDetails: {
+              referenceId: 'cob-2',
+              tipo: 'digital-goods',
+              totalCentavos: 200_000,
+              taxaCentavos: 0,
+              itens: [{ retailerId: '1', nome: 'Sinal', valorCentavos: 200_000, quantidade: 1 }],
+              pix: {
+                code: '00020101021226820014br.gov.bcb.pix',
+                merchantName: 'SETA TECH LTDA',
+                key: 'chave-pix',
+                keyType: 'EVP',
+              },
+            },
+          },
+        },
+      },
+    );
+
+    await aguardar(async () => {
+      const [linha] = await db
+        .select()
+        .from(outbox)
+        .where(eq(outbox.dedupeKey, 'bot:cobranca:teste-janela-aberta:1'));
+      return linha?.status === 'enviada';
+    });
+    expect(templatesEnviados).toHaveLength(antes + 1);
+    expect(templatesEnviados.at(-1)).toMatchObject({ to: '5511999990007', nome: 'cobranca_pix' });
+    // a thread guarda o texto legível, que é o que o console e o histórico leem
+    const msgs = await db.select().from(mensagem).where(eq(mensagem.conversaId, conv.id));
+    expect(msgs.some((m) => m.texto.includes('R$ 2.000,00'))).toBe(true);
   }, 15_000);
 
   it('#29: retries esgotados → linha vira `falha` e o ticket escala (dead-letter)', async () => {
