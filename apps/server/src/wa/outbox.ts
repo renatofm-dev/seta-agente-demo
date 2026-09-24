@@ -99,12 +99,20 @@ const TemplateDaLinhaSchema = OutboundTemplateSchema.omit({ to: true });
  * pg-boss continuar valendo: cada tentativa pega o arquivo de novo, em vez de
  * reenviar um `media_id` que a Meta já pode ter expirado.
  */
-export const AnexoDaLinhaSchema = z.object({
-  tipo: z.literal('segunda_via'),
-  /** `idcontafinanceira` — o mesmo `titulo_id` de `v_titulo`. */
-  contaFinanceiraId: z.string().min(1),
-  filename: z.string().min(1).max(240),
-});
+export const AnexoDaLinhaSchema = z.discriminatedUnion('tipo', [
+  z.object({
+    tipo: z.literal('segunda_via'),
+    /** `idcontafinanceira` — o mesmo `titulo_id` de `v_titulo`. */
+    contaFinanceiraId: z.string().min(1),
+    filename: z.string().min(1).max(240),
+  }),
+  /** 046: o contrato, buscado pelo id do contrato no ERP. */
+  z.object({
+    tipo: z.literal('contrato'),
+    contratoErpId: z.string().min(1),
+    filename: z.string().min(1).max(240),
+  }),
+]);
 export type AnexoDaLinha = z.infer<typeof AnexoDaLinhaSchema>;
 
 /**
@@ -113,6 +121,19 @@ export type AnexoDaLinha = z.infer<typeof AnexoDaLinhaSchema>;
  */
 export interface ResolvedorAnexo {
   obterSegundaVia(contaFinanceiraId: string): Promise<DocumentoErp | null>;
+  /** 046: o contrato assinado, pelo id do contrato no ERP. */
+  obterContratoPdf(contratoId: string): Promise<DocumentoErp | null>;
+}
+
+/** Qual leitura do ERP cada tipo de anexo pede. */
+function buscarAnexo(
+  anexos: ResolvedorAnexo | undefined,
+  anexo: AnexoDaLinha,
+): Promise<DocumentoErp | null> {
+  if (!anexos) return Promise.resolve(null);
+  return anexo.tipo === 'segunda_via'
+    ? anexos.obterSegundaVia(anexo.contaFinanceiraId)
+    : anexos.obterContratoPdf(anexo.contratoErpId);
 }
 
 /**
@@ -129,9 +150,26 @@ export const TEXTO_ANEXO_INDISPONIVEL =
   'Não consegui gerar o arquivo do seu boleto agora — o sistema não devolveu o documento. ' +
   'Já avisei um atendente, que vai te enviar em seguida. Desculpe pela demora!';
 
+/** 046: o contrato falhando pede outra frase — não é boleto, e quem espera sabe. */
+export const TEXTO_CONTRATO_INDISPONIVEL =
+  'Não consegui gerar o arquivo do seu contrato agora — o sistema não devolveu o documento. ' +
+  'Já avisei um atendente, que vai te enviar em seguida. Desculpe pela demora!';
+
+/** O que dizer ao cliente quando o ERP não entrega o arquivo prometido. */
+export function textoDeAnexoIndisponivel(anexo: AnexoDaLinha): string {
+  return anexo.tipo === 'contrato' ? TEXTO_CONTRATO_INDISPONIVEL : TEXTO_ANEXO_INDISPONIVEL;
+}
+
+/** Como o anexo aparece no log e na mensagem de erro: o id que o ERP recusou. */
+function referenciaDo(anexo: AnexoDaLinha): string {
+  return anexo.tipo === 'segunda_via'
+    ? `2ª via do boleto da conta financeira ${anexo.contaFinanceiraId}`
+    : `contrato ${anexo.contratoErpId}`;
+}
+
 export class AnexoIndisponivelError extends Error {
-  constructor(readonly contaFinanceiraId: string) {
-    super(`ERP não devolveu a 2ª via da conta financeira ${contaFinanceiraId}`);
+  constructor(readonly referencia: string) {
+    super(`ERP não devolveu a ${referencia}`);
     this.name = 'AnexoIndisponivelError';
   }
 }
@@ -245,8 +283,8 @@ export async function enviarLinha(
     const janela = { expiraEm: conv.janelaExpiraEm };
     let waMessageId: string;
     if (anexo) {
-      const doc = await (deps.anexos?.obterSegundaVia(anexo.contaFinanceiraId) ?? null);
-      if (!doc) throw new AnexoIndisponivelError(anexo.contaFinanceiraId);
+      const doc = await buscarAnexo(deps.anexos, anexo);
+      if (!doc) throw new AnexoIndisponivelError(referenciaDo(anexo));
       ({ waMessageId } = await deps.gateway.sendDocument(
         {
           to: conv.waId,
@@ -305,13 +343,13 @@ export async function enviarLinha(
       await enqueueOutbound(deps, {
         conversaId: conv.id,
         chave: `anexo-indisponivel:${outboxId}`,
-        texto: TEXTO_ANEXO_INDISPONIVEL,
+        texto: anexo ? textoDeAnexoIndisponivel(anexo) : TEXTO_ANEXO_INDISPONIVEL,
         autor: 'bot',
       });
-      await marcarTicketPorFalha(deps, conv.id, 'ERP não devolveu o boleto pedido pelo cotista');
+      await marcarTicketPorFalha(deps, conv.id, `ERP não devolveu ${err.referencia}`);
       deps.logger.error(
-        { outboxId, contaFinanceiraId: err.contaFinanceiraId },
-        'outbox: 2ª via indisponível no ERP — linha em falha',
+        { outboxId, referencia: err.referencia },
+        'outbox: documento indisponível no ERP — linha em falha',
       );
       return;
     }

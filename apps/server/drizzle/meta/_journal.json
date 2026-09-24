@@ -162,6 +162,13 @@
       "when": 1789695255941,
       "tag": "0022_anexo-outbox",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1790270430363,
+      "tag": "0023_fixed_ares",
+      "breakpoints": true
     }
   ]
 }

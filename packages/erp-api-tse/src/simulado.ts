@@ -36,6 +36,8 @@ export interface ErpSimulado extends ErpWriter {
   semear(p: ParcelaErp): void;
   /** 040: o PDF que `obterSegundaVia` vai devolver para esta parcela. */
   semearBoleto(contaFinanceiraId: string, bytes: Uint8Array): void;
+  /** 046: o PDF que `obterContratoPdf` vai devolver para este contrato. */
+  semearContrato(contratoId: string, bytes: Uint8Array): void;
   /** 038: hotéis, tipos de UH e a tarifa que a simulação devolve. */
   semearReserva(cfg: {
     hoteis?: OpcaoErp[];
@@ -73,6 +75,7 @@ export function createErpSimulado(): ErpSimulado {
   const vendas: { contratoId: number; input: VendaInput }[] = [];
   const parcelas = new Map<string, ParcelaErp>();
   const boletos = new Map<string, Uint8Array>();
+  const contratos = new Map<string, Uint8Array>();
   let seq = 0;
   // 038
   const utilizacoes: UtilizacaoErp[] = [];
@@ -102,6 +105,16 @@ export function createErpSimulado(): ErpSimulado {
     async obterSegundaVia(contaFinanceiraId) {
       const bytes = boletos.get(contaFinanceiraId);
       return bytes ? { bytes, mime: 'application/pdf' } : null;
+    },
+
+    /** 046: como o boleto — quem desenha contrato é o ERP, não o produto. */
+    async obterContratoPdf(contratoId) {
+      const bytes = contratos.get(contratoId);
+      return bytes ? { bytes, mime: 'application/pdf' } : null;
+    },
+
+    semearContrato(contratoId, bytes) {
+      contratos.set(contratoId, bytes);
     },
 
     semear(p) {

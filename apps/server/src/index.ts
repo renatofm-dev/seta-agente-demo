@@ -1,4 +1,5 @@
 import { createOpenAICompatibleProvider } from '@seta/ai-provider';
+import { createAssinaturaSimulada, createAutentiqueProvider } from '@seta/assinatura';
 import { loadClientConfig } from '@seta/client-config';
 import { createErpSimulado, createTseErpApi, type ErpWriter } from '@seta/erp-api-tse';
 import { createPgConnector } from '@seta/erp-connector';
@@ -216,6 +217,23 @@ await registerCobrancaEventoWorker({ db, boss, repo: pagamentosRepo, gateway, en
 await registerErpBaixaWorker({ db, boss, writer: erpWriter, logger });
 // 038: criar + confirmar a reserva no ERP, com read-back por chave natural
 await registerErpReservaWorker({ db, boss, writer: reservaWriter, logger });
+/**
+ * 046: quem assina o contrato. O simulado desenha a página aqui mesmo e é o
+ * default da demo; o Autentique fala com a API deles. O link precisa ser
+ * ABSOLUTO e público — daí `PUBLIC_BASE_URL`, que em dev é a URL do túnel.
+ */
+const assinaturaProvider =
+  env.ASSINATURA_PROVIDER === 'autentique'
+    ? createAutentiqueProvider({ accessToken: env.ASSINATURA_AUTENTIQUE_TOKEN ?? '' })
+    : createAssinaturaSimulada({ baseUrl: env.PUBLIC_BASE_URL });
+const assinaturaDeps = {
+  db,
+  boss,
+  logger,
+  provider: assinaturaProvider,
+  erp: erpWriter, // 046: o contrato em PDF vem do ERP, como o boleto da 040
+};
+
 // 045: pessoa + casal + venda, disparado SÓ pelo pagamento do sinal
 await registerErpVendaWorker({
   db,
@@ -225,6 +243,7 @@ await registerErpVendaWorker({
   idProdutoPadrao: env.VENDA_ID_PRODUTO,
   idMeioPagamentoSinal: env.VENDA_MEIO_PAGAMENTO_SINAL,
   idMeioPagamentoSaldo: env.VENDA_MEIO_PAGAMENTO_SALDO,
+  assinatura: assinaturaDeps, // 046: e o contrato vai para assinatura
 });
 
 const app = buildApp({
@@ -233,6 +252,7 @@ const app = buildApp({
   wa: { db, boss },
   console: { auth, executor, registry, provider, templateApi },
   pagamentos: { repo: pagamentosRepo, psp },
+  assinatura: assinaturaDeps, // 046: página de assinatura + webhook do provedor
   // 015b: as rotas de decisão da proposta precisam do fluxo SDR inteiro
   sdr: {
     db,
@@ -271,6 +291,8 @@ try {
       venda: clientConfig.modulos.sdr
         ? `sinal ${env.VENDA_SINAL_CENTAVOS} centavos, produto ${env.VENDA_ID_PRODUTO}`
         : false, // 045
+      // 046: qual provedor assina, e para onde aponta o link que o comprador toca
+      assinatura: `${assinaturaProvider.nome} → ${env.PUBLIC_BASE_URL}`,
     },
     'server no ar',
   );

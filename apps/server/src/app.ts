@@ -10,6 +10,7 @@ import { type FastifyInstance, fastify, LogController, type RawServerDefault } f
 import type { PgBoss } from 'pg-boss';
 import type { Logger } from 'pino';
 import { aprendizadoRoutes } from './aprendizado-routes.js';
+import { type AssinaturaRoutesOpts, assinaturaRoutes } from './assinatura/routes.js';
 import type { Auth } from './auth.js';
 import { authRoutes } from './auth-routes.js';
 import { consoleRoutes } from './console-routes.js';
@@ -73,6 +74,11 @@ export interface BuildAppOptions {
    * funcionando sozinha.
    */
   readonly sdr?: SdrFluxoDeps;
+  /**
+   * 046: assinatura do contrato. Ausente ⇒ nem a página nem o webhook existem,
+   * e a venda termina onde terminava antes — no contrato registrado.
+   */
+  readonly assinatura?: Omit<AssinaturaRoutesOpts, 'cliente'>;
 }
 
 export function buildApp({
@@ -82,6 +88,7 @@ export function buildApp({
   console: consoleDeps,
   pagamentos,
   sdr,
+  assinatura,
 }: BuildAppOptions): App {
   const app = fastify({
     loggerInstance: createLogger({ name: 'server', level: env.LOG_LEVEL }),
@@ -100,6 +107,8 @@ export function buildApp({
   if (wa) {
     app.register(waRoutes, { env, db: wa.db, boss: wa.boss });
     if (pagamentos) app.register(webhookPspRoutes, { env, db: wa.db, boss: wa.boss });
+    // 046: página de assinatura e webhook do provedor — públicas, sem sessão
+    if (assinatura) app.register(assinaturaRoutes, { ...assinatura, cliente: clientConfig.nome });
     if (env.DEV_SIMULATOR) {
       // com console (auth) presente, o simulador exige sessão — plano B da
       // demo fica atrás de login quando exposto em produção (011)
@@ -171,7 +180,12 @@ export function buildApp({
       // Reservas (038): listagem e a aprovação da taxa de manutenção
       if (clientConfig.modulos.reserva) {
         app.register(reservasRoutes, { db: wa.db, boss: wa.boss, auth: consoleDeps.auth });
-        app.register(vendasRoutes, { db: wa.db, auth: consoleDeps.auth }); // 045
+        // 046: com as deps de assinatura, a tela ganha o reenvio do link
+        app.register(vendasRoutes, {
+          db: wa.db,
+          auth: consoleDeps.auth,
+          ...(assinatura ? { assinatura } : {}),
+        }); // 045
       }
       if (consoleDeps.registry) {
         app.register(aprendizadoRoutes, {

@@ -126,6 +126,18 @@ export interface ErpWriter {
    * valor) e não é escrito em disco em lugar nenhum desta plataforma.
    */
   obterSegundaVia(contaFinanceiraId: string): Promise<DocumentoErp | null>;
+
+  // --- 046: o contrato em documento ------------------------------------------
+  /**
+   * O contrato em PDF. Mesma regra da 2ª via: `null` é resposta (contrato que
+   * não existe), exceção é indisponibilidade. Bytes, nunca caminho.
+   *
+   * **Não tem rota no TSE real.** A API do fornecedor não expõe documento de
+   * contrato — quem serve é o simulador, sob `/sim/`. Quando o fornecedor
+   * responder como o sistema dele gera o contrato (pergunta aberta na 046),
+   * este método ganha o caminho de verdade e ninguém acima dele muda.
+   */
+  obterContratoPdf(contratoId: string): Promise<DocumentoErp | null>;
   health(): Promise<{ ok: boolean; latencyMs: number }>;
 }
 

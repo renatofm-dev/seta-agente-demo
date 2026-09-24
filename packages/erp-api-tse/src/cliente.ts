@@ -320,6 +320,27 @@ export function createTseErpApi(config: TseHttpConfig): TseErpApi {
       return { bytes: baixa.bytes, mime: 'application/pdf' };
     },
 
+    /**
+     * 046: o contrato em PDF. O caminho é `/sim/` porque **não existe rota
+     * equivalente no TSE** — é extensão do simulador, e o prefixo deixa isso
+     * visível no log de quem depurar. Fora daí, o tratamento é o mesmo da 2ª
+     * via: 404 é resposta (`null`), indisponibilidade sobe, e o que não começa
+     * com `%PDF-` não é documento.
+     */
+    async obterContratoPdf(contratoId) {
+      const id = z.coerce.number().int().positive().parse(contratoId);
+      let baixa: Awaited<ReturnType<typeof baixar>>;
+      try {
+        baixa = await baixar({ path: `/sim/contratos/${id}/documento.pdf` });
+      } catch (err) {
+        if (err instanceof ErpBusinessError) return null;
+        throw err;
+      }
+      if (baixa.bytes.length === 0) return null;
+      if (!PDF_MAGIC.every((b, i) => baixa.bytes[i] === b)) return null;
+      return { bytes: baixa.bytes, mime: 'application/pdf' };
+    },
+
     async lerParcela(contaFinanceiraId, contratoId) {
       // o painel pagina de 10 em 10 e não filtra por parcela: varre até achar
       for (let pagina = 1; pagina <= MAX_PAGINAS; pagina++) {
