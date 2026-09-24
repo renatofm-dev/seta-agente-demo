@@ -169,11 +169,18 @@ export function mensagensEmitida(d: DadosEmissao): string[] {
       return msgs;
     }
     case 'pix': {
+      /**
+       * O link vai SEMPRE, como no boleto — e não só quando falta o
+       * copia-e-cola. O BR Code do PIX carrega um domínio dentro do payload
+       * (`...br.gov.bcb.pix2560pix-h.asaas.com/qr/cobv/...`), e o WhatsApp
+       * transforma esse pedaço em link. Sem um link de verdade na mensagem, a
+       * única coisa tocável da conversa era aquele — que não abre página
+       * nenhuma. Quem toca não sabe que tocou num fragmento de código.
+       */
       const msgs = [
         `${prefixo}Seu PIX está pronto! ⚡\nValor: ${valor} — válido até ${formatarData(d.vencimento)}` +
-          (d.pixCopiaCola
-            ? '\nO código copia-e-cola vem na próxima mensagem.'
-            : `\nPague pelo link: ${d.urlFatura}`),
+          `\nPague pelo link: ${d.urlFatura}` +
+          (d.pixCopiaCola ? '\nOu use o código copia-e-cola da próxima mensagem.' : ''),
       ];
       if (d.pixCopiaCola) msgs.push(d.pixCopiaCola);
       return msgs;
