@@ -7,6 +7,7 @@
     { "path": "packages/query-catalog" },
     { "path": "packages/agent" },
     { "path": "packages/ai-provider" },
+    { "path": "packages/assinatura" },
     { "path": "packages/guardrails" },
     { "path": "packages/wa-meta" },
     { "path": "packages/crm" },
