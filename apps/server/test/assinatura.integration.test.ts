@@ -256,6 +256,40 @@ describe('046: a página de assinatura e a volta do aceite', () => {
     });
   });
 
+  it('o POST do FORMULÁRIO (urlencoded) é aceito — foi 415 em campo', async () => {
+    await venderParaAssinar();
+
+    /**
+     * O navegador manda `application/x-www-form-urlencoded`, e o Fastify não
+     * traz parser para isso. O teste antigo usava JSON e passava; quem tocou em
+     * "Assinar contrato" no celular levou um 415 na tela. Este caso existe para
+     * não acontecer de novo.
+     */
+    const r = await app.inject({
+      method: 'POST',
+      url: `/assinar/${DOC_ID}`,
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      payload: '',
+    });
+
+    expect(r.statusCode).toBe(200);
+    expect(r.body).toContain('Contrato assinado');
+  });
+
+  it('o webhook do provedor também chega urlencoded', async () => {
+    await venderParaAssinar();
+
+    const r = await app.inject({
+      method: 'POST',
+      url: '/webhooks/assinatura',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      payload: `documento=${DOC_ID}&estado=assinada`,
+    });
+
+    expect(r.statusCode).toBe(200);
+    expect(r.json()).toMatchObject({ aplicado: true });
+  });
+
   it('assinar duas vezes não manda a via duas vezes', async () => {
     await venderParaAssinar();
     await app.inject({ method: 'POST', url: `/assinar/${DOC_ID}` });

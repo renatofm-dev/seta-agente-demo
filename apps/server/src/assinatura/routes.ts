@@ -36,6 +36,27 @@ export const assinaturaRoutes: FastifyPluginCallback<AssinaturaRoutesOpts> = (ap
     erp: opts.erp,
   };
 
+  /**
+   * Formulário de navegador e webhook do Autentique falam
+   * `application/x-www-form-urlencoded`, e o Fastify não traz parser para isso
+   * — sem este, o toque em "Assinar contrato" devolvia 415 na cara de quem ia
+   * assinar. O parser fica no escopo deste plugin, não no app inteiro.
+   *
+   * `URLSearchParams` preserva a chave literal, que é justamente o que o
+   * Autentique manda: `partes[0][assinado][created]`, `arquivo[assinado]`.
+   */
+  app.addContentTypeParser(
+    'application/x-www-form-urlencoded',
+    { parseAs: 'string' },
+    (_req, corpo, done) => {
+      try {
+        done(null, Object.fromEntries(new URLSearchParams(String(corpo))));
+      } catch (err) {
+        done(err as Error, undefined);
+      }
+    },
+  );
+
   const achar = async (documentoId: string) => {
     const [linha] = await opts.db
       .select()
