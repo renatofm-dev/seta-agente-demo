@@ -1,5 +1,6 @@
 import type { TraceEvento } from '@seta/agent';
 import type { AIProvider } from '@seta/ai-provider';
+import { mensagensEmitida } from '@seta/cobranca';
 import { newTraceId } from '@seta/observability';
 import type { Executor, SessionCtx } from '@seta/query-catalog';
 import {
@@ -27,7 +28,7 @@ import type { Db } from '../db/index.js';
 import { cobranca, fluxoSdr, venda as vendaTabela } from '../db/schema.js';
 import type { Env } from '../env.js';
 import type { Comprador, VendaRepo } from '../venda/repo.js';
-import { enqueueOutbound } from '../wa/outbox.js';
+import { enqueueOutbound, enviarJobOutbound } from '../wa/outbox.js';
 import {
   escalarTicketSdr,
   TRIGGER_DESCONTO_ACIMA_ALCADA,
@@ -141,7 +142,7 @@ function resultado(
   extras: Partial<ResultadoFluxoSdr> & { etapaAntes: string; acao: string },
 ): ResultadoFluxoSdr {
   return {
-    mensagens: t.mensagens,
+    mensagens: extras.mensagens ?? t.mensagens,
     escalado: extras.escalado ?? false,
     escaladoTrigger: extras.escaladoTrigger ?? null,
     eventos: [
@@ -318,6 +319,25 @@ export async function continuarFluxoSdr(
       await salvarEstado(deps.db, fluxo.id, t.estado);
       return resultado(t, { ...base, escalado: true, escaladoTrigger: TRIGGER_SDR_COMERCIAL });
     }
+    case 'reenviar_sinal': {
+      const existente = await deps.venda?.repo.daConversa(ctx.conversaId);
+      const reenviou =
+        existente?.status === 'sinal_emitido'
+          ? await reenviarSinal(deps, ctx, existente.cobrancaId)
+          : false;
+      await salvarEstado(deps.db, fluxo.id, t.estado, { propostaId: fluxo.propostaId });
+      /**
+       * Se o PIX foi, ele É a resposta — dizer junto que "o pagamento ainda não
+       * caiu" só empurra o que importa para cima na tela. Quando o reenvio não
+       * acontece (já reenviado antes, ou cobrança não reenviável), a frase da
+       * máquina volta a ser a resposta: silêncio nunca.
+       */
+      return resultado(t, {
+        ...base,
+        propostaId: fluxo.propostaId,
+        ...(reenviou ? { mensagens: [] } : {}),
+      });
+    }
     case 'emitir_sinal': {
       const r = await emitirSinal(deps, ctx, fluxo, t.estado, contexto);
       await salvarEstado(deps.db, fluxo.id, t.estado, { propostaId: fluxo.propostaId });
@@ -415,6 +435,55 @@ async function registrarProposta(
  * na 014 serve para chavear o cliente no PSP, não para apontar um contrato que
  * ainda não existe. Ver a decisão registrada no PR.
  */
+/**
+ * Reenvia as mensagens do sinal que já foi emitido. Texto, não template: o
+ * template só existe para reengajar fora da janela, e quem acabou de escrever
+ * está dentro dela.
+ */
+async function reenviarSinal(
+  deps: SdrFluxoDeps,
+  ctx: ContextoTurnoSdr,
+  cobrancaId: string | null,
+): Promise<boolean> {
+  const boss = deps.venda?.boss;
+  if (!cobrancaId || !boss) return false;
+  const [c] = await deps.db.select().from(cobranca).where(eq(cobranca.id, cobrancaId));
+  if (!c || c.status !== 'emitida' || !c.urlFatura) {
+    deps.logger.warn(
+      { cobrancaId, status: c?.status },
+      'sinal já emitido, mas a cobrança não está reenviável',
+    );
+    return false;
+  }
+  /**
+   * UMA mensagem, não três. O `pixCopiaCola` vai como `null` de propósito: com
+   * ele, `mensagensEmitida` promete o código "na próxima mensagem" e devolve
+   * uma segunda linha com o código cru — e quem perguntou "e o pix?" recebia
+   * três mensagens seguidas (explicação, código e o aviso de que o pagamento
+   * não caiu). O link da fatura abre a página com QR e copia-e-cola, então uma
+   * mensagem basta e é a que se lê inteira na tela do celular.
+   */
+  const [texto] = mensagensEmitida({
+    metodo: c.metodo,
+    valorCentavos: c.valorCentavos,
+    vencimento: c.vencimentoPsp,
+    urlFatura: c.urlFatura,
+    urlBoleto: c.urlBoleto,
+    linhaDigitavel: null,
+    pixCopiaCola: null,
+    reenvio: true,
+  });
+  if (!texto) return false;
+  const r = await enqueueOutbound(
+    { db: deps.db, boss },
+    { conversaId: ctx.conversaId, chave: `venda-reenvio:${c.id}`, texto, autor: 'bot' },
+  );
+  if (!r.outboxId) return false; // dedupe: já foi reenviado antes
+  await enviarJobOutbound(boss, r.outboxId);
+  deps.logger.info({ cobrancaId: c.id }, 'sinal já emitido — PIX reenviado');
+  return true;
+}
+
 async function emitirSinal(
   deps: SdrFluxoDeps,
   ctx: ContextoTurnoSdr,
@@ -437,7 +506,21 @@ async function emitirSinal(
     return { escalado: false };
   }
   const existente = await venda.repo.daConversa(ctx.conversaId);
-  if (existente && existente.status === 'sinal_emitido') return { escalado: false };
+  if (existente && existente.status === 'sinal_emitido') {
+    /**
+     * Já existe um sinal emitido nesta conversa. Antes isto era um `return`
+     * mudo, e o efeito em campo foi o pior possível: o lead ouvia "estou te
+     * mandando o PIX aqui embaixo 👇" e não vinha nada — porque a venda velha,
+     * de um teste anterior, bloqueava a nova sem dizer uma palavra.
+     *
+     * O PIX que existe É o pagamento que ele precisa fazer, então reenviar é a
+     * resposta certa — e é o que o fluxo de cobrança da 014 já faz quando o
+     * cotista pede duas vezes. Emitir outro seria pior: dois PIX abertos para
+     * a mesma venda.
+     */
+    await reenviarSinal(deps, ctx, existente.cobrancaId);
+    return { escalado: false };
+  }
 
   await venda.repo.garantirContato(ctx.waId, comprador);
 
