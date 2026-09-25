@@ -7,8 +7,10 @@
 #       Se o server não estiver de pé, o script sobe o `pnpm dev` (Postgres +
 #       tsc watch + server + console) neste mesmo terminal e espera o healthz.
 #       Com o `pnpm dev` já rodando em outro terminal, só faz o túnel.
-# Sair: Ctrl+C — derruba o túnel, REMOVE o override (o número não fica
-#       apontando para uma URL morta) e encerra o `pnpm dev` que ele subiu.
+# Sair: Ctrl+C — derruba o túnel, DEVOLVE o número para onde ele apontava antes
+#       (a VPS da demo, hoje; e se não havia override, remove o nosso para o
+#       número não ficar apontando para URL morta) e encerra o `pnpm dev` que
+#       ele subiu.
 #
 # Requer no .env: WA_PHONE_NUMBER_ID, WA_ACCESS_TOKEN, WA_VERIFY_TOKEN.
 set -euo pipefail
@@ -40,6 +42,8 @@ TUNNEL_PID=""
 TUNNEL_URL=""
 LOG=""
 ASAAS_WEBHOOK_ID=""
+# Para onde o número apontava ANTES desta sessão (vazio = para o webhook do app).
+OVERRIDE_ANTERIOR=""
 ASAAS_BASE="${ASAAS_BASE_URL:-https://api-sandbox.asaas.com/v3}"
 asaas() { # método, path, [corpo]
   if [ -n "${3:-}" ]; then
@@ -71,10 +75,22 @@ if w:
 limpar() {
   echo
   if [ -n "$TUNNEL_URL" ]; then
-    echo "→ removendo o override do número (volta ao webhook do app)…"
-    curl -s --max-time 20 -X POST "$GRAPH/$WA_PHONE_NUMBER_ID" \
-      -H "Authorization: Bearer $WA_ACCESS_TOKEN" -H "Content-Type: application/json" \
-      -d '{"webhook_configuration":{"override_callback_uri":""}}' >/dev/null || true
+    # RESTAURA para onde o número apontava, em vez de só limpar. Limpar devolve o
+    # número ao webhook do APP — que não é nosso: é o do n8n. Desde que a demo
+    # subiu na VPS, o destino de repouso do número é a VPS, e um Ctrl+C aqui
+    # entregava a conversa do cotista a um fluxo que não a espera — sem erro
+    # nenhum na tela, as mensagens simplesmente iam para outro lugar.
+    if [ -n "$OVERRIDE_ANTERIOR" ]; then
+      echo "→ devolvendo o número para $OVERRIDE_ANTERIOR…"
+      curl -s --max-time 20 -X POST "$GRAPH/$WA_PHONE_NUMBER_ID" \
+        -H "Authorization: Bearer $WA_ACCESS_TOKEN" -H "Content-Type: application/json" \
+        -d '{"webhook_configuration":{"override_callback_uri":"'"$OVERRIDE_ANTERIOR"'","verify_token":"'"$WA_VERIFY_TOKEN"'"}}' >/dev/null || true
+    else
+      echo "→ removendo o override do número (volta ao webhook do app)…"
+      curl -s --max-time 20 -X POST "$GRAPH/$WA_PHONE_NUMBER_ID" \
+        -H "Authorization: Bearer $WA_ACCESS_TOKEN" -H "Content-Type: application/json" \
+        -d '{"webhook_configuration":{"override_callback_uri":""}}' >/dev/null || true
+    fi
   fi
   # 014: a URL do quick tunnel morre junto — webhook ligado apontaria para o nada.
   # Procura por NOME em vez de usar $ASAAS_WEBHOOK_ID: se o registro falhou no
@@ -204,6 +220,22 @@ if [ "$DESAFIO" != "12345" ]; then
   echo "erro: handshake pela URL pública não respondeu 12345 em ~60s (veio: '${DESAFIO:0:200}')" >&2
   echo "       log do cloudflared:" >&2; grep -E 'ERR|WRN' "$LOG" | tail -5 >&2 || true
   exit 1
+fi
+
+# Qual é o destino de repouso do número? Guardado ANTES de sobrescrever, para o
+# trap devolver o número a ele. Túnel morto (trycloudflare) não conta: é sobra
+# de sessão anterior, e restaurar isso apontaria para o nada.
+OVERRIDE_ANTERIOR="$(curl -s --max-time 25 "$GRAPH/$WA_PHONE_NUMBER_ID?fields=webhook_configuration" \
+  -H "Authorization: Bearer $WA_ACCESS_TOKEN" | python3 -c '
+import sys, json
+try:
+    url = json.load(sys.stdin).get("webhook_configuration", {}).get("phone_number", "") or ""
+except Exception:
+    url = ""
+print("" if "trycloudflare.com" in url else url)
+' 2>/dev/null || true)"
+if [ -n "$OVERRIDE_ANTERIOR" ]; then
+  echo "→ hoje o número aponta para $OVERRIDE_ANTERIOR — devolvo no Ctrl+C."
 fi
 
 echo "→ aplicando o override no número de teste…"
