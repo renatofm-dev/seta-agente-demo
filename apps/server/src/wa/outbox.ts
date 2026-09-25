@@ -230,6 +230,16 @@ export async function enviarLinha(
    * para o caminho de falha, que acaba em ticket.
    */
   const anexo = linha.anexo === null ? null : AnexoDaLinhaSchema.parse(linha.anexo);
+  /**
+   * 043 + decisão do Renato em 24/09: a linha que traz template SAI como
+   * template, com a janela aberta ou fechada. Antes ele era só plano B do
+   * reengajamento, e o efeito era que o card de pagamento — valor, vencimento,
+   * link e o botão de copiar o código — **nunca aparecia na demo**, porque ali
+   * a janela está sempre aberta: o cliente acabou de escrever. O que o cotista
+   * recebia era texto puro, e o único elemento tocável da conversa acabava
+   * sendo o domínio que mora DENTRO do BR Code do PIX — que não abre nada.
+   */
+  const template = TemplateDaLinhaSchema.safeParse(linha.template);
 
   try {
     const janela = { expiraEm: conv.janelaExpiraEm };
@@ -247,6 +257,8 @@ export async function enviarLinha(
         },
         janela,
       ));
+    } else if (template.success) {
+      ({ waMessageId } = await deps.gateway.sendTemplate({ ...template.data, to: conv.waId }));
     } else {
       ({ waMessageId } = await deps.gateway.send({ to: conv.waId, body: linha.texto }, janela));
     }
@@ -306,39 +318,12 @@ export async function enviarLinha(
     if (err instanceof JanelaFechadaError) {
       // Envio LIVRE fora da janela de 24h não existe na Meta (só template aprovado — 013 usa
       // nos disparos e no aviso de pagamento).
-      // 043: se ESTA linha trouxe um template equivalente, o reengajamento é
-      // automático — é o único instante em que dá para decidir texto × template,
-      // porque a janela pode ter fechado depois do INSERT.
-      const template = TemplateDaLinhaSchema.safeParse(linha.template);
-      if (template.success) {
-        const { waMessageId } = await deps.gateway.sendTemplate({
-          ...template.data,
-          to: conv.waId,
-        });
-        await deps.db.transaction(async (tx) => {
-          await tx
-            .update(outbox)
-            .set({ status: 'enviada', waMessageId, atualizadoEm: new Date() })
-            .where(eq(outbox.id, outboxId));
-          await tx.insert(mensagem).values({
-            id: newTraceId(),
-            conversaId: conv.id,
-            direcao: 'out',
-            autor: linha.autor,
-            waMessageId,
-            texto: linha.texto,
-            anexoNome: null,
-            status: 'enviada',
-            turnoId: linha.turnoId,
-          });
-        });
-        deps.logger.info(
-          { outboxId, waId: conv.waId, template: template.data.nome },
-          'janela fechada — reengajado por template',
-        );
-        return;
-      }
-      // sem template: comportamento da 014 — marca a linha E o ticket.
+      // Linha COM template não chega aqui: ela nem passa pelo envio livre, sai
+      // por `sendTemplate` acima. Quem cai neste ponto é a linha de texto —
+      // inclusive as linhas 2+ de uma emissão (o copia-e-cola, a linha
+      // digitável), que seguem sem template próprio de propósito: anexá-lo
+      // abriria uma segunda conversa cobrada dizendo a mesma coisa.
+      // Comportamento da 014: marca a linha E o ticket.
       await deps.db
         .update(outbox)
         .set({ status: 'janela_fechada', atualizadoEm: new Date() })

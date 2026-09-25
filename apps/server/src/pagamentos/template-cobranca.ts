@@ -90,3 +90,24 @@ export function montarTemplateCobranca(
     }
   }
 }
+
+/**
+ * Quais das mensagens da emissão realmente saem, dado o template da linha 1.
+ *
+ * O código do PIX viaja DENTRO do botão "Copy Pix code" do `order_details`.
+ * Mandá-lo também como texto cru entrega o mesmo código duas vezes — foi o que
+ * apareceu no teste de campo assim que o card passou a sair. Some só a linha
+ * que repete exatamente o que o botão já leva.
+ *
+ * O boleto não entra nessa regra: o template dele traz a linha digitável como
+ * variável do corpo, sem botão de copiar, então a mensagem crua é a única forma
+ * copiável que o cotista tem.
+ */
+export function linhasQueSaem(
+  textos: readonly string[],
+  template: TemplateCobranca | null | undefined,
+): readonly string[] {
+  const codigoNoBotao = template?.botao?.orderDetails.pix?.code ?? null;
+  if (!codigoNoBotao) return textos;
+  return textos.filter((texto, i) => i === 0 || texto !== codigoNoBotao);
+}

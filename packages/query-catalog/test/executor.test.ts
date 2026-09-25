@@ -126,6 +126,7 @@ describe('codegen de ToolSpecs', () => {
       'meu_produto',
       'minha_cota',
       'proxima_parcela',
+      'proximas_parcelas',
       'saldo_contrato',
       'status_cancelamento',
       'titulos_atraso',
@@ -141,6 +142,7 @@ describe('codegen de ToolSpecs', () => {
     });
     expect(soFinanceiro.map((t) => t.name).sort()).toEqual([
       'proxima_parcela',
+      'proximas_parcelas',
       'saldo_contrato',
       'titulos_atraso',
       'total_pago',

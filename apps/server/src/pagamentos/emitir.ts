@@ -11,7 +11,7 @@ import { enqueueOutbound, enviarJobOutbound, inserirOutbound } from '../wa/outbo
 import { escalarTicketCobranca, TRIGGER_FALHA_EMISSAO } from './escalar.js';
 import type { PixRecebedor } from './order-details.js';
 import type { PagamentosRepo } from './repo.js';
-import { montarTemplateCobranca } from './template-cobranca.js';
+import { linhasQueSaem, montarTemplateCobranca } from './template-cobranca.js';
 
 /**
  * Worker de emissão (014): materializa a cobrança no PSP e manda o meio de
@@ -168,10 +168,17 @@ export async function processarEmissao(
           atualizadoEm: new Date(),
         })
         .where(eq(cobranca.id, c.id));
-      // 043: o template vai SÓ na linha 1. As linhas 2+ são o copia-e-cola cru,
-      // que já viaja dentro do order_details — anexar nelas abriria uma segunda
-      // conversa de template, cobrada, dizendo a mesma coisa.
-      for (const [i, texto] of textos.entries()) {
+      /**
+       * 043: o template vai SÓ na linha 1 — anexá-lo às linhas 2+ abriria uma
+       * segunda conversa cobrada dizendo a mesma coisa.
+       *
+       * E quando o card do PIX sai, a linha do copia-e-cola CRU não sai: o
+       * código já está dentro do botão "Copy Pix code", e mandá-lo de novo em
+       * texto entrega o mesmo código duas vezes. Vale só para o PIX: o template
+       * do boleto leva a linha digitável como variável do corpo, sem botão de
+       * copiar, então ali a mensagem crua é a única forma copiável e continua.
+       */
+      for (const [i, texto] of linhasQueSaem(textos, template).entries()) {
         const r = await inserirOutbound(tx, {
           conversaId: c.conversaId,
           chave: `cobranca:${c.id}:${i + 1}`,

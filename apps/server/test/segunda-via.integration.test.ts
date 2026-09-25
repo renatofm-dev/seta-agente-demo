@@ -66,11 +66,18 @@ let erp: ErpSimulado;
 let enviados: { doc: OutboundDocument; janela: JanelaInfo }[] = [];
 let textos: string[] = [];
 let gateway: OutboundGateway;
-/** Parcelas do seed usadas pelos casos, resolvidas no beforeAll. */
+/**
+ * Parcelas do seed usadas pelos casos, resolvidas no beforeAll. De cada uma
+ * guardamos as DUAS faces: o `id` da linha, que é o que o servidor usa para
+ * buscar o PDF e o que os asserts conferem no anexo, e o NÚMERO da parcela,
+ * que é o único que o modelo manipula desde que a tool deixou de pedir id.
+ */
 let tituloComBoleto = '';
-let tituloCartao = '';
-let tituloBoletoNaoGerado = '';
-let tituloDeOutroContrato = '';
+let numComBoleto = '';
+let numCartao = '';
+let numBoletoNaoGerado = '';
+/** Número que NÃO existe em aberto neste contrato — `max(parcela) + 1`. */
+let numInexistente = '';
 
 const clientConfig = loadClientConfig(
   join(import.meta.dirname, '../../../configs/demo/client.yaml'),
@@ -124,31 +131,51 @@ beforeAll(async () => {
   await applySchema(admin);
   await seedData(admin);
 
-  const parcela = async (sql: string, params: unknown[]): Promise<string> => {
-    const { rows } = await admin.query<{ id: string }>(sql, params);
-    return String(rows[0]?.id ?? '');
+  /**
+   * `status <> 'pago'` em todas: é o recorte de `financeiro.parcela_por_numero`.
+   * Uma fixture paga passaria no SELECT daqui e não existiria para a tool.
+   */
+  const parcela = async (sql: string, params: unknown[]): Promise<[string, string]> => {
+    const { rows } = await admin.query<{ id: string; parcela: number }>(sql, params);
+    return [String(rows[0]?.id ?? ''), String(rows[0]?.parcela ?? '')];
   };
-  tituloComBoleto = await parcela(
-    `SELECT id FROM v_titulo WHERE contrato_id = $1 AND linha_digitavel IS NOT NULL
-      ORDER BY vencimento DESC LIMIT 1`,
+  // a mais PRÓXIMA: a mais distante é a que perde a linha digitável logo abaixo
+  [tituloComBoleto, numComBoleto] = await parcela(
+    `SELECT id, parcela FROM v_titulo WHERE contrato_id = $1 AND linha_digitavel IS NOT NULL
+        AND status <> 'pago'
+      ORDER BY vencimento ASC LIMIT 1`,
     [CONTRATO],
   );
   // duas maneiras de não ter boleto, e o agente precisa saber diferenciá-las
-  tituloCartao = await parcela(
-    `SELECT id FROM v_titulo WHERE contrato_id = $1 AND meio_pagamento = 'cartao_recorrente' LIMIT 1`,
+  [, numCartao] = await parcela(
+    `SELECT id, parcela FROM v_titulo WHERE contrato_id = $1 AND meio_pagamento = 'cartao_recorrente'
+        AND status <> 'pago' LIMIT 1`,
     [CONTRATO],
   );
-  tituloBoletoNaoGerado = await parcela(
-    `SELECT id FROM v_titulo WHERE contrato_id = $1 AND meio_pagamento = 'boleto'
-        AND linha_digitavel IS NULL LIMIT 1`,
+  /**
+   * "Boleto ainda não gerado" não existe no seed em parcela ABERTA — as sem
+   * linha digitável são todas pagas, e pagas não entram na consulta da tool.
+   * Então a fixture é fabricada aqui: a parcela mais distante do contrato perde
+   * a linha digitável. É a mais distante de propósito: as próximas são as que
+   * a demo usa.
+   */
+  const { rows: semLinha } = await admin.query<{ id: string; parcela: number }>(
+    `UPDATE contafinanceira SET linhadigitavel = NULL
+      WHERE idcontafinanceira = (
+        SELECT id::int FROM v_titulo
+         WHERE contrato_id = $1 AND meio_pagamento = 'boleto' AND status <> 'pago'
+         ORDER BY vencimento DESC LIMIT 1)
+      RETURNING idcontafinanceira::text AS id, numeroparcela AS parcela`,
     [CONTRATO],
   );
-  tituloDeOutroContrato = await parcela(
-    `SELECT id FROM v_titulo WHERE contrato_id <> $1 AND linha_digitavel IS NOT NULL LIMIT 1`,
+  numBoletoNaoGerado = String(semLinha[0]?.parcela ?? '');
+  const { rows: maiores } = await admin.query<{ proxima: string }>(
+    `SELECT (max(parcela) + 1)::text AS proxima FROM v_titulo WHERE contrato_id = $1`,
     [CONTRATO],
   );
+  numInexistente = String(maiores[0]?.proxima ?? '');
   expect(
-    tituloComBoleto && tituloCartao && tituloBoletoNaoGerado && tituloDeOutroContrato,
+    tituloComBoleto && numComBoleto && numCartao && numBoletoNaoGerado && numInexistente,
   ).toBeTruthy();
 
   env = {
@@ -265,7 +292,7 @@ describe('040: o cotista pede a 2ª via e o boleto chega', () => {
   it('a tool confere a parcela, o servidor entrega o PDF e o modelo nunca o vê', async () => {
     fake
       .respondeTexto('outro') // classificador de intenção (006)
-      .chamaTool('enviar_segunda_via', { titulo_id: tituloComBoleto })
+      .chamaTool('enviar_segunda_via', { parcela: numComBoleto })
       .respondeTexto('Claro! Já estou te enviando o boleto.');
 
     await enviarPeloSimulador('me manda a segunda via do meu boleto');
@@ -330,7 +357,7 @@ describe('040: o cotista pede a 2ª via e o boleto chega', () => {
   it('a frase do roteiro chega ao agente, não ao fluxo de cobrança', async () => {
     fake
       .respondeTexto('segunda_via') // classificador — a categoria da 040
-      .chamaTool('enviar_segunda_via', { titulo_id: tituloComBoleto })
+      .chamaTool('enviar_segunda_via', { parcela: numComBoleto })
       .respondeTexto('Claro! Já estou te enviando o boleto.');
 
     await enviarPeloSimulador('me manda a segunda via do meu boleto');
@@ -346,7 +373,7 @@ describe('040: o cotista pede a 2ª via e o boleto chega', () => {
   it('reprocessar a MESMA linha não manda o boleto duas vezes', async () => {
     fake
       .respondeTexto('outro')
-      .chamaTool('enviar_segunda_via', { titulo_id: tituloComBoleto })
+      .chamaTool('enviar_segunda_via', { parcela: numComBoleto })
       .respondeTexto('Já vai!');
     await enviarPeloSimulador('manda o boleto por favor');
     await aguardarTurno();
@@ -362,7 +389,7 @@ describe('040: quando não dá, o agente explica — e nada é inventado', () =>
   it('parcela no cartão recorrente volta com o MOTIVO — o agente não precisa adivinhar', async () => {
     fake
       .respondeTexto('outro')
-      .chamaTool('enviar_segunda_via', { titulo_id: tituloCartao })
+      .chamaTool('enviar_segunda_via', { parcela: numCartao })
       .respondeTexto('Essa parcela é no cartão recorrente, não tem boleto para segunda via.');
 
     await enviarPeloSimulador('me manda o boleto daquela parcela');
@@ -379,7 +406,7 @@ describe('040: quando não dá, o agente explica — e nada é inventado', () =>
   it('parcela de boleto AINDA não gerado é caso diferente, e a resposta diz isso', async () => {
     fake
       .respondeTexto('outro')
-      .chamaTool('enviar_segunda_via', { titulo_id: tituloBoletoNaoGerado })
+      .chamaTool('enviar_segunda_via', { parcela: numBoletoNaoGerado })
       .respondeTexto('Essa parcela ainda não tem boleto emitido.');
 
     await enviarPeloSimulador('segunda via da próxima parcela');
@@ -390,17 +417,25 @@ describe('040: quando não dá, o agente explica — e nada é inventado', () =>
     expect(await linhasOutbox()).toHaveLength(1);
   }, 30_000);
 
-  it('parcela de OUTRO contrato não existe para esta conversa — o bind é de sessão', async () => {
+  /**
+   * O caso antigo mandava o id de uma parcela de OUTRO contrato para provar o
+   * bind de sessão. Com a tool recebendo NÚMERO, esse ataque deixou de existir:
+   * `financeiro.parcela_por_numero` filtra por `contrato_id` de sessão, então
+   * não há id a contrabandear. O que sobrou de errado que o modelo consegue
+   * fazer é pedir um número que este contrato não tem — e aí a resposta tem de
+   * ser "não achei", nunca um boleto parecido.
+   */
+  it('número que não existe no contrato volta ok=false — sem boleto aproximado', async () => {
     fake
       .respondeTexto('outro')
-      .chamaTool('enviar_segunda_via', { titulo_id: tituloDeOutroContrato })
+      .chamaTool('enviar_segunda_via', { parcela: numInexistente })
       .respondeTexto('Não achei essa parcela no seu contrato, me confirma qual é?');
 
     await enviarPeloSimulador('manda a segunda via');
     await aguardarTurno();
 
     expect(ultimaRespostaDeTool()).toContain('"ok":false');
-    expect(ultimaRespostaDeTool()).toMatch(/não encontrei essa parcela/i);
+    expect(ultimaRespostaDeTool()).toMatch(/não achei a parcela/i);
     expect(await linhasOutbox()).toHaveLength(1);
     expect(enviados).toHaveLength(0);
   }, 30_000);
@@ -408,7 +443,7 @@ describe('040: quando não dá, o agente explica — e nada é inventado', () =>
   it('ERP sem o arquivo: a linha vira falha e um humano é chamado — nunca silêncio', async () => {
     fake
       .respondeTexto('outro')
-      .chamaTool('enviar_segunda_via', { titulo_id: tituloComBoleto })
+      .chamaTool('enviar_segunda_via', { parcela: numComBoleto })
       .respondeTexto('Já estou te enviando.');
     await enviarPeloSimulador('segunda via do boleto');
     await aguardarTurno();
@@ -438,7 +473,7 @@ describe('040: quando não dá, o agente explica — e nada é inventado', () =>
   it('o aviso de falha não se repete quando a mesma linha é reprocessada', async () => {
     fake
       .respondeTexto('outro')
-      .chamaTool('enviar_segunda_via', { titulo_id: tituloComBoleto })
+      .chamaTool('enviar_segunda_via', { parcela: numComBoleto })
       .respondeTexto('Já vai.');
     await enviarPeloSimulador('me manda o boleto');
     await aguardarTurno();
@@ -457,7 +492,7 @@ describe('040: quando não dá, o agente explica — e nada é inventado', () =>
   it('sem resolvedor de anexo a entrega não acontece em silêncio — escala igual', async () => {
     fake
       .respondeTexto('outro')
-      .chamaTool('enviar_segunda_via', { titulo_id: tituloComBoleto })
+      .chamaTool('enviar_segunda_via', { parcela: numComBoleto })
       .respondeTexto('Já vai.');
     await enviarPeloSimulador('quero a segunda via');
     await aguardarTurno();

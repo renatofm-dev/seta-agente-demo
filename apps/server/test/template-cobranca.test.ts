@@ -2,7 +2,7 @@ import type { DadosEmissao } from '@seta/cobranca';
 import { describe, expect, it } from 'vitest';
 import type { PixRecebedor } from '../src/pagamentos/order-details.ts';
 import type { CobrancaRow, CobrancaTituloRow } from '../src/pagamentos/repo.ts';
-import { montarTemplateCobranca } from '../src/pagamentos/template-cobranca.ts';
+import { linhasQueSaem, montarTemplateCobranca } from '../src/pagamentos/template-cobranca.ts';
 
 /**
  * Spec 043 — escolha do template por método. A aridade de cada lista é o
@@ -91,5 +91,34 @@ describe('spec 043 — montarTemplateCobranca', () => {
     expect(monta({}, { ...NOMES, boleto: undefined })).toBeNull();
     expect(monta({ reenvio: true }, { ...NOMES, boletoSegundaVia: undefined })).toBeNull();
     expect(monta({ metodo: 'cartao' }, { ...NOMES, cartao: undefined })).toBeNull();
+  });
+});
+
+describe('linhasQueSaem: o que o card já leva não sai de novo em texto', () => {
+  const CODIGO = '00020101021226820014br.gov.bcb.pix';
+
+  it('PIX: a linha do copia-e-cola some quando o código está no botão', () => {
+    const template = monta({ metodo: 'pix', pixCopiaCola: CODIGO });
+    expect(template?.botao?.orderDetails.pix?.code).toBe(CODIGO);
+
+    const saem = linhasQueSaem(['Seu PIX está pronto! ⚡', CODIGO], template);
+
+    expect(saem).toEqual(['Seu PIX está pronto! ⚡']);
+  });
+
+  it('sem template, o copia-e-cola continua — é a única forma copiável', () => {
+    const semNomes = { ...NOMES, pix: '' };
+    const template = monta({ metodo: 'pix', pixCopiaCola: CODIGO }, semNomes);
+    expect(template).toBeNull();
+
+    expect(linhasQueSaem(['Seu PIX está pronto! ⚡', CODIGO], template)).toHaveLength(2);
+  });
+
+  it('boleto: a linha digitável NÃO some — o card dela não tem botão de copiar', () => {
+    const template = monta({});
+    expect(template?.botao).toBeUndefined();
+    const linhas = ['Seu boleto está pronto! 🧾', BASE.linhaDigitavel ?? ''];
+
+    expect(linhasQueSaem(linhas, template)).toEqual(linhas);
   });
 });

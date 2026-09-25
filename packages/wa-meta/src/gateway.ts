@@ -44,6 +44,15 @@ export interface MetaGatewayConfig {
   readonly fetchFn?: typeof fetch;
 }
 
+/**
+ * Mensagem com link: o Cloud API só renderiza a URL como link clicável — com o
+ * cartão de preview que o cotista toca — quando `preview_url` vai `true`. Sem
+ * ele a URL chega como texto morto: o link de pagamento do 014 aparecia na
+ * conversa e não abria nada. Ligar sempre seria pedir preview de qualquer coisa
+ * parecida com URL; ligar quando há http(s) é o recorte honesto.
+ */
+const TEM_URL = /https?:\/\//i;
+
 /** Implementação real: Graph API da Meta (número de teste na POC). */
 export function createMetaGateway(config: MetaGatewayConfig): OutboundGateway {
   const fetchFn = config.fetchFn ?? fetch;
@@ -107,7 +116,7 @@ export function createMetaGateway(config: MetaGatewayConfig): OutboundGateway {
         messaging_product: 'whatsapp',
         to: valida.to,
         type: 'text',
-        text: { body: valida.body },
+        text: { body: valida.body, preview_url: TEM_URL.test(valida.body) },
       });
       return { waMessageId };
     },

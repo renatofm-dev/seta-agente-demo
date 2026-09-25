@@ -6,7 +6,7 @@ const CATALOG_REAL = join(import.meta.dirname, '../../../catalog');
 const FIXTURES_INVALIDAS = join(import.meta.dirname, 'fixtures-invalidas');
 
 describe('loader do catálogo', () => {
-  it('carrega o catálogo real do repo: 8 da 012 + 1 interna da 014 + 2 comerciais da 015 + 1 da 040', () => {
+  it('carrega o catálogo real do repo: 8 da 012 + 1 da 014 + 2 comerciais da 015 + 1 interna da 040', () => {
     const catalog = loadCatalog(CATALOG_REAL);
     const ids = catalog
       .list()
@@ -19,7 +19,7 @@ describe('loader do catálogo', () => {
       'contrato.meu_produto',
       'contrato.minha_cota',
       'contrato.status_cancelamento',
-      'financeiro.boleto_da_parcela',
+      'financeiro.parcela_por_numero',
       'financeiro.proxima_parcela',
       'financeiro.proximas_parcelas',
       'financeiro.saldo_contrato',
@@ -34,11 +34,14 @@ describe('loader do catálogo', () => {
       } else {
         expect(entry.params.contrato_id?.source).toBe('session');
       }
-      // Duas entradas NÃO viram tool do modelo: `proximas_parcelas` é uso interno
-      // do fluxo/conciliação (014) e `boleto_da_parcela` é a VERIFICAÇÃO que o
-      // servidor faz antes de buscar o PDF (040) — o agente chama
-      // `enviar_segunda_via`, não esta.
-      const internas = ['financeiro.proximas_parcelas', 'financeiro.boleto_da_parcela'];
+      // `parcela_por_numero` é a única que não vira tool do modelo: é a
+      // VERIFICAÇÃO que o servidor faz antes de buscar o PDF (040), e é ela que
+      // traduz o NÚMERO da parcela (o que o cotista fala) para a linha do ERP —
+      // o agente chama `enviar_segunda_via`, nunca esta. `proximas_parcelas`
+      // deixou de ser interna na 040: sem enxergar a lista, o modelo só alcança
+      // a próxima parcela e as vencidas, e o critério de aceite da spec ("a
+      // segunda via da parcela de março") fica impossível.
+      const internas = ['financeiro.parcela_por_numero'];
       expect(entry.tool.expose).toBe(!internas.includes(entry.id));
       // 015: condicoes_cota é a primeira price_source — a alçada do SDR emerge dela
       expect(entry.price_source).toBe(entry.id === 'comercial.condicoes_cota');

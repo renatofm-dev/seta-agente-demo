@@ -68,7 +68,7 @@ describe('spec 014 — render', () => {
     expect(opcoesDe({ candidatos: [VENCIDAS[0] as Candidato, PROXIMA] })).toHaveLength(2); // sem "todas"
   });
 
-  it('mensagens de emissão: código sozinho na 2ª mensagem; cartão só link', () => {
+  it('mensagens de emissão: link SEMPRE, código sozinho na 2ª mensagem; cartão só link', () => {
     const base = {
       valorCentavos: 85000,
       vencimento: '2026-09-05',
@@ -78,10 +78,15 @@ describe('spec 014 — render', () => {
       pixCopiaCola: '000201',
       reenvio: false,
     };
-    expect(mensagensEmitida({ ...base, metodo: 'pix' })).toEqual([
-      expect.stringContaining('Seu PIX está pronto'),
-      '000201',
-    ]);
+    const pix = mensagensEmitida({ ...base, metodo: 'pix' });
+    expect(pix).toEqual([expect.stringContaining('Seu PIX está pronto'), '000201']);
+    /**
+     * O link vai junto do copia-e-cola: o BR Code tem um domínio dentro
+     * (`pix-h.asaas.com/qr/...`) que o WhatsApp vira link, e sem um link de
+     * verdade na mensagem o único tocável da conversa é aquele — que não abre
+     * nada.
+     */
+    expect(pix[0]).toContain('https://x/i/1');
     const boleto = mensagensEmitida({ ...base, metodo: 'boleto' });
     expect(boleto[0]).toContain('https://x/b/1');
     expect(boleto[1]).toBe('2379000');

@@ -11,12 +11,16 @@ import type { AnexoDaLinha } from './outbox.js';
  * pelo modelo**. A tool só verifica e SINALIZA; quem entrega é o servidor,
  * depois que a frase do agente saiu — o mesmo contrato de `iniciar_pagamento`.
  *
- * A verificação não é burocracia. O `titulo_id` é o único parâmetro que vem do
- * modelo em todo este caminho, e ele decide QUAL boleto sai. Por isso a
- * consulta que valida (`financeiro.boleto_da_parcela`) tem o contrato como bind
- * de SESSÃO: pedir a parcela de outro contrato não devolve linha nenhuma, e o
- * resto do fluxo nem começa. O modelo escolhe entre o que já leu; ele não
- * alcança o que não é do cotista da conversa.
+ * A verificação não é burocracia. O parâmetro que vem do modelo decide QUAL
+ * boleto sai, e ele é o NÚMERO da parcela — o mesmo que o cotista fala. Pedir
+ * o id interno da linha era um convite ao erro silencioso: o modelo lia
+ * "parcela 20" na listagem e mandava `20` como id, que no banco é outra
+ * parcela, de outro vencimento, às vezes já paga. A tool respondia sobre a
+ * linha errada com toda a confiança do mundo. Agora quem resolve número → id é
+ * `financeiro.parcela_por_numero`, com o contrato como bind de SESSÃO: pedir a
+ * parcela de outro contrato não devolve linha nenhuma, e o resto do fluxo nem
+ * começa. Número que casa com mais de uma parcela em aberto (contrato com duas
+ * origens) não vira escolha nossa: volta para o agente perguntar.
  */
 
 export const NOME_SEGUNDA_VIA = 'enviar_segunda_via';
@@ -29,11 +33,14 @@ export interface PedidoSegundaVia {
 }
 
 const ParamsSchema = z.object({
-  titulo_id: z
-    .string()
-    .min(1)
-    .max(40)
-    .describe('Id da parcela, exatamente como veio de titulos_atraso ou proximas_parcelas.'),
+  parcela: z
+    .union([z.string(), z.number().int().positive()])
+    .transform((v) => String(v).trim())
+    .pipe(z.string().min(1).max(10))
+    .describe(
+      'NÚMERO da parcela, como o cotista fala ("20" em "parcela 20/120"). Nunca o id ' +
+        'interno da linha: o servidor resolve o id sozinho.',
+    ),
 });
 
 /** Como o cotista reconhece a parcela numa frase. */
@@ -105,31 +112,59 @@ export function toolEnviarSegundaVia(
     description:
       'Envia ao cliente, em PDF pelo WhatsApp, a 2ª via do boleto de UMA parcela do contrato ' +
       'dele. Use quando o cliente pedir o boleto, a segunda via, o PDF ou o documento de uma ' +
-      'parcela. Informe o titulo_id da parcela, exatamente como ele apareceu em titulos_atraso ' +
-      'ou proximas_parcelas — se você ainda não listou as parcelas, liste antes e pergunte qual ' +
-      'ele quer. Depois de chamar, responda em UMA frase curta que o boleto está indo; o ' +
+      'parcela. Informe o NÚMERO da parcela (o "20" de "parcela 20/120"), como o cliente a ' +
+      'chama — nunca um id. Se ele não disse qual, liste antes (proximas_parcelas ou ' +
+      'titulos_atraso) e pergunte. Depois de chamar, responda em UMA frase curta que o boleto está indo; o ' +
       'arquivo sai logo em seguida, você não precisa (nem consegue) anexá-lo. Parcela sem ' +
       'boleto ou de outro contrato volta com ok=false e o motivo: explique, não tente de novo.',
     schema: ParamsSchema,
     priceSource: false,
     async execute(params, session) {
       if (!session.clienteId) throw new Error('sessão sem vínculo — tool indisponível');
-      const { titulo_id } = ParamsSchema.parse(params);
-      const r = await deps.executor.run(
-        'financeiro.boleto_da_parcela',
-        { titulo_id },
-        deps.session,
-      );
-      const linha = r.rows[0];
-      if (!linha) {
+      const { parcela } = ParamsSchema.parse(params);
+      const r = await deps.executor.run('financeiro.parcela_por_numero', { parcela }, deps.session);
+      if (r.rows.length === 0) {
         return {
           rows: [
             {
               ok: false,
               motivo:
-                'não encontrei essa parcela no contrato deste cliente; liste as parcelas de novo e confirme com ele qual é',
+                `não achei a parcela ${parcela} em aberto no contrato deste cliente; liste as ` +
+                'parcelas de novo e confirme com ele qual é',
             },
           ],
+          rowCount: 1,
+          truncated: false,
+        };
+      }
+      /**
+       * Duas parcelas com o mesmo número acontecem em contrato com mais de uma
+       * origem (entrada e saldo, por exemplo). Escolher uma seria adivinhar —
+       * e adivinhar aqui manda o boleto errado para o cotista.
+       */
+      if (r.rows.length > 1) {
+        return {
+          rows: [
+            {
+              ok: false,
+              motivo:
+                `há ${r.rows.length} parcelas ${parcela} em aberto neste contrato, de origens ` +
+                'diferentes: pergunte ao cliente qual delas, pelo vencimento',
+              opcoes: r.rows.map((l) => ({
+                origem: l.origem,
+                vencimento: l.vencimento,
+                valor: reais(l.valor_centavos),
+              })),
+            },
+          ],
+          rowCount: 1,
+          truncated: false,
+        };
+      }
+      const linha = r.rows[0];
+      if (!linha) {
+        return {
+          rows: [{ ok: false, motivo: 'não consegui ler essa parcela agora' }],
           rowCount: 1,
           truncated: false,
         };

@@ -12,7 +12,8 @@
       "!pnpm-lock.yaml",
       "!apps/console/app/globals.css",
       "!apps/server/drizzle",
-      "!apps/tse-sim/contrato"
+      "!apps/tse-sim/contrato",
+      "!docs/autentique-v2-api.json"
     ]
   },
   "formatter": {
