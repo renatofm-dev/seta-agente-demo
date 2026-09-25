@@ -260,8 +260,26 @@ export const EnvSchema = EnvSchemaBase.superRefine((env, ctx) => {
 });
 export type Env = z.infer<typeof EnvSchema>;
 
+/**
+ * Variável VAZIA é variável AUSENTE.
+ *
+ * O compose de produção escreve `''` para tudo que não foi configurado
+ * (`${VAR:-}`), e `.optional()` sozinho não cobre string vazia: `min(1)` recusa
+ * e o boot morre pedindo justamente o que era opcional. Foi assim que a primeira
+ * subida na VPS caiu — `ASSINATURA_AUTENTIQUE_TOKEN` vazio derrubou o server que
+ * não precisa dele.
+ *
+ * Fica aqui, e não em cada campo, porque a regra é do CONTRATO de ambiente: em
+ * env não existe "string vazia configurada" — quem não define, não define.
+ * Obrigatória vazia continua erro, e com mensagem melhor ("obrigatória" em vez
+ * de "muito curta").
+ */
+function semVazias(source: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  return Object.fromEntries(Object.entries(source).filter(([, v]) => v !== ''));
+}
+
 export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
-  const parsed = EnvSchema.safeParse(source);
+  const parsed = EnvSchema.safeParse(semVazias(source));
   if (!parsed.success) {
     throw new Error(`Env inválida:\n${z.prettifyError(parsed.error)}`);
   }

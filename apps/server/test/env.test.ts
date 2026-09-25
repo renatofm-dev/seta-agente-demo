@@ -62,3 +62,29 @@ describe('P-31: .env.example documenta tudo que o server lê', () => {
     expect(faltando, `variáveis sem linha no .env.example: ${faltando.join(', ')}`).toEqual([]);
   });
 });
+
+/**
+ * Variável vazia é variável ausente — a queda da primeira subida na VPS.
+ *
+ * O compose de produção escreve `''` para tudo que não foi configurado
+ * (`${VAR:-}`), e `.optional()` sozinho não cobre string vazia. Estes dois
+ * testes são o defeito e o seu limite: o opcional vazio some, o obrigatório
+ * vazio continua erro.
+ */
+describe('env: string vazia conta como não definida', () => {
+  it('opcional vazia não derruba o boot (o que aconteceu na VPS)', () => {
+    const env = loadEnv({
+      ...BASE,
+      ...SEGREDOS_REAIS,
+      NODE_ENV: 'production',
+      ASSINATURA_AUTENTIQUE_TOKEN: '',
+      EMBEDDING_MODEL: '',
+    });
+    expect(env.ASSINATURA_AUTENTIQUE_TOKEN).toBeUndefined();
+    expect(env.EMBEDDING_MODEL).toBeUndefined();
+  });
+
+  it('obrigatória vazia continua sendo erro, e a mensagem a nomeia', () => {
+    expect(() => loadEnv({ ...BASE, ...SEGREDOS_REAIS, DATABASE_URL: '' })).toThrow(/DATABASE_URL/);
+  });
+});

@@ -36,6 +36,17 @@ set +a
 CONSOLE_URL="${CONSOLE_URL:-https://demo.setaia.com.br}"
 API_URL="${API_URL:-https://api.demo.setaia.com.br}"
 
+# Valor com `$` (a chave do Asaas começa com `$aact_`) tem de sair entre aspas
+# simples: o `--env-file` do docker compose expande `$...` como variável e o
+# valor chega VAZIO ao container. Testado — sem aspas o compose resolve `""`.
+# Na UI do Coolify, remova as aspas desse valor: lá elas entrariam literais.
+citar() {
+  case "$1" in
+    *'$'*|*' '*) printf "'%s'" "$1" ;;
+    *) printf '%s' "$1" ;;
+  esac
+}
+
 senha() { openssl rand -base64 24 | tr -d '/+=' | cut -c1-28; }
 segredo() { openssl rand -base64 32; }
 
@@ -67,7 +78,7 @@ TSE_RESERVA_PASSWORD=$(senha)
 # WhatsApp: credenciais da Meta — as MESMAS do dev (são do app, não do ambiente)
 WA_VERIFY_TOKEN=${WA_VERIFY_TOKEN:-}
 WA_APP_SECRET=${WA_APP_SECRET:-}
-WA_ACCESS_TOKEN=${WA_ACCESS_TOKEN:-}
+WA_ACCESS_TOKEN=$(citar "${WA_ACCESS_TOKEN:-}")
 WA_PHONE_NUMBER_ID=${WA_PHONE_NUMBER_ID:-}
 WA_WABA_ID=${WA_WABA_ID:-}
 WA_TEMPLATE_COBRANCA_PIX=${WA_TEMPLATE_COBRANCA_PIX:-}
@@ -78,7 +89,7 @@ WA_TEMPLATE_PAGAMENTO_CONFIRMADO=${WA_TEMPLATE_PAGAMENTO_CONFIRMADO:-}
 
 # LLM e embeddings
 LLM_BASE_URL=${LLM_BASE_URL:-}
-LLM_API_KEY=${LLM_API_KEY:-}
+LLM_API_KEY=$(citar "${LLM_API_KEY:-}")
 LLM_MODEL=${LLM_MODEL:-}
 EMBEDDING_MODEL=${EMBEDDING_MODEL:-}
 EMBEDDING_DIM=${EMBEDDING_DIM:-1536}
@@ -87,7 +98,7 @@ LLM_PRECO_OUT_POR_1M=${LLM_PRECO_OUT_POR_1M:-0}
 
 # Asaas (sandbox): a chave é a mesma; o token do webhook nasce novo
 ASAAS_BASE_URL=${ASAAS_BASE_URL:-https://api-sandbox.asaas.com/v3}
-ASAAS_API_KEY=${ASAAS_API_KEY:-}
+ASAAS_API_KEY=$(citar "${ASAAS_API_KEY:-}")
 ASAAS_WEBHOOK_TOKEN=$(segredo | tr -d '/+=')
 
 # Assinatura (046) e venda (045) — defaults servem; mude o que o cliente pedir
@@ -104,7 +115,9 @@ chmod 600 "$DESTINO"
 
 cat >&2 <<AVISO
 
-escrito em $DESTINO (modo 600). Confira que nenhum valor saiu vazio: o que é
+escrito em $DESTINO (modo 600). Valor entre aspas simples é proposital (o
+docker compose comeria o `\$` da chave do Asaas); ao colar na UI do Coolify,
+remova as aspas desse valor. Confira que nenhum valor saiu vazio: o que é
 credencial de terceiro vem do .env, e o que estiver em branco falta buscar na
 origem (painel da Meta, do Asaas, da Anthropic) — não é para gerar.
 
