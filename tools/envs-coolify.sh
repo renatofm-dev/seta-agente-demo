@@ -2,7 +2,13 @@
 # Monta o bloco de variáveis do deploy (Coolify) a partir do .env de dev,
 # GERANDO o que não pode ser reaproveitado.
 #
-# Uso:  pnpm envs-coolify > /tmp/coolify.env   (e cole na UI do Coolify)
+# Uso:  pnpm envs-coolify            (escreve em /tmp/coolify.env)
+#       pnpm envs-coolify /caminho  (escreve onde você quiser)
+#
+# O arquivo é escrito pelo próprio script, e NÃO por redirecionamento. Motivo:
+# `pnpm envs-coolify > arquivo` grava também as duas linhas de banner do pnpm
+# ("> seta-agente@0.1.0 …") no topo, e o arquivo chega inválido no Coolify e no
+# `docker compose --env-file`. Foi o que aconteceu na primeira versão.
 #
 # Por que este script existe: o boot RECUSA subir em produção com segredo de dev
 # (P-28), e a lista de variáveis é longa o bastante para alguém esquecer uma —
@@ -14,6 +20,11 @@
 # repo — o .gitignore cobre `*.env`, mas o cuidado é seu.
 set -euo pipefail
 cd "$(dirname "$0")/.."
+
+DESTINO="${1:-/tmp/coolify.env}"
+case "$DESTINO" in
+  "$PWD"/*|./*) echo "erro: não escreva segredo dentro do repo — use /tmp ou ~/" >&2; exit 1 ;;
+esac
 
 [ -f .env ] || { echo "erro: .env não encontrado na raiz do repo" >&2; exit 1; }
 set -a
@@ -33,7 +44,7 @@ segredo() { openssl rand -base64 32; }
 TSE_USER_PROD="${TSE_USER_PROD:-TSE.DEMO}"
 TSE_PASS_PROD="$(senha)"
 
-cat <<EOF
+cat > "$DESTINO" <<EOF
 # ── gerado por tools/envs-coolify.sh em $(date '+%d/%m/%Y %H:%M') ──
 # Senhas NOVAS (o boot recusa as de dev em produção)
 POSTGRES_PASSWORD=$(senha)
@@ -89,7 +100,13 @@ DEV_SIMULATOR=true
 LOG_LEVEL=info
 EOF
 
-cat >&2 <<'AVISO'
+chmod 600 "$DESTINO"
+
+cat >&2 <<AVISO
+
+escrito em $DESTINO (modo 600). Confira que nenhum valor saiu vazio: o que é
+credencial de terceiro vem do .env, e o que estiver em branco falta buscar na
+origem (painel da Meta, do Asaas, da Anthropic) — não é para gerar.
 
 ── depois de colar no Coolify, três coisas que o script NÃO faz ──
 1. registrar o webhook do Asaas apontando para https://api.<dominio>/webhooks/asaas

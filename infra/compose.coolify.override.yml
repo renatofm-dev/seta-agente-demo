@@ -1,0 +1,78 @@
+# Subida MANUAL na VPS da SETA, sem passar pelo Coolify.
+#
+# Uso:
+#   docker compose -f infra/compose.coolify.yml -f infra/compose.coolify.override.yml \
+#     --env-file .env.vps up -d
+#
+# Por que este arquivo existe: o `compose.coolify.yml` conta com a plataforma
+# para duas coisas — injetar as variáveis e **gerar os labels do Traefik**. Quem
+# sobe na mão não tem nenhuma das duas: o container fica de pé e ninguém o
+# alcança, porque o `coolify-proxy` (Traefik v3.6) só roteia o que tem label.
+#
+# O que está aqui foi COPIADO do padrão que a máquina já usa (conferido em
+# 24/09/2026 num app roteado da própria VPS): entrypoints `http`/`https`,
+# resolver `letsencrypt` por HTTP-01, rede `coolify`.
+#
+# ── Três avisos, e eles são o motivo de isto ser plano B ──
+#
+# 1. **O Coolify não conhece estes containers.** A limpeza de recursos não
+#    usados da plataforma pode removê-los. Se a demo vai VIVER na VPS, crie o
+#    recurso no painel e descarte este override — o `compose.coolify.yml` é o
+#    mesmo nos dois caminhos.
+# 2. **Redeploy é na mão**: `docker compose ... pull && up -d`. Não há gatilho
+#    por push.
+# 3. **Os middlewares são NOSSOS** (`demo-gzip`, `demo-redirect-https`), com
+#    nome próprio de propósito. Referenciar os do Coolify (`gzip@docker`) faria
+#    a demo depender de labels de outro container — some o container, some o
+#    middleware, e a demo cai por tabela. Os nomes de router também são
+#    prefixados (`demo-`) para não colidir com n8n, Evolution ou Supabase, que
+#    dividem este Traefik.
+
+services:
+  server:
+    networks: [default, coolify]
+    labels:
+      traefik.enable: 'true'
+      # o Traefik precisa saber em qual rede falar com o container: ele está em
+      # duas, e a escolha errada dá 504 sem explicação
+      traefik.docker.network: coolify
+      traefik.http.middlewares.demo-redirect-https.redirectscheme.scheme: https
+      traefik.http.middlewares.demo-gzip.compress: 'true'
+      # http → só redireciona (e é a entrypoint que o HTTP-01 do Let's Encrypt usa)
+      traefik.http.routers.demo-api-http.rule: Host(`api.demo.setaia.com.br`) && PathPrefix(`/`)
+      traefik.http.routers.demo-api-http.entryPoints: http
+      traefik.http.routers.demo-api-http.middlewares: demo-redirect-https
+      traefik.http.routers.demo-api-http.service: demo-api
+      traefik.http.routers.demo-api.rule: Host(`api.demo.setaia.com.br`) && PathPrefix(`/`)
+      traefik.http.routers.demo-api.entryPoints: https
+      traefik.http.routers.demo-api.tls.certresolver: letsencrypt
+      traefik.http.routers.demo-api.middlewares: demo-gzip
+      traefik.http.routers.demo-api.service: demo-api
+      traefik.http.services.demo-api.loadbalancer.server.port: '3001'
+
+  console:
+    networks: [default, coolify]
+    labels:
+      traefik.enable: 'true'
+      traefik.docker.network: coolify
+      traefik.http.routers.demo-console-http.rule: Host(`demo.setaia.com.br`) && PathPrefix(`/`)
+      traefik.http.routers.demo-console-http.entryPoints: http
+      traefik.http.routers.demo-console-http.middlewares: demo-redirect-https
+      traefik.http.routers.demo-console-http.service: demo-console
+      traefik.http.routers.demo-console.rule: Host(`demo.setaia.com.br`) && PathPrefix(`/`)
+      traefik.http.routers.demo-console.entryPoints: https
+      traefik.http.routers.demo-console.tls.certresolver: letsencrypt
+      traefik.http.routers.demo-console.middlewares: demo-gzip
+      traefik.http.routers.demo-console.service: demo-console
+      traefik.http.services.demo-console.loadbalancer.server.port: '3000'
+
+  # O dublê do ERP e o banco NÃO recebem label: nem `traefik.enable=false` é
+  # preciso (sem label o Traefik já os ignora), mas vale dizer em voz alta que
+  # dar FQDN ao `tse-sim` seria o erro a evitar — ele é alcançável só pela rede
+  # interna, e é isso que o mantém fora da internet.
+
+networks:
+  # a rede do proxy JÁ EXISTE na máquina: `external` para o compose não criar
+  # outra com nome parecido e deixar o Traefik falando sozinho
+  coolify:
+    external: true
