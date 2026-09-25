@@ -6,6 +6,7 @@ import type { Logger } from 'pino';
 import { FILA_DISPARO } from '../boss.js';
 import type { Db } from '../db/index.js';
 import { conversa, disparo, disparoDestinatario, mensagem, modeloMensagem } from '../db/schema.js';
+import { suprimidosEntre } from './supressao.js';
 
 /**
  * Worker de disparo (013): envia o template para cada destinatário pendente,
@@ -76,7 +77,31 @@ export async function processarDisparo(deps: DisparoWorkerDeps, disparoId: strin
     )
     .orderBy(asc(disparoDestinatario.id));
 
+  /**
+   * 044: a conferência acontece TAMBÉM aqui, não só na criação. Entre criar o
+   * disparo e ele sair, alguém pode pedir para sair — e é justamente durante um
+   * disparo grande que isso acontece, porque as primeiras mensagens já saíram.
+   * Uma consulta para a lista inteira: 500 idas ao banco fariam a conferência
+   * virar candidata a "otimizar depois", e ela não é opcional.
+   */
+  const suprimidos = await suprimidosEntre(
+    db,
+    pendentes.map((p) => p.waId),
+  );
+
   for (const dest of pendentes) {
+    if (suprimidos.has(dest.waId)) {
+      await db
+        .update(disparoDestinatario)
+        .set({
+          status: 'recusado',
+          erro: 'contato na lista de supressão',
+          atualizadoEm: new Date(),
+        })
+        .where(eq(disparoDestinatario.id, dest.id));
+      logger.info({ disparoId, waId: dest.waId }, 'disparo: destinatário suprimido — não enviado');
+      continue;
+    }
     try {
       const { waMessageId } = await gateway.sendTemplate({
         to: dest.waId,

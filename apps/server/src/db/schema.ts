@@ -195,6 +195,26 @@ export const disparo = pgTable('disparo', {
   atualizadoEm: timestamp('atualizado_em', { withTimezone: true }).notNull().defaultNow(),
 });
 
+/**
+ * 044 — lista de supressão: quem NÃO recebe disparo.
+ *
+ * Chave é o `wa_id`, não o contato: quem pede para sair pede pelo número, e o
+ * número pode não estar vinculado a contrato nenhum (lead frio que recebeu
+ * campanha). Sem `updated`, sem histórico: existir na tabela é a informação.
+ *
+ * Voltar a receber é apagar a linha — e isso é de propósito. Reativar por
+ * flag deixaria a porta aberta para "reativar em massa" sem ninguém pedir.
+ */
+export const ORIGENS_SUPRESSAO = ['pedido_do_contato', 'falha_recorrente', 'manual'] as const;
+
+export const supressao = pgTable('supressao', {
+  waId: text('wa_id').primaryKey(),
+  origem: text('origem', { enum: ORIGENS_SUPRESSAO }).notNull(),
+  /** O que aconteceu: a frase do contato, o erro que repetiu, quem cadastrou. */
+  detalhe: text('detalhe'),
+  criadoEm: timestamp('criado_em', { withTimezone: true }).notNull().defaultNow(),
+});
+
 export const disparoDestinatario = pgTable(
   'disparo_destinatario',
   {
@@ -205,7 +225,15 @@ export const disparoDestinatario = pgTable(
     waId: text('wa_id').notNull(),
     /** Snapshot do nome do contato no momento do disparo (exibição). */
     contatoNome: text('contato_nome'),
-    status: text('status', { enum: ['pendente', 'enviado', 'entregue', 'lido', 'falha'] })
+    /**
+     * 044: `recusado` é diferente de `falha`. Falha é envio que tentou e não
+     * foi; recusado é envio que NÃO DEVIA acontecer — suprimido, sem CPF,
+     * contrato cancelado. Misturar os dois esconderia opt-out desrespeitado
+     * dentro da métrica de erro de rede.
+     */
+    status: text('status', {
+      enum: ['pendente', 'enviado', 'entregue', 'lido', 'falha', 'recusado'],
+    })
       .notNull()
       .default('pendente'),
     waMessageId: text('wa_message_id').unique(),

@@ -31,6 +31,7 @@ import {
   modeloMensagem,
   outbox,
   sinalAprendizado,
+  supressao,
   ticket,
   traceTurno,
   turno,
@@ -40,7 +41,8 @@ import { createDrizzleQueryEventSink } from '../src/query-event-sink.ts';
 import { createPgVectorStore } from '../src/rag/pgvector-store.ts';
 import { seedApp, USUARIOS_DEMO } from '../src/seed-app.ts';
 import { registerDebounceWorker } from '../src/wa/debounce.ts';
-import { registerDisparoWorker, renderizarCorpo } from '../src/wa/disparo.ts';
+import { processarDisparo, registerDisparoWorker, renderizarCorpo } from '../src/wa/disparo.ts';
+import { suprimir } from '../src/wa/supressao.ts';
 import { ticketPermiteBot } from '../src/wa/tickets.ts';
 import { createAgentTurnoHandler } from '../src/wa/turno-handler.ts';
 
@@ -237,6 +239,7 @@ beforeEach(async () => {
     try {
       await db.delete(disparoDestinatario);
       await db.delete(disparo);
+      await db.delete(supressao); // 044: supressão de um teste não vaza para o outro
       await db.delete(modeloMensagem);
       await db.delete(conversaLeitura);
       await db.delete(sinalAprendizado);
@@ -257,6 +260,13 @@ beforeEach(async () => {
 });
 
 afterAll(async () => {
+  /**
+   * 044: a supressão sai daqui. Ela é a única tabela deste arquivo que muda o
+   * COMPORTAMENTO de outros arquivos — um número suprimido faz o disparo do
+   * teste de relatórios recusar o envio, e o funil dele quebra longe da causa.
+   * Foi o que aconteceu na primeira versão.
+   */
+  await db.delete(supressao);
   await app?.close();
   await appSemMeta?.close();
   await boss?.stop({ graceful: false });
@@ -393,6 +403,70 @@ describe('spec 013 — disparos para a carteira', () => {
     expect(lista.json().disparos[0]).toMatchObject({ total: 3, enviados: 2, falhas: 1 });
   }, 30_000);
 
+  it('044: quem está na supressão não recebe, e aparece como recusado', async () => {
+    const modelo = await modeloAprovado('aviso_optout', 'Olá {{1}}! Aviso do resort.');
+    await suprimir(db, '5511999990002', 'pedido_do_contato', 'pediu para sair');
+
+    const res = await apiConsole('POST', '/api/console/disparos', {
+      modeloId: modelo.id,
+      variaveis: ['cotista'],
+      waIds: ['5511999990001', '5511999990002', '5511999990003'],
+    });
+
+    expect(res.statusCode).toBe(202);
+    /**
+     * A resposta diz quem NÃO vai receber. Sumir em silêncio seria pior que
+     * enviar: quem criou a campanha iria procurar no funil por que faltou um.
+     */
+    expect(res.json()).toMatchObject({ destinatarios: 2, recusados: ['5511999990002'] });
+
+    await aguardar(async () => (await db.select().from(disparo))[0]?.status === 'concluido');
+    const porWa = new Map((await db.select().from(disparoDestinatario)).map((d) => [d.waId, d]));
+    expect(porWa.get('5511999990002')?.status).toBe('recusado');
+    expect(porWa.get('5511999990002')?.erro).toContain('supressão');
+    // e o template NÃO foi para ele
+    expect(gatewayFake.templates.map((t) => t.to)).not.toContain('5511999990002');
+
+    // a listagem conta recusado separado de falha — opt-out não é erro de envio
+    const lista = await apiConsole('GET', '/api/console/disparos');
+    expect(lista.json().disparos[0]).toMatchObject({
+      total: 3,
+      enviados: 2,
+      recusados: 1,
+      falhas: 0,
+    });
+  }, 30_000);
+
+  it('044: supressão que entra DEPOIS da criação ainda é respeitada no envio', async () => {
+    const modelo = await modeloAprovado('aviso_optout_tardio', 'Olá {{1}}!');
+    const res = await apiConsole('POST', '/api/console/disparos', {
+      modeloId: modelo.id,
+      variaveis: ['cotista'],
+      waIds: ['5511999990001', '5511999990003'],
+    });
+    expect(res.json().destinatarios).toBe(2);
+
+    /**
+     * O pedido de saída chega entre a criação e o envio — que é justamente
+     * quando isso acontece de verdade, porque as primeiras mensagens do disparo
+     * já saíram. Por isso a conferência existe nos DOIS lugares.
+     */
+    await suprimir(db, '5511999990003', 'pedido_do_contato', 'pediu no meio do disparo');
+    const disparoId = res.json().disparoId as string;
+    await processarDisparo({ db, gateway: gatewayFake.gateway, logger }, disparoId);
+
+    const porWa = new Map(
+      (
+        await db
+          .select()
+          .from(disparoDestinatario)
+          .where(eq(disparoDestinatario.disparoId, disparoId))
+      ).map((d) => [d.waId, d]),
+    );
+    expect(porWa.get('5511999990001')?.status).toBe('enviado');
+    expect(porWa.get('5511999990003')?.status).toBe('recusado');
+  }, 30_000);
+
   it('webhook de status atualiza o destinatário; resposta do cliente vira turno normal', async () => {
     const modelo = await modeloAprovado('reengaja', 'Voltamos a falar!');
     await apiConsole('POST', '/api/console/disparos', {
@@ -441,5 +515,42 @@ describe('spec 013 — disparos para a carteira', () => {
       async () => ((await db.select({ n: count() }).from(traceTurno))[0]?.n ?? 0) === 1,
     );
     expect((await db.select({ n: count() }).from(turno))[0]?.n).toBe(1);
+  }, 30_000);
+
+  it('044: "SAIR" suprime, confirma e NÃO chama o modelo', async () => {
+    /**
+     * O provider fake é criado SEM respostas: se o turno chegasse ao modelo, o
+     * teste falharia na fila vazia. É assim que se prova que o opt-out roda
+     * antes do classificador — e que continua funcionando com o LLM fora do ar.
+     */
+    fake = createFakeProvider();
+
+    const inbound = await app.inject({
+      method: 'POST',
+      url: '/dev/inbound',
+      headers: { cookie },
+      payload: { waId: '5511999990001', text: 'SAIR' },
+    });
+    expect(inbound.statusCode).toBe(202);
+
+    await aguardar(async () => (await db.select().from(supressao)).length === 1);
+    const [linha] = await db.select().from(supressao);
+    expect(linha).toMatchObject({ waId: '5511999990001', origem: 'pedido_do_contato' });
+    expect(linha?.detalhe).toBe('SAIR');
+
+    // uma confirmação, e só ela
+    const saidas = await db.select().from(outbox);
+    expect(saidas).toHaveLength(1);
+    expect(saidas[0]?.texto).toContain('não vai mais receber mensagens');
+    expect(fake.requests).toHaveLength(0);
+
+    // e um disparo criado depois já nasce recusando este número
+    const modelo = await modeloAprovado('depois_do_optout', 'Olá!');
+    const res = await apiConsole('POST', '/api/console/disparos', {
+      modeloId: modelo.id,
+      variaveis: [],
+      waIds: ['5511999990001'],
+    });
+    expect(res.json()).toMatchObject({ destinatarios: 0, recusados: ['5511999990001'] });
   }, 30_000);
 });

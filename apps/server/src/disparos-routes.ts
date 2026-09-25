@@ -13,6 +13,7 @@ import { type Auth, type SessaoConsole, sessaoDaRequest } from './auth.js';
 import { FILA_DISPARO } from './boss.js';
 import type { Db } from './db/index.js';
 import { contato, disparo, disparoDestinatario, modeloMensagem } from './db/schema.js';
+import { suprimidosEntre } from './wa/supressao.js';
 
 /**
  * API de disparos (013): modelos de mensagem criados DA PLATAFORMA (registro
@@ -184,6 +185,18 @@ export const disparosRoutes: FastifyPluginCallback<DisparosRoutesOpts> = (app, o
       return reply.code(400).send({ erro: `fora da carteira: ${fora.join(', ')}` });
     }
 
+    /**
+     * 044: quem pediu para sair NÃO entra no disparo — e aparece na resposta
+     * como recusado, com o número. Sumir em silêncio seria pior que enviar:
+     * quem criou a campanha precisa saber que 30 dos 200 não vão receber, senão
+     * vai procurar o erro no funil depois.
+     *
+     * A linha do destinatário é criada mesmo assim, com status `recusado`: é o
+     * registro de que a supressão foi respeitada, e é o que o console conta.
+     */
+    const suprimidos = await suprimidosEntre(db, waIds);
+    const enviaveis = daCarteira.filter((c) => !suprimidos.has(c.waId));
+
     const disparoId = newTraceId();
     await db.transaction(async (tx) => {
       await tx.insert(disparo).values({
@@ -200,11 +213,18 @@ export const disparosRoutes: FastifyPluginCallback<DisparosRoutesOpts> = (app, o
           disparoId,
           waId: c.waId,
           contatoNome: c.nome,
+          ...(suprimidos.has(c.waId)
+            ? { status: 'recusado' as const, erro: 'contato na lista de supressão' }
+            : {}),
         })),
       );
     });
     await boss.send(FILA_DISPARO, { disparoId });
-    return reply.code(202).send({ disparoId, destinatarios: daCarteira.length });
+    return reply.code(202).send({
+      disparoId,
+      destinatarios: enviaveis.length,
+      recusados: [...suprimidos],
+    });
   });
 
   app.get('/api/console/disparos', async () => {
@@ -212,7 +232,8 @@ export const disparosRoutes: FastifyPluginCallback<DisparosRoutesOpts> = (app, o
     const r = await db.execute(sql`
       SELECT d.id, d.status, d.variaveis, d.criado_em, d.nome, d.meta_conversao_bps,
              m.nome AS modelo_nome,
-             ct.total, ct.enviados, ct.entregues, ct.lidos, ct.falhas, ct.pendentes
+             ct.total, ct.enviados, ct.entregues, ct.lidos, ct.falhas, ct.pendentes,
+             ct.recusados
       FROM disparo d
       JOIN modelo_mensagem m ON m.id = d.modelo_id
       LEFT JOIN LATERAL (
@@ -221,7 +242,9 @@ export const disparosRoutes: FastifyPluginCallback<DisparosRoutesOpts> = (app, o
                count(*) FILTER (WHERE dd.status = 'entregue')::int AS entregues,
                count(*) FILTER (WHERE dd.status = 'lido')::int AS lidos,
                count(*) FILTER (WHERE dd.status = 'falha')::int AS falhas,
-               count(*) FILTER (WHERE dd.status = 'pendente')::int AS pendentes
+               count(*) FILTER (WHERE dd.status = 'pendente')::int AS pendentes,
+               -- 044: recusado é opt-out respeitado, não erro de envio
+               count(*) FILTER (WHERE dd.status = 'recusado')::int AS recusados
         FROM disparo_destinatario dd WHERE dd.disparo_id = d.id
       ) ct ON true
       ORDER BY d.criado_em DESC

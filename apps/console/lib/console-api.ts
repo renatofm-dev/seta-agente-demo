@@ -326,13 +326,15 @@ export interface DisparoResumo {
   lidos: number;
   falhas: number;
   pendentes: number;
+  /** 044: opt-out respeitado — não é erro de envio, e por isso conta separado. */
+  recusados: number;
 }
 
 export interface DisparoDestinatarioView {
   id: string;
   waId: string;
   contatoNome: string | null;
-  status: 'pendente' | 'enviado' | 'entregue' | 'lido' | 'falha';
+  status: 'pendente' | 'enviado' | 'entregue' | 'lido' | 'falha' | 'recusado';
   erro: string | null;
   atualizadoEm: string;
 }

@@ -67,6 +67,7 @@ import {
   type ResolvedorAnexo,
 } from './outbox.js';
 import { type PedidoSegundaVia, toolEnviarSegundaVia } from './segunda-via.js';
+import { ehPedidoDeSaida, suprimir, TEXTO_SAIDA_CONFIRMADA } from './supressao.js';
 import { aplicarTransicao, garantirTicket } from './tickets.js';
 
 /**
@@ -617,6 +618,34 @@ async function processarComAgente(
     fusao: fusao.resultado,
     respostaEnviada: fusao.textoEnviado,
   });
+  /**
+   * 044 — pedido de saída, ANTES de tudo.
+   *
+   * Antes dos fluxos (que interceptam o turno) e antes do classificador (que é
+   * uma chamada de LLM). Opt-out é obrigação, não interpretação: precisa
+   * funcionar com o modelo fora do ar, e não pode depender de o LLM classificar
+   * certo. Quem pede para sair recebe UMA confirmação e mais nada — inclusive
+   * se estiver no meio de um fluxo de cobrança ou de venda.
+   */
+  if (ehPedidoDeSaida(t.textoAgregado)) {
+    await suprimir(deps.db, conv.waId, 'pedido_do_contato', t.textoAgregado.slice(0, 300));
+    await enviar(TEXTO_SAIDA_CONFIRMADA, { ignorarPendentes: true });
+    deps.logger.info({ waId: conv.waId, conversaId: conv.id }, 'opt-out: contato suprimido');
+    return {
+      resposta: TEXTO_SAIDA_CONFIRMADA,
+      escalado: false,
+      escaladoTrigger: null,
+      fallback: false,
+      fallbackMotivo: null,
+      eventos: [{ tipo: 'opt_out' }],
+      tokensEntrada: 0,
+      tokensSaida: 0,
+      latenciaMs: Date.now() - inicioTurno,
+      fusao: fusao.resultado,
+      respostaEnviada: fusao.textoEnviado,
+    };
+  }
+
   let personaExtra = '';
   if (fluxoDeps) {
     const ativo = await fluxoDeps.repo.fluxoAtivo(t.conversaId);

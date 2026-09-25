@@ -42,6 +42,11 @@ export type TraceEvento =
   | { tipo: 'cobranca'; etapa: string; acao: string; cobrancaId?: string }
   /** 015: passo do fluxo SDR (lead frio) que atendeu o turno. */
   | { tipo: 'sdr'; etapa: string; acao: string; propostaId?: string }
+  /**
+   * 044: pedido de saída atendido. Fica no trace para a auditoria poder
+   * responder "quando ele pediu?" sem depender de ler mensagem por mensagem.
+   */
+  | { tipo: 'opt_out' }
   /** 016: o que foi anonimizado antes de sair para a LLM — contagens, nunca valores. */
   | {
       tipo: 'anonimizacao';
