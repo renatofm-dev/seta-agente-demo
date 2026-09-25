@@ -517,15 +517,26 @@ describe('precedência na raia do cotista', { timeout: 120_000 }, () => {
     expect(v.status).toBe('sinal_emitido');
 
     /**
-     * Qualquer assunto enquanto o PIX não cai tem a mesma resposta. A busca é
-     * em TODAS as linhas do outbox, não na última: o card do PIX e o
+     * Qualquer assunto enquanto o PIX não cai TEM RESPOSTA — e ela é uma de
+     * duas: o PIX reenviado (046: quem escreve aqui quase sempre pergunta "cadê
+     * o pix?") ou a frase de que o pagamento não foi identificado, quando o
+     * reenvio não acontece (já reenviado antes, ou cobrança ainda não emitida).
+     * O que este teste trava é a INVARIANTE: nunca silêncio, e o fluxo não cai.
+     *
+     * A busca é em TODAS as linhas do outbox, não na última: o card do PIX e o
      * copia-e-cola são enviados pelo worker de cobrança e se intercalam com as
      * respostas do turno — foi exatamente assim que este teste falhou primeiro.
      */
     const respondeu = async (texto: string): Promise<boolean> => {
+      const antes = (await db.select().from(outbox)).length;
       await turnoDe(WA_COTISTA, texto);
       const linhas = await db.select().from(outbox);
-      return linhas.some((l) => l.texto.includes('Ainda não identifiquei o pagamento'));
+      const houveResposta = linhas.length > antes;
+      const respostaEsperada = linhas.some(
+        (l) =>
+          l.texto.includes('Ainda não identifiquei o pagamento') || l.texto.includes('reenviando'),
+      );
+      return houveResposta && respostaEsperada;
     };
     expect(await respondeu('e a minha parcela de setembro?')).toBe(true);
     expect(await respondeu('tudo bem então')).toBe(true);
