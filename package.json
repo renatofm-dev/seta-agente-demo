@@ -14,6 +14,7 @@
     "dev:tse-sim": "node --watch --env-file-if-exists=.env apps/tse-sim/dist/index.js",
     "dev:console": "pnpm --filter @seta/console dev",
     "dev-whatsapp": "tools/dev-whatsapp.sh",
+    "envs-coolify": "tools/envs-coolify.sh",
     "build": "tsc -b && pnpm --filter @seta/console build",
     "typecheck": "tsc -b && pnpm --filter @seta/console typecheck",
     "test": "tsc -b && vitest run",
