@@ -108,6 +108,27 @@ services:
       TSE_RESERVA_PASSWORD: ${TSE_RESERVA_PASSWORD:-}
       ERP_CONCILIACAO: ${ERP_CONCILIACAO:-auto}
       RESERVA_TETO_TAXA_SEM_HITL_CENTAVOS: ${RESERVA_TETO_TAXA_SEM_HITL_CENTAVOS:-100000}
+      # 015/045: alçada do SDR e os números da venda. Todos têm default no
+      # `env.ts`, e é justamente por isso que precisam aparecer aqui: sem a
+      # linha, mudar o valor do sinal exigiria imagem nova.
+      SDR_DESCONTO_MAX_BPS: ${SDR_DESCONTO_MAX_BPS:-300}
+      SDR_MAX_PROPOSTAS_DIA: ${SDR_MAX_PROPOSTAS_DIA:-3}
+      SDR_FLUXO_EXPIRA_MIN: ${SDR_FLUXO_EXPIRA_MIN:-60}
+      VENDA_SINAL_CENTAVOS: ${VENDA_SINAL_CENTAVOS:-200000}
+      VENDA_ID_PRODUTO: ${VENDA_ID_PRODUTO:-111}
+      VENDA_MEIO_PAGAMENTO_SINAL: ${VENDA_MEIO_PAGAMENTO_SINAL:-2}
+      VENDA_MEIO_PAGAMENTO_SALDO: ${VENDA_MEIO_PAGAMENTO_SALDO:-1}
+      # 046: assinatura do contrato.
+      #
+      # `PUBLIC_BASE_URL` é OBRIGATÓRIA e aponta para o host de **API**, não para
+      # o do console: a página de assinatura é servida pelo server. Ela existe
+      # porque o link vai para o celular de quem comprou — e o default do
+      # `env.ts` é `localhost`, que sobe sem erro e gera link que não abre em
+      # aparelho nenhum. É o tipo de defeito que só aparece com alguém tocando
+      # na tela, então o compose exige o valor em vez de assumir.
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:?a URL pública do SERVER, ex https://api.demo.setaia.com.br}
+      ASSINATURA_PROVIDER: ${ASSINATURA_PROVIDER:-simulado}
+      ASSINATURA_AUTENTIQUE_TOKEN: ${ASSINATURA_AUTENTIQUE_TOKEN:-}
       # simulador de WhatsApp do console (plano B da demo) — exige login em produção
       DEV_SIMULATOR: ${DEV_SIMULATOR:-false}
     expose:

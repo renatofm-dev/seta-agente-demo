@@ -27,7 +27,7 @@ compartilhada.
 | host | serviço | para quê |
 |---|---|---|
 | `demo.setaia.com.br` | `console` (`:3000`) | a demo que se mostra; o Next reescreve `/api/*` para o server pela rede interna |
-| `api.demo.setaia.com.br` | `server` (`:3001`) | **só** os webhooks: Meta e Asaas |
+| `api.demo.setaia.com.br` | `server` (`:3001`) | os webhooks (Meta, Asaas, assinatura) **e a página de assinatura do contrato** (046) |
 
 O DNS já está pronto: `setaia.com.br` responde em curinga e os dois nomes já apontam para
 `162.55.51.98`, com **registro A direto** (não é proxy do Cloudflare) — o Let's Encrypt HTTP-01 do
@@ -78,6 +78,8 @@ sem elas) estão marcadas com ✱.
 | LLM | `LLM_BASE_URL`, `LLM_API_KEY`, `LLM_MODEL`, `EMBEDDING_MODEL`, `EMBEDDING_DIM`, `LLM_PRECO_*` |
 | Asaas | `ASAAS_BASE_URL`, `ASAAS_API_KEY`, `ASAAS_WEBHOOK_TOKEN` |
 | ERP / TSE | ✱`TSE_USERNAME`, ✱`TSE_PASSWORD`, `TSE_RESERVA_USERNAME`, `TSE_RESERVA_PASSWORD`, `ERP_CONCILIACAO` |
+| Venda / SDR (045) | `SDR_DESCONTO_MAX_BPS`, `VENDA_SINAL_CENTAVOS`, `VENDA_ID_PRODUTO`, `VENDA_MEIO_PAGAMENTO_SINAL`, `VENDA_MEIO_PAGAMENTO_SALDO` |
+| Assinatura (046) | ✱`PUBLIC_BASE_URL=https://api.demo.setaia.com.br`, `ASSINATURA_PROVIDER` (default `simulado`), `ASSINATURA_AUTENTIQUE_TOKEN` |
 | Simulador do TSE | ✱`TSE_SIM_DB_PASSWORD`, ✱`TSE_SIM_USERS` (`login:senha:idPessoa`), `TSE_SIM_PAINEL_ESCOPO` |
 | Outros | `TAG` (default `latest`; use o SHA para pinar), `DEV_SIMULATOR`, `LOG_LEVEL` |
 
@@ -85,6 +87,17 @@ O boot **recusa** subir em `NODE_ENV=production` com segredo de exemplo (P-28): 
 `WA_APP_SECRET` e `BETTER_AUTH_SECRET` nos valores de dev, senha de dev nas URLs do banco, ou
 `TSE_USERNAME/PASSWORD` = `integracao`. Se o container morrer no start, leia o log: ele nomeia a
 variável.
+
+### `PUBLIC_BASE_URL` é o host de API — e é o erro que não dá erro
+
+A 046 mudou a natureza do host de API: além dos webhooks, ele serve `/assinar/:id`, a página que o
+**comprador abre no celular** para assinar o contrato. Por isso `PUBLIC_BASE_URL` aponta para
+`https://api.demo.setaia.com.br`, e não para o host do console.
+
+O `env.ts` tem default `http://localhost:3001` — o server **sobe sem reclamar** com ele e gera todo
+link de assinatura apontando para `localhost`, que não abre em aparelho nenhum. Como isso só
+aparece com alguém tocando na tela, o compose do Coolify **exige** a variável: sem ela o container
+morre no start dizendo o nome dela. Prefira o container que não sobe ao link que não abre.
 
 ## Primeiro deploy e seed
 
@@ -123,10 +136,14 @@ curl -fsS https://api.demo.setaia.com.br/healthz
 curl -sS "https://api.demo.setaia.com.br/webhook?hub.mode=subscribe&hub.verify_token=<WA_VERIFY_TOKEN>&hub.challenge=42"
 # → 42
 
-# 3. o console responde no host público
+# 3. a página de assinatura existe no host de API (404 com link inventado = rota viva)
+curl -s -o /dev/null -w '%{http_code}\n' https://api.demo.setaia.com.br/assinar/nao-existe
+# → 404 (e NÃO 502/404 do Traefik: o corpo é HTML nosso, com a tarja de simulado)
+
+# 4. o console responde no host público
 curl -sS -o /dev/null -w '%{http_code}\n' https://demo.setaia.com.br/   # → 200
 
-# 4. o simulador do TSE está de pé POR DENTRO…
+# 5. o simulador do TSE está de pé POR DENTRO…
 ssh hetzner-seta 'docker exec $(docker ps -qf name=seta-agente-server) \
   node -e "fetch(\"http://tse-sim:3010/healthz\").then(r=>r.text()).then(console.log)"'
 # …e INALCANÇÁVEL por fora (ambos devem falhar):
@@ -151,7 +168,12 @@ Se o Coolify dessa versão não permitir um FQDN por serviço, exponha **só o c
 // apps/console/next.config.ts — acrescentar ao rewrites()
 { source: '/webhook', destination: `${SERVER_URL}/webhook` },
 { source: '/webhooks/:path*', destination: `${SERVER_URL}/webhooks/:path*` },
+// 046: a página de assinatura também é do server
+{ source: '/assinar/:path*', destination: `${SERVER_URL}/assinar/:path*` },
 ```
+
+Neste plano o `PUBLIC_BASE_URL` passa a ser o host do console (`https://demo.setaia.com.br`), já que
+é por ele que o link de assinatura vai ser aberto.
 
 Atenção: o rewrite é resolvido **no build** (`infra/docker/console.Dockerfile` fixa
 `SERVER_INTERNAL_URL`), então isso exige **imagem nova** — não basta mexer na variável.

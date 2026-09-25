@@ -71,6 +71,18 @@ services:
       TSE_USERNAME: ${TSE_USERNAME:?defina no .env.prod}
       TSE_PASSWORD: ${TSE_PASSWORD:?defina no .env.prod}
       ERP_CONCILIACAO: ${ERP_CONCILIACAO:-auto}
+      RESERVA_TETO_TAXA_SEM_HITL_CENTAVOS: ${RESERVA_TETO_TAXA_SEM_HITL_CENTAVOS:-100000}
+      # 015/045: alçada do SDR e os números da venda (todos com default no env.ts)
+      SDR_DESCONTO_MAX_BPS: ${SDR_DESCONTO_MAX_BPS:-300}
+      VENDA_SINAL_CENTAVOS: ${VENDA_SINAL_CENTAVOS:-200000}
+      VENDA_ID_PRODUTO: ${VENDA_ID_PRODUTO:-111}
+      VENDA_MEIO_PAGAMENTO_SINAL: ${VENDA_MEIO_PAGAMENTO_SINAL:-2}
+      VENDA_MEIO_PAGAMENTO_SALDO: ${VENDA_MEIO_PAGAMENTO_SALDO:-1}
+      # 046: a URL pública do SERVER — é ela que vai no link de assinatura. O
+      # default do env.ts é `localhost`, que sobe sem erro e gera link morto.
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:?a URL pública do server, ex https://api.seu-dominio}
+      ASSINATURA_PROVIDER: ${ASSINATURA_PROVIDER:-simulado}
+      ASSINATURA_AUTENTIQUE_TOKEN: ${ASSINATURA_AUTENTIQUE_TOKEN:-}
     ports:
       - '127.0.0.1:3001:3001' # só o Caddy do host enxerga
     logging: *logging
