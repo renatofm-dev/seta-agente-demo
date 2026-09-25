@@ -79,7 +79,6 @@ em PDF. Decisão no [ADR 0002](../adr/0002-integracao-erp-por-api.md); contrato 
 | [038 — reserva de utilização](../../specs/038-reserva-utilizacao.md) | o agente reserva de verdade (hoje a persona diz que não sabe) | 035, 036 |
 | [039 — SDR escreve no ERP](../../specs/039-sdr-escreve-no-erp.md) | lead vira casal e proposta aprovada vira contrato | 036, 015b |
 | [041 — TSE real](../../specs/041-tse-real-e-fim-da-conciliacao.md) | aponta para um TSE de verdade e apaga `conciliacao.ts` | 037, ambiente do TSE |
-| [046 — contrato para assinar](../../specs/046-contrato-para-assinar.md) | o contrato vira PDF, vai para assinatura e volta assinado pelo WhatsApp; port `AssinaturaProvider` com simulado e Autentique | ✅045, ✅040 |
 
 **Duas coisas que quem executar precisa saber antes de abrir o editor:**
 

@@ -454,6 +454,38 @@ aqui é o mapa.
   do LEAD (é entrada, e a máquina já trata "10%" como pedido abaixo do piso) e vocabulário por
   cliente no `client.yaml` (032).
 
+## 046 — O contrato vira documento e o comprador assina
+- **Entrega:** a 045 terminava com um **número de contrato** e nada para assinar. Agora, assim que
+  o contrato nasce no ERP, ele **vira PDF**, vai para assinatura e o comprador **assina pelo
+  celular** — a via assinada volta como arquivo no WhatsApp, pelo mesmo caminho da 040. Provado
+  ponta a ponta em 24/09 com contrato real (10218): documento gerado, link aberto pela internet,
+  aceite por webhook e PDF `entregue` confirmado pela Meta.
+- **Onde está:** `packages/assinatura` (port + dublê + Autentique v2), `apps/tse-sim/src/pdf.ts` e
+  `contrato-pdf.ts` com a rota `/sim/contratos/:id/documento.pdf`, `packages/erp-api-tse`
+  (`obterContratoPdf`), `apps/server/src/assinatura/` (`fluxo`, `routes`, `pagina`), o gancho em
+  `venda/worker.ts`, o anexo `contrato` em `wa/outbox.ts`, migração `0023` e o estado da assinatura
+  em `venda/vendas-routes.ts` + `console/app/(console)/vendas/`.
+- **A ordem é paga → contrato no ERP → assina** (decisão do Renato em 24/09). Assinar antes de
+  pagar exigiria gerar documento de um contrato que ainda não existe, e a 045 decidiu não escrever
+  nada no ERP antes do dinheiro entrar.
+- **A API do TSE não assina.** As 90 rotas da coleção cobrem cadastro, venda, financeiro,
+  utilização e operador; as 8 ocorrências de "Assinatura" lá dentro são `TvAssinatura`, campo do
+  formulário de lead. Quem conecta o Autentique é o sistema do fornecedor, fora da API — daí o port
+  do nosso lado, e daí a pergunta aberta: quem é o dono do fluxo de assinatura no piloto?
+- **Na demo a assinatura é simulada, e isso é decisão, não atalho.** O webhook do Autentique
+  registra CPF, nascimento, IP e cidade de quem assina; uma demonstração não pode criar registro de
+  assinatura real de quem só está assistindo. O dublê imita a FORMA (`criarDocumento` devolvendo
+  link por signatário, evento de aceite), e o PDF sai com tarja de documento simulado.
+- **A rota do documento mora sob `/sim/`, não sob `/api/`.** Ela não tem original na coleção — quem
+  ler um log daqui a seis meses precisa distinguir, sem pensar, contrato do fornecedor de invenção
+  nossa para a demo andar.
+- **Três defeitos que só o campo achou**, e que viraram teste: o formulário de aceite recusado com
+  **415** (navegador manda `x-www-form-urlencoded`, Fastify só parseia JSON — e o teste usava
+  `app.inject` com JSON); o fechamento da venda **bloqueando em silêncio** quando já havia sinal
+  emitido; e o reenvio do PIX saindo em **três mensagens**. O padrão é sempre o mesmo: caminho que
+  promete ao cliente e não entrega. Vale como convenção — **promessa termina em entrega, em
+  explicação honesta ou em ticket, nunca em `return` mudo**.
+
 ## 040 — 2ª via de boleto em PDF pelo WhatsApp
 - **Entrega:** o cotista pede "me manda a segunda via" e **o boleto chega em PDF**, com nome de
   arquivo legível (`boleto-parcela-03-20260310.pdf`). Até aqui o agente só sabia mandar texto: o

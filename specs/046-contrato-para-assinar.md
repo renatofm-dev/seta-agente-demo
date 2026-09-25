@@ -1,6 +1,10 @@
 # 046 — O contrato vira documento e o comprador assina
 
-> **Pré-spec** (rascunho de 24/09/2026): ainda não executada. Fecha o ciclo comercial que a
+> **Entregue em 24/09/2026.** O que saiu está em
+> [`docs/dev/04-modulos-entregues.md`](../docs/dev/04-modulos-entregues.md), e o ato 7 do
+> [roteiro](../docs/roteiro-demo.md) já termina na assinatura.
+>
+> Fecha o ciclo comercial que a
 > [045](045-venda-ponta-a-ponta.md) abriu — hoje o lead termina com um **número de contrato** e
 > nada para assinar. Depende da **045** (entregue) e da **040** (entregue: envio de documento pela
 > Cloud API, provado contra a Meta em 24/09). Tamanho **M**.

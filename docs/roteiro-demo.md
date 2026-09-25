@@ -15,6 +15,9 @@ se a Meta falhar no dia.
       (aprendizado) — senhas no seed.
 - [ ] `/metricas` aberta numa aba para o Ato 4 já ter dados dos ensaios.
 - [ ] Celular com o número de teste no WhatsApp, tela espelhada.
+- [ ] `PUBLIC_BASE_URL` apontando para a URL **pública** do server (o túnel em
+      dev, o domínio em produção) — é ela que vai no link de assinatura do Ato 7.
+      Com o default (`localhost`), o link chega e não abre no celular de ninguém.
 - [ ] `TSE_BASE_URL` apontando para o simulador (`http://localhost:3010`) —
       **sem ela o Ato 8 não acontece**: quem desenha o boleto é o ERP, e o
       writer em memória não tem documento para servir.
@@ -122,7 +125,7 @@ atendente. É o ato que era, até agora, o exemplo de limitação:
 Narrar no fim: "a reserva existe no ERP com o nome do operador do agente — o
 sistema do cliente sabe distinguir o que o robô fez do que uma pessoa fez."
 
-## Ato 7 — Venda de ponta a ponta (045, ~4 min)
+## Ato 7 — Venda de ponta a ponta, até a assinatura (045 + 046, ~5 min)
 
 De um número **sem vínculo** (um lead frio de verdade — use o simulador se não
 tiver um chip à mão), com a página **Vendas** aberta. É o ato que fecha o ciclo
@@ -150,26 +153,44 @@ comercial: até a 044 o lead do SDR morria numa tabela nossa.
       left join contafinanceira f on f.idcontrato = c.idcontrato
      where c.idcontrato = <o número> group by 1,2,3;
     ```
-29. Bônus: repetir a mesma pergunta do **número do Renato (cotista)** → ele
+29. **Logo depois do "contrato registrado"** chega *"Seu contrato está pronto
+    para assinar ✍️"* com um link, e a página **Vendas** ganha o chip
+    **Aguardando assinatura**. Narrar: "o contrato virou documento sozinho — o
+    PDF saiu do ERP, não de nós".
+30. **Abrir o link no celular** (espelhar a tela): a página mostra o contrato e
+    oferece o **PDF para ler antes**. Vale abrir: partes, cota, categoria,
+    unidade, períodos e o plano de pagamento — entrada e saldo — com os mesmos
+    números que foram para o ERP.
+31. **Assinar** → a página confirma e, no WhatsApp, chegam duas coisas:
+    *"Contrato assinado! 🎉"* e **o PDF como arquivo**. Em **Vendas**, o chip
+    vira **Assinada**.
+32. Bônus: repetir a mesma pergunta do **número do Renato (cotista)** → ele
     entra no mesmo fluxo **sem pedir CPF**, porque o cadastro já tem.
 
-Narrar no fim: "o lead virou cotista no ERP do cliente sem ninguém digitar nada
-— e nenhuma linha foi escrita antes de o dinheiro entrar."
+Narrar no fim: "o lead virou cotista no ERP do cliente sem ninguém digitar nada,
+assinou pelo celular — e nenhuma linha foi escrita antes de o dinheiro entrar."
+
+**Honestidade obrigatória neste ato**: a assinatura da demo é **simulada**. O
+papel diz isso em tarja no topo, a página de aceite também, e não há certificado
+nem trilha jurídica. O mecanismo é o real — documento, link, aceite por webhook,
+via assinada entregue —, e trocar o dublê pelo Autentique é uma variável de
+ambiente. Se perguntarem, é essa a resposta; **não deixe ninguém sair achando
+que assinou algo com validade**.
 
 ## Ato 8 — O boleto chega como arquivo (040, ~2 min)
 
 Do número **…0002** (inadimplente), com o **inbox** aberto no browser do
 atendente. É curto de propósito: o valor está em ser óbvio.
 
-30. **"me manda a segunda via do meu boleto"** → o agente lista as parcelas em
+33. **"me manda a segunda via do meu boleto"** → o agente lista as parcelas em
     aberto e pergunta qual.
-31. Escolher uma → uma frase curta ("já estou te enviando") e, logo em seguida,
+34. Escolher uma → uma frase curta ("já estou te enviando") e, logo em seguida,
     **o PDF chega no WhatsApp**, com nome de arquivo legível
     (`boleto-parcela-03-20260310.pdf`). Abrir no celular: o boleto traz o nome do
     cotista, o contrato, o valor e o vencimento daquela parcela.
-32. No **inbox**, a mesma mensagem aparece com o clipe e o nome do arquivo —
+35. No **inbox**, a mesma mensagem aparece com o clipe e o nome do arquivo —
     o atendente sabe o que foi entregue sem precisar do celular.
-33. Bônus de honestidade: pedir a 2ª via de uma parcela **no cartão
+36. Bônus de honestidade: pedir a 2ª via de uma parcela **no cartão
     recorrente** → o agente explica que aquela parcela não tem boleto, em vez de
     inventar um.
 

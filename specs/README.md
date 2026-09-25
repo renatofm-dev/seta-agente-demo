@@ -49,6 +49,7 @@ autônomo sobre WhatsApp, rodando local (repo privado + homelab), fora da org se
 | 015b | Aprovar/recusar/contra-propor a proposta acima da alçada pelo console | ✅ 17/09/2026 — o lead deixa de ficar sem resposta |
 | 015c | Guardrail do percentual por extenso na raia SDR | ✅ 17/09/2026 — "três por cento" deixa de chegar ao lead |
 | 040 | 2ª via de boleto em PDF pelo WhatsApp | ✅ 17/09/2026 — o boleto chega como arquivo, e o PDF não é armazenado em lugar nenhum |
+| 046 | O contrato vira documento e o comprador assina | ✅ 24/09/2026 — contrato em PDF, assinatura pelo celular e a via assinada no WhatsApp (assinatura simulada por decisão) |
 
 A ordem, o calendário e as decisões pendentes estão em **[`docs/roadmap.md`](../docs/roadmap.md)**;
 o mapa técnico do que cada spec entregou está em
@@ -84,7 +85,6 @@ executa em M2, antes de M4).
 | ~~[039](039-sdr-escreve-no-erp.md) SDR escreve lead e venda no ERP~~ | — | **absorvida pela ✅045** |
 | [041](041-tse-real-e-fim-da-conciliacao.md) TSE real e fim da conciliação | **Demo** | 037, ambiente do TSE |
 | [044](044-cobranca-proativa.md) cobrança proativa | **Pagamentos** | ✅042, ✅043 |
-| [046](046-contrato-para-assinar.md) contrato vira documento e é assinado | **Demo** | ✅045, ✅040 |
 
 
 ### A frente "demo ponta a ponta" (035–041)
