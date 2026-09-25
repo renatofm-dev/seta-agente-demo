@@ -355,7 +355,12 @@ describe('critérios spec 010', () => {
     await db.insert(turno).values({ id: turnoId, conversaId, textoAgregado: 'oi, tudo bem?' });
     fake.respondeTexto('outro').respondeTexto('Tudo ótimo! Como posso ajudar?');
 
-    await handler.processar({ id: turnoId, conversaId, textoAgregado: 'oi, tudo bem?' });
+    await handler.processar({
+      id: turnoId,
+      conversaId,
+      textoAgregado: 'oi, tudo bem?',
+      waMessageIdUltima: null,
+    });
 
     expect(falhas).toBeGreaterThan(0); // o emitter de fato falhou...
     const [saida] = await db.select().from(outbox).where(eq(outbox.conversaId, conversaId));
@@ -390,7 +395,12 @@ describe('critérios spec 010', () => {
       .respondeTexto('Oi! Tudo certo por aqui.')
       .respondeTexto('Resumo: cliente cumprimentou; sem pendências.');
 
-    await handler.processar({ id: turnoId, conversaId, textoAgregado: 'oi de novo' });
+    await handler.processar({
+      id: turnoId,
+      conversaId,
+      textoAgregado: 'oi de novo',
+      waMessageIdUltima: null,
+    });
 
     await aguardar(async () => {
       const [ev] = await db.select().from(eventoLlm).where(eq(eventoLlm.conversaId, conversaId));

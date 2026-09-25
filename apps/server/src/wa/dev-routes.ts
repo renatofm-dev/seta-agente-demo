@@ -1,6 +1,6 @@
 import { newTraceId } from '@seta/observability';
 import { WaPhoneSchema } from '@seta/wa-meta';
-import { and, asc, eq, gt } from 'drizzle-orm';
+import { and, asc, desc, eq, gt } from 'drizzle-orm';
 import type { FastifyPluginCallback } from 'fastify';
 import type { PgBoss } from 'pg-boss';
 import { z } from 'zod';
@@ -32,6 +32,61 @@ const InboundBodySchema = z.object({
 });
 
 const SSE_INTERVALO_MS = 700;
+
+/**
+ * "Digitando…" no simulador.
+ *
+ * O simulador não enxerga a chamada à Graph API (em dev ela não acontece): ele
+ * REPRODUZ o estado que liga o indicador no WhatsApp — turno aberto, resposta
+ * ainda não enviada. Mesma fonte de verdade, canais diferentes.
+ *
+ * Não dá para derivar isso no cliente: dentro de um mesmo tique o loop varre
+ * `mensagem` ANTES de `turno`, então num turno rápido os eventos chegariam na
+ * ordem [mensagem out, turno] e a regra "último evento é turno" travaria a bolha.
+ *
+ * O teto é o do turno (`AGENT_TURN_TIMEOUT_MS`): turno que nunca respondeu —
+ * fusão descartada (#46) ou atendente que assumiu (#47) — apaga a bolha, em vez
+ * de deixá-la girando para sempre.
+ */
+export function digitandoAgora(
+  turnoAberto: { readonly criadoEm: Date } | null,
+  jaRespondeu: boolean,
+  agora: Date,
+  tetoMs: number,
+): boolean {
+  if (!turnoAberto || jaRespondeu) return false;
+  return agora.getTime() - turnoAberto.criadoEm.getTime() < tetoMs;
+}
+
+/**
+ * O estado lido do banco: o turno mais RECENTE da conversa (o anterior, já
+ * respondido ou descartado, não tem mais ninguém digitando por ele) e se ele já
+ * produziu mensagem de saída. A resposta do bot entra em `mensagem` com
+ * `direcao: 'out'` e o `turnoId` do turno — é o worker do outbox que grava, no
+ * instante do envio, que é exatamente quando o WhatsApp apaga o indicador.
+ *
+ * Separado de `digitandoAgora` para a decisão ser testável sem banco e o SQL ser
+ * testável sem SSE (que, sendo stream infinito, não cabe num `app.inject`).
+ */
+export async function estadoDigitando(
+  db: Db,
+  conversaId: string,
+  tetoMs: number,
+): Promise<boolean> {
+  const [ultimo] = await db
+    .select({ id: turno.id, criadoEm: turno.criadoEm })
+    .from(turno)
+    .where(eq(turno.conversaId, conversaId))
+    .orderBy(desc(turno.criadoEm))
+    .limit(1);
+  if (!ultimo) return false;
+  const resposta = await db
+    .select({ id: mensagem.id })
+    .from(mensagem)
+    .where(and(eq(mensagem.turnoId, ultimo.id), eq(mensagem.direcao, 'out')))
+    .limit(1);
+  return digitandoAgora(ultimo, resposta.length > 0, new Date(), tetoMs);
+}
 
 export const devRoutes: FastifyPluginCallback<DevRoutesOpts> = (app, opts, done) => {
   const { env, db, boss, auth } = opts;
@@ -72,6 +127,7 @@ export const devRoutes: FastifyPluginCallback<DevRoutesOpts> = (app, opts, done)
     const vistos = new Set<string>();
     let cursorMsg = new Date(0);
     let cursorTurno = new Date(0);
+    let digitando = false;
     const recuo = (d: Date) => new Date(d.getTime() - 1_000);
     const timer = setInterval(async () => {
       try {
@@ -108,6 +164,12 @@ export const devRoutes: FastifyPluginCallback<DevRoutesOpts> = (app, opts, done)
           reply.raw.write(
             `event: turno\ndata: ${JSON.stringify({ id: t.id, textoAgregado: t.textoAgregado })}\n\n`,
           );
+        }
+        const ativo = await estadoDigitando(db, conv.id, env.AGENT_TURN_TIMEOUT_MS);
+        // só na MUDANÇA: emitir a cada 700 ms encheria o stream de ruído
+        if (ativo !== digitando) {
+          digitando = ativo;
+          reply.raw.write(`event: digitando\ndata: ${JSON.stringify({ ativo })}\n\n`);
         }
       } catch (err) {
         req.log.warn({ err }, 'sse: falha ao consultar conversa');

@@ -231,3 +231,123 @@ campo `messages`, janela de 24 h). O que é específico do túnel e do script:
 O contrato do webhook (GET de verificação, POST assinado, status de entrega, 200 sempre para a
 Meta não re-tentar) está em [`05-dados-e-integracoes.md`](05-dados-e-integracoes.md) e no código em
 [`apps/server/src/wa/routes.ts`](../../apps/server/src/wa/routes.ts).
+
+## O indicador de digitação ("digitando…")
+
+Antes, o contato mandava mensagem e ficava **sem sinal nenhum** até a resposta chegar: o
+debounce espera de 6 a 15 s de silêncio (`WA_DEBOUNCE_MS`, com a janela adaptativa de 0,6× a
+1,5×) e só depois o turno roda o classificador, o grafo e as tools. Para quem está do outro
+lado, a conversa parecia morta. Agora o agente aparece **lida + digitando…** enquanto pensa.
+
+### O contrato da Meta, e o que ele arrasta consigo
+
+É um POST no **mesmo** `/<PHONE_NUMBER_ID>/messages` do envio, mas com `status: 'read'`:
+
+```json
+{ "messaging_product": "whatsapp", "status": "read", "message_id": "<WAMID_RECEBIDO>",
+  "typing_indicator": { "type": "text" } }
+```
+
+Quatro consequências que **não são escolha nossa**:
+
+- **marca a mensagem como LIDA** — dois tiques azuis, do robô, antes de ele responder. É um
+  request só: não existe indicador sem leitura. É o efeito mais visível da feature, e é o
+  motivo de `WA_TYPING_INDICATOR` existir (ver abaixo);
+- **exige o wamid de uma mensagem RECEBIDA** — por isso disparo proativo (campanha da 013,
+  aviso de pagamento) não tem indicador: não há mensagem de entrada para reagir. Limite da
+  plataforma, não decisão nossa;
+- **dura no máximo 25 s**, ou até a resposta sair, o que vier primeiro;
+- a resposta é `{ "success": true }`, **sem** `messages[0].id`.
+
+Esse último ponto é a armadilha do código: o `postMessages` do gateway exige
+`messages[0].id` e lançaria `'Graph API sem message id na resposta'` em **todo** indicador
+bem-sucedido. Por isso a parte compartilhada (URL, headers, erro de HTTP) foi extraída para
+[`packages/wa-meta/src/graph.ts`](../../packages/wa-meta/src/graph.ts) e a leitura do corpo
+ficou com cada chamador. Há teste travando isso (`indicador-digitacao.test.ts`).
+
+### Onde mora, e por que não é um método do gateway
+
+O port é `IndicadorDigitacao` em
+[`packages/wa-meta/src/indicador-digitacao.ts`](../../packages/wa-meta/src/indicador-digitacao.ts),
+com `createMetaIndicador` (real) e `createLogIndicador` (dev), **não** um 4º método de
+`OutboundGateway`. O motivo é estrutural: o único código que chama o gateway é o worker do
+outbox, e é justamente por o turno-handler **não ter o gateway na mão** que a invariante "toda
+resposta passa pelo outbox" (dedupe `turnoId:seq`, retry do pg-boss, janela de 24 h,
+reengajamento por template) se sustenta sozinha. Dar o gateway ao handler para mostrar
+"digitando" tornaria furar essa invariante um autocomplete de distância. Mesma doutrina do
+`ResolvedorAnexo` no outbox.
+
+O disparo é no **topo de `processar`** do turno-handler, e o lugar é a parte que importa:
+
+- **depois do debounce**: disparar no webhook gastaria mais da metade dos 25 s esperando
+  silêncio;
+- **depois do `ticketGate`**: ticket `humano_ativo` não cria turno, então bot silenciado nunca
+  aparece digitando;
+- **antes do trabalho do modelo**, que é exatamente o tempo que a feature cobre.
+
+O wamid da última mensagem agregada viaja do debouncer até o handler em
+`TurnoPronto.waMessageIdUltima` — da **última**, porque numa rajada é o id dela que a Meta
+aceita.
+
+### Renovação, e por que ela existe
+
+O teto da Meta é 25 s, mas `AGENT_TURN_TIMEOUT_MS` é 60 s. Um turno com tools pode passar dos
+25 s e o contato veria o "digitando" apagar antes da resposta. Então o disparo se **renova a
+cada 20 s**, com teto de 3 renovações (~80 s, além do timeout do turno — o teto existe para o
+timer nunca ser eterno).
+
+O `parar()` acontece em **dois** lugares, e os dois são necessários:
+
+- no **enfileiramento da resposta** (`enviar`/`enviarVarias`): é o momento em que responder
+  deixa de ser hipótese. Sem isso, entre o enqueue e o fim do turno ainda rodam
+  `escalarTicket`, `gravarSinaisDeVerdict`, `emitirObservabilidade` e `gravarTrace` — e uma
+  renovação caindo nessa janela acenderia "digitando" com a resposta já a caminho, por 25 s;
+- no **`finally`** de `processar`: rede de segurança, inclusive no caminho de exceção.
+
+Os timers são `setTimeout` em cadeia (um handle por vez, sem sobreposição) e `unref()`ados: o
+indicador nunca segura o encerramento do processo nem o teardown da suíte de testes. O
+`parar()` também **aborta o request em vôo** (`AbortController` repassado ao `fetch`): matar o
+timer não impede um request que já saiu de pousar na Meta depois do envio.
+
+### O turno instantâneo, e o read receipt que ele abre mão
+
+Nem todo turno chama o modelo. O opt-out (044), o `TEXTO_JA_NA_FILA` (#47) e **todo** turno em
+dev sem `LLM_*` respondem em dezenas de milissegundos — menos do que o request do indicador
+leva para chegar à Meta. Sem cuidado, a ordem seria: acende o indicador → a resposta sai → o
+request pousa depois → e aí **não há mais nada que o apague**, porque o que apaga o indicador é
+o envio da mensagem. O contato pediria para sair da lista, receberia a confirmação, e veria o
+robô "digitando" por 25 s. É o pior lugar possível para esse defeito.
+
+Por isso o **primeiro** disparo é atrasado em 250 ms (`ATRASO_INICIAL_DIGITACAO_MS`, injetável
+por `digitacaoAtrasoMs` nos testes). Turno que termina antes disso não acende nada, de forma
+determinística, em vez de depender de quem ganha a corrida. Em turno de LLM os 250 ms são
+imperceptíveis: o contato já esperou o debounce inteiro.
+
+**Consequência deliberada, e não defeito:** como o indicador e o read receipt são o MESMO
+request, não acender nada significa também **não marcar a mensagem como lida**. Quem escreve
+"sair" recebe a confirmação sem os dois tiques azuis. É a troca certa — a própria resposta é o
+reconhecimento, e ela chega em menos de um segundo, o que é melhor do que um "digitando"
+fantasma por 25 s depois dela. Se algum dia o receipt nesses caminhos for requisito, o desenho
+muda: seria um `status:'read'` puro disparado sempre, com o indicador por cima só quando vale.
+
+### Enfeite, não obrigação
+
+Falha de rede, 400 da Meta, indicador pendurado ou nem configurado ⇒ **a resposta sai igual**,
+o turno não cai no fallback de emergência, o trace é gravado normalmente e nada é re-tentado.
+Sai um `warn` com `turnoId` e `traceId`. O disparo nunca é `await`ado — não entra no caminho
+crítico. Três testes de integração travam isso em `agente.integration.test.ts`.
+
+### Nos quatro modos
+
+| Modo | O que acontece |
+|---|---|
+| **Simulador** | a bolha de três pontos aparece na tela do `/simulador`. Ela **não** vem da chamada à Graph API (em dev ela não acontece): o SSE de `/dev/events` reproduz o mesmo estado que acende o indicador no WhatsApp — turno aberto, resposta ainda não enviada (`estadoDigitando` em `dev-routes.ts`) |
+| **Log-only** | `createLogIndicador`: uma linha `indicador de digitação simulado (log-only)` por turno, mesmo caminho de código do real |
+| **Real em dev** (`pnpm dev-whatsapp`) | o indicador de verdade no celular. Os ids sintéticos do simulador (`sim-…`) são filtrados por `ehWamidDaMeta` — sem isso, cada turno simulado viraria um 400 e um `warn` sobre um caminho que está correto |
+| **Produção** | idem real; `WA_TYPING_INDICATOR=false` desliga sem deploy |
+
+### Desligar
+
+`WA_TYPING_INDICATOR=false` (default `true`). O botão existe para **um** caso: como a Cloud
+API não separa o indicador da marcação de leitura, um cliente que não queira os dois tiques
+azuis do robô precisa poder desligar as duas coisas com um restart, não com um revert.

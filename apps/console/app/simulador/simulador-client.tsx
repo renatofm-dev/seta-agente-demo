@@ -47,6 +47,12 @@ export default function SimuladorClient() {
   const [texto, setTexto] = useState('');
   const [eventos, setEventos] = useState<Evento[]>([]);
   const [instalacao, setInstalacao] = useState<string | null>(null);
+  /**
+   * Estado transitório, e por isso FORA da lista de eventos: quem decide é o
+   * servidor (`estadoDigitando` em `dev-routes.ts`), que enxerga turno aberto sem
+   * resposta enviada — o mesmo estado que acende o indicador no WhatsApp real.
+   */
+  const [digitando, setDigitando] = useState(false);
   const fimRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -56,9 +62,16 @@ export default function SimuladorClient() {
   useEffect(() => {
     const vistos = new Set<string>();
     setEventos([]);
+    setDigitando(false);
     const es = new EventSource(`/api-dev/dev/events?waId=${encodeURIComponent(waId)}`);
     es.onopen = () => setConectado(true);
-    es.onerror = () => setConectado(false);
+    es.onerror = () => {
+      setConectado(false);
+      setDigitando(false); // stream caiu: não deixar a bolha pendurada
+    };
+    es.addEventListener('digitando', (ev) => {
+      setDigitando((JSON.parse(ev.data) as { ativo: boolean }).ativo);
+    });
     es.addEventListener('mensagem', (ev) => {
       const dados = JSON.parse(ev.data) as MensagemEvento;
       if (vistos.has(dados.id)) return;
@@ -77,7 +90,7 @@ export default function SimuladorClient() {
   // biome-ignore lint/correctness/useExhaustiveDependencies: rolar ao fim a cada evento novo é o efeito desejado
   useEffect(() => {
     fimRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [eventos]);
+  }, [eventos, digitando]);
 
   const enviar = useCallback(async () => {
     const corpo = texto.trim();
@@ -172,6 +185,26 @@ export default function SimuladorClient() {
                 turno agregado · “{ev.dados.textoAgregado.replaceAll('\n', ' · ')}”
               </p>
             ),
+          )}
+          {digitando && (
+            <div className="flex max-w-[min(520px,88%)] flex-col gap-[3px] self-start">
+              <span className="pl-1 font-mono text-[10px] uppercase tracking-[.08em] text-ok">
+                Agente
+              </span>
+              <div
+                className="flex items-center gap-1 rounded-[4px_14px_14px_14px] bg-surface px-3 py-[11px] shadow-[0_1px_2px_rgba(20,20,22,.08)]"
+                aria-label="digitando"
+                role="status"
+              >
+                {[0, 150, 300].map((atraso) => (
+                  <span
+                    key={atraso}
+                    className="size-[6px] rounded-full bg-text-3 motion-safe:animate-bounce"
+                    style={{ animationDelay: `${atraso}ms` }}
+                  />
+                ))}
+              </div>
+            </div>
           )}
           <div ref={fimRef} />
         </div>

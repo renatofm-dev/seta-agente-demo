@@ -1,3 +1,4 @@
+import { criarPostMessages, GRAPH_VERSAO_DEFAULT, type GraphMessagesConfig } from './graph.js';
 import { type OutboundDocument, OutboundDocumentSchema, OutboundTextSchema } from './index.js';
 import { type OutboundTemplate, OutboundTemplateSchema, payloadDeTemplate } from './template.js';
 
@@ -37,12 +38,12 @@ function exigirJanelaAberta(to: string, janela: JanelaInfo): void {
   }
 }
 
-export interface MetaGatewayConfig {
-  readonly accessToken: string;
-  readonly phoneNumberId: string;
-  readonly graphVersion?: string;
-  readonly fetchFn?: typeof fetch;
-}
+/**
+ * Mesmo contrato de `GraphMessagesConfig`: o gateway e o indicador de digitação
+ * falam com o MESMO endpoint, com as mesmas credenciais. O alias fica para não
+ * quebrar quem já importa o nome.
+ */
+export type MetaGatewayConfig = GraphMessagesConfig;
 
 /**
  * Mensagem com link: o Cloud API só renderiza a URL como link clicável — com o
@@ -56,24 +57,17 @@ const TEM_URL = /https?:\/\//i;
 /** Implementação real: Graph API da Meta (número de teste na POC). */
 export function createMetaGateway(config: MetaGatewayConfig): OutboundGateway {
   const fetchFn = config.fetchFn ?? fetch;
-  const versao = config.graphVersion ?? 'v21.0';
+  const versao = config.graphVersion ?? GRAPH_VERSAO_DEFAULT;
+  const postGraph = criarPostMessages(config);
 
   const postMessages = async (payload: Record<string, unknown>): Promise<string> => {
-    const res = await fetchFn(
-      `https://graph.facebook.com/${versao}/${config.phoneNumberId}/messages`,
-      {
-        method: 'POST',
-        headers: {
-          authorization: `Bearer ${config.accessToken}`,
-          'content-type': 'application/json',
-        },
-        body: JSON.stringify(payload),
-      },
-    );
-    if (!res.ok) {
-      throw new Error(`Graph API ${res.status}: ${(await res.text()).slice(0, 300)}`);
-    }
-    const corpo = (await res.json()) as { messages?: { id: string }[] };
+    /**
+     * A leitura do corpo mora AQUI, e não dentro do post: o corpo do ENVIO traz
+     * o wamid, e o do indicador de digitação traz `{success:true}`. Exigir
+     * `messages[0].id` no lugar compartilhado faria todo indicador
+     * bem-sucedido virar 'Graph API sem message id na resposta'.
+     */
+    const corpo = (await postGraph(payload)) as { messages?: { id: string }[] };
     const waMessageId = corpo.messages?.[0]?.id;
     if (!waMessageId) throw new Error('Graph API sem message id na resposta');
     return waMessageId;
