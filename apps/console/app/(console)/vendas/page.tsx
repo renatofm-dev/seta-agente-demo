@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
+import { Button } from '@/components/ui/button';
 import { Kpi, Vazio } from '@/components/ui/card';
 import { Chip } from '@/components/ui/chip';
 import { Detalhes, Drawer } from '@/components/ui/drawer';
@@ -16,7 +17,7 @@ import {
   type VendaView,
 } from '@/lib/console-api';
 import { dataHoraCurta, reaisDeCentavos } from '@/lib/formatos';
-import { STATUS_VENDA } from '@/lib/rotulos';
+import { ESTADO_ASSINATURA, STATUS_VENDA } from '@/lib/rotulos';
 import { cn } from '@/lib/utils';
 import { useInstalacao } from '../layout';
 
@@ -40,8 +41,17 @@ const GRUPO: Record<Filtro, readonly StatusVenda[] | null> = {
 };
 const COLUNAS = '1.4fr 1.2fr 1.1fr 1fr 1fr 1fr';
 
-function DrawerVenda({ item, aoFechar }: { item: VendaView; aoFechar: () => void }) {
+function DrawerVenda({
+  item,
+  aoFechar,
+  aoMudar,
+}: {
+  item: VendaView;
+  aoFechar: () => void;
+  aoMudar: (msg: string) => void;
+}) {
   const [detalhe, setDetalhe] = useState<VendaDetalhe | null>(null);
+  const [ocupado, setOcupado] = useState(false);
 
   useEffect(() => {
     setDetalhe(null);
@@ -124,6 +134,56 @@ function DrawerVenda({ item, aoFechar }: { item: VendaView; aoFechar: () => void
         <p className="mt-3 rounded-lg bg-risk-bg p-2.5 text-[12.5px] text-risk">
           {item.motivo ?? detalhe?.escrita?.erro}
         </p>
+      )}
+
+      {item.assinatura && (
+        <>
+          <p className="mt-5 mb-1.5 text-[11px] tracking-wide text-text-3 uppercase">Assinatura</p>
+          <Detalhes
+            itens={[
+              { rotulo: 'Estado', valor: ESTADO_ASSINATURA[item.assinatura.estado].rotulo },
+              { rotulo: 'Provedor', valor: item.assinatura.provedor },
+              {
+                rotulo: 'Enviada',
+                valor: dataHoraCurta(item.assinatura.criadoEm),
+              },
+              {
+                rotulo: 'Assinada',
+                valor: item.assinatura.assinadoEm ? dataHoraCurta(item.assinatura.assinadoEm) : '—',
+              },
+            ]}
+          />
+          {item.assinatura.estado === 'pendente' && (
+            <div className="mt-3 flex flex-col gap-2">
+              {/* o link se perde: apagam a mensagem, trocam de aparelho. Reenviar
+                  devolve o MESMO documento — não cria um segundo para assinar. */}
+              <p className="m-0 text-xs text-text-2">
+                O contrato já está no ERP e espera o aceite. Reenviar manda o mesmo link pelo
+                WhatsApp.
+              </p>
+              <Button
+                disabled={ocupado}
+                onClick={async () => {
+                  setOcupado(true);
+                  try {
+                    const r = await api.reenviarAssinatura(item.id);
+                    aoMudar(
+                      r.estado === 'sem_documento'
+                        ? 'O ERP não devolveu o contrato — um atendente foi acionado'
+                        : 'Link de assinatura reenviado no WhatsApp',
+                    );
+                  } catch (err) {
+                    aoMudar(err instanceof Error ? err.message : String(err));
+                  } finally {
+                    setOcupado(false);
+                  }
+                }}
+              >
+                Reenviar link
+              </Button>
+            </div>
+          )}
+        </>
       )}
 
       <Link
@@ -241,10 +301,17 @@ function VendasConteudo() {
                     </span>
                   </span>
                   <span className="font-mono text-[11.5px] text-text-2">{v.cotaCodigo}</span>
-                  <span>
+                  <span className="flex flex-col items-start gap-1">
                     <Chip papel={s.papel} tamanho="md">
                       {s.rotulo}
                     </Chip>
+                    {/* 046: o contrato existe e ainda não foi aceito — some da
+                        vista se não aparecer aqui, ao lado do status da venda */}
+                    {v.assinatura && (
+                      <Chip papel={ESTADO_ASSINATURA[v.assinatura.estado].papel}>
+                        {ESTADO_ASSINATURA[v.assinatura.estado].rotulo}
+                      </Chip>
+                    )}
                   </span>
                   <span className="font-heading font-semibold">
                     {reaisDeCentavos(v.sinalCentavos)}
@@ -265,7 +332,14 @@ function VendasConteudo() {
       </Pagina>
       {item && (
         <div className="fixed top-14 right-0 bottom-0 z-30 w-[400px] max-w-full shadow-[-12px_0_32px_rgba(20,20,26,.12)] xl:static xl:z-auto xl:w-auto xl:shadow-none">
-          <DrawerVenda item={item} aoFechar={fechar} />
+          <DrawerVenda
+            item={item}
+            aoFechar={fechar}
+            aoMudar={(msg) => {
+              setAviso(msg);
+              recarregar();
+            }}
+          />
         </div>
       )}
     </div>

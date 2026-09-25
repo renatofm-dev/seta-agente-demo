@@ -139,6 +139,12 @@ export type Efeito =
   | 'agendar'
   /** 045: comprador identificado — emitir a cobrança do sinal e mandar o PIX. */
   | 'emitir_sinal'
+  /**
+   * 046: o comprador falou algo enquanto o sinal não cai. Quase sempre é "cadê
+   * o PIX?", e a resposta certa é mandá-lo de novo — não repetir que ainda não
+   * identificamos o pagamento e ficar por isso mesmo.
+   */
+  | 'reenviar_sinal'
   /** 045: sinal pago — gravar pessoa, lead e venda no ERP. */
   | 'registrar_venda';
 

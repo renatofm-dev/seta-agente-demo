@@ -1,3 +1,17 @@
+import {
+  caixa,
+  campo,
+  cinza,
+  dataBr,
+  LARGURA,
+  linha,
+  montarPdf,
+  preto,
+  reais,
+  tarjaSimulado,
+  texto,
+} from './pdf.js';
+
 /**
  * Boleto SINTÉTICO em PDF — 040.
  *
@@ -12,16 +26,9 @@
  * do `erp_mock`, e deixa claro no papel que é simulado: um PDF que PARECE um
  * boleto pagável e não é seria pior que texto nenhum.
  *
- * Escrito à mão porque a stack é travada e nenhuma lib de PDF está nela. Um
- * PDF 1.4 de uma página é pequeno o bastante para isso ser honesto: catálogo,
- * páginas, página, conteúdo e três fontes-padrão (não embarcadas, logo sem
- * nenhum byte de fonte). O trabalho de verdade é a tabela `xref`, que é por
- * OFFSET DE BYTE — daí montar tudo em `Buffer` e medir, nunca em string.
+ * A máquina de PDF (objetos, `xref`, primitivas de desenho) saiu daqui para
+ * `pdf.ts` na 046, quando o contrato virou o segundo documento a desenhar.
  */
-
-/** A4 em pontos, o tamanho de boleto que qualquer visualizador abre. */
-const LARGURA = 595;
-const ALTURA = 842;
 
 export interface DadosBoleto {
   readonly cedente: string;
@@ -39,56 +46,15 @@ export interface DadosBoleto {
   readonly emitidoEm: string;
 }
 
-/**
- * Texto dentro de `(...)`: só `\`, `(` e `)` precisam de escape. Fora do ASCII
- * o PDF lê os bytes conforme a `/Encoding` da fonte — WinAnsi, aqui, que é
- * latin-1 para tudo que o português usa.
- */
-function literal(s: string): string {
-  return s.replaceAll('\\', '\\\\').replaceAll('(', '\\(').replaceAll(')', '\\)');
-}
-
-function dataBr(iso: string): string {
-  const [a, m, d] = iso.slice(0, 10).split('-');
-  return d && m && a ? `${d}/${m}/${a}` : iso;
-}
-
-function reais(v: number): string {
-  return v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
-
-/** Operadores de conteúdo: texto, linha e retângulo preenchido. */
-const texto = (x: number, y: number, fonte: string, tam: number, s: string): string =>
-  `BT /${fonte} ${tam} Tf ${x} ${y} Td (${literal(s)}) Tj ET`;
-
-const linha = (x1: number, y1: number, x2: number, y2: number, w = 0.7): string =>
-  `${w} w ${x1} ${y1} m ${x2} ${y2} l S`;
-
-const caixa = (x: number, y: number, l: number, a: number, w = 0.7): string =>
-  `${w} w ${x} ${y} ${l} ${a} re S`;
-
-const cinza = (t: number): string => `${t} ${t} ${t} rg`;
-const preto = '0 0 0 rg';
-
 /** Ponto de quebra da linha digitável: o espaço mais próximo do meio. */
-function quebra(linha: string): number {
-  const alvo = Math.floor(linha.length / 2);
+function quebra(digitavel: string): number {
+  const alvo = Math.floor(digitavel.length / 2);
   let melhor = -1;
-  for (let i = 0; i < linha.length; i++) {
-    if (linha[i] !== ' ') continue;
+  for (let i = 0; i < digitavel.length; i++) {
+    if (digitavel[i] !== ' ') continue;
     if (melhor === -1 || Math.abs(i - alvo) < Math.abs(melhor - alvo)) melhor = i;
   }
   return melhor === -1 ? alvo : melhor; // sem espaço, parte no meio mesmo
-}
-
-/** Rótulo pequeno + valor, o par que se repete em toda ficha de compensação. */
-function campo(x: number, y: number, rotulo: string, valor: string, tam = 11): string[] {
-  return [
-    cinza(0.35),
-    texto(x, y, 'F1', 6.5, rotulo.toUpperCase()),
-    preto,
-    texto(x, y - 13, 'F2', tam, valor),
-  ];
 }
 
 function conteudo(d: DadosBoleto): string {
@@ -103,19 +69,11 @@ function conteudo(d: DadosBoleto): string {
     preto,
   );
 
-  // A tarja. Fica no topo, em caixa alta e com moldura, porque este PDF vai
-  // parar no WhatsApp de alguém: tem que ser óbvio que não se paga.
   ops.push(
-    cinza(0.9),
-    `${m} 735 ${dir - m} 28 re f`,
-    preto,
-    caixa(m, 735, dir - m, 28, 1),
-    texto(m + 10, 752, 'F2', 9, 'DOCUMENTO SIMULADO - AMBIENTE DE DEMONSTRACAO'),
-    texto(
-      m + 10,
-      741,
-      'F1',
-      8,
+    ...tarjaSimulado(
+      m,
+      dir,
+      735,
       'Gerado pelo simulador do ERP. Nao tem valor de cobranca e nao e pagavel.',
     ),
   );
@@ -162,53 +120,6 @@ function conteudo(d: DadosBoleto): string {
   return ops.join('\n');
 }
 
-/**
- * Monta o arquivo. Cada objeto entra no buffer na ordem, guardando o offset —
- * é isso que a `xref` publica, e é o que um PDF inválido erra primeiro.
- */
 export function boletoPdf(d: DadosBoleto): Buffer {
-  const fluxo = Buffer.from(conteudo(d), 'latin1');
-  const fonte = (nome: string) =>
-    `<< /Type /Font /Subtype /Type1 /BaseFont /${nome} /Encoding /WinAnsiEncoding >>`;
-
-  const objetos: string[] = [
-    '<< /Type /Catalog /Pages 2 0 R >>',
-    '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
-    `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${LARGURA} ${ALTURA}] ` +
-      '/Resources << /Font << /F1 5 0 R /F2 6 0 R /F3 7 0 R >> >> /Contents 4 0 R >>',
-    `<< /Length ${fluxo.length} >>\nstream\n${fluxo.toString('latin1')}\nendstream`,
-    fonte('Helvetica'),
-    fonte('Helvetica-Bold'),
-    fonte('Courier-Bold'),
-  ];
-
-  const partes: Buffer[] = [Buffer.from('%PDF-1.4\n', 'latin1')];
-  // comentário binário: convenção que faz ferramentas tratarem o arquivo como
-  // binário e não reescreverem quebras de linha
-  partes.push(Buffer.from('%\xE2\xE3\xCF\xD3\n', 'latin1'));
-  const offsets: number[] = [];
-  let posicao = partes.reduce((n, p) => n + p.length, 0);
-
-  objetos.forEach((corpo, i) => {
-    const bloco = Buffer.from(`${i + 1} 0 obj\n${corpo}\nendobj\n`, 'latin1');
-    offsets.push(posicao);
-    posicao += bloco.length;
-    partes.push(bloco);
-  });
-
-  const inicioXref = posicao;
-  const xref = [
-    `xref\n0 ${objetos.length + 1}\n`,
-    '0000000000 65535 f \n',
-    ...offsets.map((o) => `${String(o).padStart(10, '0')} 00000 n \n`),
-  ].join('');
-  partes.push(Buffer.from(xref, 'latin1'));
-  partes.push(
-    Buffer.from(
-      `trailer\n<< /Size ${objetos.length + 1} /Root 1 0 R >>\nstartxref\n${inicioXref}\n%%EOF\n`,
-      'latin1',
-    ),
-  );
-
-  return Buffer.concat(partes);
+  return montarPdf(conteudo(d));
 }

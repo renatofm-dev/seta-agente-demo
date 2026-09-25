@@ -127,6 +127,18 @@ export interface VendaView {
   erpContratoId: string | null;
   motivo: string | null;
   criadoEm: string;
+  /**
+   * 046: a assinatura do contrato. `null` é o normal antes do contrato existir
+   * — e o LINK não vem: quem o recebe é quem comprou, no WhatsApp.
+   */
+  assinatura: AssinaturaView | null;
+}
+
+export interface AssinaturaView {
+  estado: 'pendente' | 'assinada' | 'recusada';
+  provedor: string;
+  assinadoEm: string | null;
+  criadoEm: string;
 }
 
 export interface VendasResposta {
@@ -802,6 +814,11 @@ export const api = {
     return fetch(`/api/console/vendas${qs ? `?${qs}` : ''}`).then((r) => json<VendasResposta>(r));
   },
   venda: (id: string) => fetch(`/api/console/vendas/${id}`).then((r) => json<VendaDetalhe>(r)),
+  /** 046: reenvia o link de assinatura — não cria um segundo documento. */
+  reenviarAssinatura: (id: string) =>
+    post(`/api/console/vendas/${id}/reenviar-assinatura`).then((r) =>
+      json<{ estado: 'enviada' | 'reenviada' | 'sem_documento' }>(r),
+    ),
   aprovarReserva: (id: string) =>
     post(`/api/console/reservas/${id}/aprovar`).then((r) => json<{ ok: boolean }>(r)),
   recusarReserva: (id: string, motivo: string) =>

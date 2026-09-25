@@ -3,6 +3,7 @@ import { textoVendido } from '@seta/sdr';
 import { and, eq, sql } from 'drizzle-orm';
 import type { PgBoss } from 'pg-boss';
 import type { Logger } from 'pino';
+import { type AssinaturaDeps, enviarParaAssinatura } from '../assinatura/fluxo.js';
 import { FILA_ERP_VENDA } from '../boss.js';
 import type { Db } from '../db/index.js';
 import { erpEscrita, venda } from '../db/schema.js';
@@ -40,6 +41,12 @@ export interface VendaWorkerDeps {
   /** Ids do espelho: 1 = ENTRADA, 2 = SALDO; 1 = BOLETO, 2 = PIX. */
   readonly idMeioPagamentoSinal: number;
   readonly idMeioPagamentoSaldo: number;
+  /**
+   * 046: manda o contrato para assinar, logo depois de avisar que ele foi
+   * registrado. Ausente ⇒ a venda termina como na 045, no aviso — é o degrau
+   * que mantém a 045 funcionando sozinha.
+   */
+  readonly assinatura?: AssinaturaDeps;
 }
 
 export type ResultadoVenda = 'registrada' | 'ja-resolvida' | 'falha';
@@ -83,6 +90,7 @@ export async function processarVenda(
       })
       .where(eq(venda.id, vendaId));
     await avisar(deps, linha, String(contratoId));
+    await mandarAssinar(deps, linha, String(contratoId));
     deps.logger.info({ chave, contratoId }, 'venda registrada no ERP');
     return 'registrada';
   } catch (err) {
@@ -186,6 +194,50 @@ async function concluir(
       atualizadoEm: new Date(),
     })
     .where(eq(erpEscrita.chave, chave));
+}
+
+/**
+ * 046: o contrato existe no ERP — agora ele vira documento e vai para
+ * assinatura. Falhar aqui NÃO desfaz a venda: o dinheiro entrou e o contrato
+ * está registrado. Vira ticket, e o comprador ouve o que houve.
+ */
+async function mandarAssinar(
+  deps: VendaWorkerDeps,
+  linha: VendaRow,
+  contratoId: string,
+): Promise<void> {
+  if (!deps.assinatura) return;
+  const comprador = linha.comprador as Comprador;
+  try {
+    const r = await enviarParaAssinatura(deps.assinatura, {
+      id: linha.id,
+      conversaId: linha.conversaId,
+      contratoErpId: contratoId,
+      compradorNome: comprador.nome,
+      ...(comprador.cpf ? { compradorCpf: comprador.cpf } : {}),
+    });
+    if (r.estado === 'sem_documento') {
+      await escalarTicketVenda(
+        deps.db,
+        linha.conversaId,
+        TRIGGER_FALHA_VENDA,
+        `contrato ${contratoId} registrado, mas o ERP não devolveu o documento para assinatura`,
+        { refId: linha.id },
+      );
+    }
+  } catch (err) {
+    deps.logger.error(
+      { err, vendaId: linha.id, contratoId },
+      'venda: contrato registrado, mas a assinatura não foi criada',
+    );
+    await escalarTicketVenda(
+      deps.db,
+      linha.conversaId,
+      TRIGGER_FALHA_VENDA,
+      `contrato ${contratoId} registrado, mas a assinatura não foi criada`,
+      { refId: linha.id },
+    );
+  }
 }
 
 async function avisar(deps: VendaWorkerDeps, linha: VendaRow, contratoId: string): Promise<void> {

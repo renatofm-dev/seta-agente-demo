@@ -197,6 +197,22 @@ export const EnvSchemaBase = z.object({
    */
   TSE_RESERVA_USERNAME: z.string().min(1).optional(),
   TSE_RESERVA_PASSWORD: z.string().min(1).optional(),
+  /**
+   * 046: quem assina o contrato. `simulado` (default) desenha a página de
+   * assinatura aqui mesmo; `autentique` fala com a API deles. A demo roda no
+   * simulado por decisão da spec — o webhook do Autentique registra CPF,
+   * nascimento, IP e cidade de quem assina, e uma demonstração não pode criar
+   * registro de assinatura real de quem só está assistindo.
+   */
+  ASSINATURA_PROVIDER: z.enum(['simulado', 'autentique']).default('simulado'),
+  ASSINATURA_AUTENTIQUE_TOKEN: z.string().min(1).optional(),
+  /**
+   * 046: a origem PÚBLICA deste servidor — a que o celular de quem assina
+   * consegue abrir. Em dev é a URL do túnel, que muda a cada `pnpm
+   * dev-whatsapp`; em produção é o domínio fixo. Sem ela o link de assinatura
+   * sairia apontando para `localhost`, que só existe nesta máquina.
+   */
+  PUBLIC_BASE_URL: z.url().default('http://localhost:3001'),
 });
 export const EnvSchema = EnvSchemaBase.superRefine((env, ctx) => {
   // vale em qualquer ambiente: apontar para o TSE sem credencial é boot mudo
@@ -205,6 +221,13 @@ export const EnvSchema = EnvSchemaBase.superRefine((env, ctx) => {
       code: 'custom',
       path: ['TSE_USERNAME'],
       message: 'TSE_BASE_URL definido exige TSE_USERNAME e TSE_PASSWORD',
+    });
+  }
+  if (env.ASSINATURA_PROVIDER === 'autentique' && !env.ASSINATURA_AUTENTIQUE_TOKEN) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['ASSINATURA_AUTENTIQUE_TOKEN'],
+      message: 'ASSINATURA_PROVIDER=autentique exige ASSINATURA_AUTENTIQUE_TOKEN',
     });
   }
   if (env.NODE_ENV !== 'production') return;

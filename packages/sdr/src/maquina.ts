@@ -305,7 +305,13 @@ export function transicionar(estado: EstadoFluxo, acao: Acao, ctx: ContextoFluxo
    * avançar é o webhook do PSP.
    */
   if (estado.etapa === 'fechamento' && acao.tipo !== 'sinal_pago' && acao.tipo !== 'agendar') {
-    return { estado, mensagens: [TEXTO_AGUARDANDO_SINAL], efeito: 'nenhum' };
+    /**
+     * 046: além de dizer que o pagamento não caiu, REENVIA o PIX. Quem escreve
+     * aqui quase sempre está perguntando por ele — e em campo o silêncio custou
+     * caro: o comprador ouviu "estou te mandando o PIX" e ficou esperando. O
+     * reenvio é dedupado pela chave do outbox, então não vira enxurrada.
+     */
+    return { estado, mensagens: [TEXTO_AGUARDANDO_SINAL], efeito: 'reenviar_sinal' };
   }
   if (acao.tipo === 'nao_entendi') return naoEntendi(estado);
 

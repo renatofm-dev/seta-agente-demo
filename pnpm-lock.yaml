@@ -99,6 +99,9 @@ importers:
       '@seta/anonimizacao':
         specifier: workspace:*
         version: link:../../packages/anonimizacao
+      '@seta/assinatura':
+        specifier: workspace:*
+        version: link:../../packages/assinatura
       '@seta/client-config':
         specifier: workspace:*
         version: link:../../packages/client-config
@@ -227,6 +230,12 @@ importers:
       '@seta/ai-provider':
         specifier: workspace:*
         version: link:../ai-provider
+      zod:
+        specifier: ^4.4.3
+        version: 4.4.3
+
+  packages/assinatura:
+    dependencies:
       zod:
         specifier: ^4.4.3
         version: 4.4.3

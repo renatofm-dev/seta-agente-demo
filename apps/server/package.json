@@ -13,6 +13,7 @@
     "@seta/agent": "workspace:*",
     "@seta/ai-provider": "workspace:*",
     "@seta/anonimizacao": "workspace:*",
+    "@seta/assinatura": "workspace:*",
     "@seta/client-config": "workspace:*",
     "@seta/cobranca": "workspace:*",
     "@seta/crm": "workspace:*",

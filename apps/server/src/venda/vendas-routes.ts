@@ -1,10 +1,18 @@
 import { and, desc, eq } from 'drizzle-orm';
 import type { FastifyPluginCallback, FastifyRequest } from 'fastify';
 import { z } from 'zod';
+import { type AssinaturaDeps, enviarParaAssinatura } from '../assinatura/fluxo.js';
 import type { Auth } from '../auth.js';
 import { type SessaoConsole, sessaoDaRequest } from '../auth.js';
 import type { Db } from '../db/index.js';
-import { cobranca, erpEscrita, propostaSdr, STATUS_VENDA, venda } from '../db/schema.js';
+import {
+  assinatura,
+  cobranca,
+  erpEscrita,
+  propostaSdr,
+  STATUS_VENDA,
+  venda,
+} from '../db/schema.js';
 import { chaveVenda } from './chave.js';
 
 /**
@@ -20,6 +28,11 @@ import { chaveVenda } from './chave.js';
 export interface VendasRoutesOpts {
   readonly db: Db;
   readonly auth: Auth;
+  /**
+   * 046: sem isto a tela continua só leitura — reenviar o link de assinatura
+   * não existe. É o mesmo degrau que a 015b usou para não quebrar a 015a.
+   */
+  readonly assinatura?: AssinaturaDeps;
 }
 
 const sessoes = new WeakMap<FastifyRequest, SessaoConsole>();
@@ -52,6 +65,17 @@ function paraJson(linha: typeof venda.$inferSelect) {
   };
 }
 
+/** 046: o link NÃO sai daqui — quem o recebe é quem comprou, no WhatsApp. */
+function assinaturaJson(linha: typeof assinatura.$inferSelect | null) {
+  if (!linha) return null;
+  return {
+    estado: linha.estado,
+    provedor: linha.provedor,
+    assinadoEm: linha.assinadoEm,
+    criadoEm: linha.criadoEm,
+  };
+}
+
 export const vendasRoutes: FastifyPluginCallback<VendasRoutesOpts> = (app, opts, done) => {
   const { db, auth } = opts;
 
@@ -78,13 +102,23 @@ export const vendasRoutes: FastifyPluginCallback<VendasRoutesOpts> = (app, opts,
       ...(q.status ? [eq(venda.status, q.status)] : []),
       ...(q.conversaId ? [eq(venda.conversaId, q.conversaId)] : []),
     ];
+    /**
+     * 046: `leftJoin` porque venda sem assinatura é o normal — a assinatura só
+     * nasce depois do contrato, e venda que falhou no ERP nunca chega lá.
+     */
     const linhas = await db
-      .select()
+      .select({ venda, assinatura })
       .from(venda)
+      .leftJoin(assinatura, eq(assinatura.vendaId, venda.id))
       .where(onde.length > 0 ? and(...onde) : undefined)
       .orderBy(desc(venda.criadoEm))
       .limit(200);
-    return { vendas: linhas.map(paraJson) };
+    return {
+      vendas: linhas.map((l) => ({
+        ...paraJson(l.venda),
+        assinatura: assinaturaJson(l.assinatura),
+      })),
+    };
   });
 
   app.get('/api/console/vendas/:id', async (req, reply) => {
@@ -103,6 +137,7 @@ export const vendasRoutes: FastifyPluginCallback<VendasRoutesOpts> = (app, opts,
     const [proposta] = linha.propostaId
       ? await db.select().from(propostaSdr).where(eq(propostaSdr.id, linha.propostaId))
       : [];
+    const [ass] = await db.select().from(assinatura).where(eq(assinatura.vendaId, id));
 
     return {
       ...paraJson(linha),
@@ -127,7 +162,39 @@ export const vendasRoutes: FastifyPluginCallback<VendasRoutesOpts> = (app, opts,
             status: proposta.status,
           }
         : null,
+      assinatura: assinaturaJson(ass ?? null),
     };
+  });
+
+  /**
+   * 046: reenviar o link de assinatura. É a única escrita desta tela, e existe
+   * porque a mensagem se perde: o comprador apaga, troca de aparelho, some.
+   * Reenviar NÃO cria um segundo documento — `enviarParaAssinatura` devolve o
+   * link que já existe, e a idempotência é do índice parcial, não da boa-fé.
+   */
+  app.post('/api/console/vendas/:id/reenviar-assinatura', async (req, reply) => {
+    const { id } = ParamsId.parse(req.params);
+    if (!opts.assinatura) {
+      return reply.code(503).send({ erro: 'assinatura não configurada neste servidor' });
+    }
+    const [linha] = await db.select().from(venda).where(eq(venda.id, id));
+    if (!linha) return reply.code(404).send({ erro: 'venda não encontrada' });
+    if (!linha.erpContratoId) {
+      return reply.code(409).send({ erro: 'venda ainda não tem contrato no ERP' });
+    }
+    const comprador = linha.comprador as { nome: string; cpf?: string };
+    const r = await enviarParaAssinatura(opts.assinatura, {
+      id: linha.id,
+      conversaId: linha.conversaId,
+      contratoErpId: linha.erpContratoId,
+      compradorNome: comprador.nome,
+      ...(comprador.cpf ? { compradorCpf: comprador.cpf } : {}),
+    });
+    req.log.info(
+      { vendaId: id, estado: r.estado, por: sessoes.get(req)?.userId },
+      'assinatura reenviada pelo console',
+    );
+    return { estado: r.estado };
   });
 
   done();

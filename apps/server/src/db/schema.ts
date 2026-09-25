@@ -430,6 +430,12 @@ export const fluxoSdr = pgTable(
   ],
 );
 
+/**
+ * 046: estados da assinatura do contrato. Espelham o port `@seta/assinatura` —
+ * o provedor fala esses três e mais nada.
+ */
+export const ESTADOS_ASSINATURA = ['pendente', 'assinada', 'recusada'] as const;
+
 /** 045: estados da venda, do sinal emitido ao contrato criado no ERP. */
 export const STATUS_VENDA = [
   'sinal_emitido',
@@ -1035,5 +1041,48 @@ export const venda = pgTable(
       .where(sql`status IN ('sinal_emitido','sinal_pago','registrando','registrada')`),
     index('venda_conversa_idx').on(t.conversaId, t.criadoEm),
     index('venda_status_idx').on(t.status),
+  ],
+);
+
+/**
+ * 046 — a assinatura do contrato que a venda criou.
+ *
+ * Uma linha por documento enviado para assinar. Ela existe porque o estado que
+ * vale é o NOSSO: o provedor manda um evento quando assinam, e é aqui que ele
+ * vira fato — com o id do documento no provedor como chave de reconciliação,
+ * do mesmo jeito que `evento_psp` faz com o PSP.
+ *
+ * O `link` fica guardado para poder reenviar sem criar um segundo documento.
+ */
+export const assinatura = pgTable(
+  'assinatura',
+  {
+    id: uuid('id').primaryKey(),
+    vendaId: uuid('venda_id')
+      .notNull()
+      .references(() => venda.id),
+    conversaId: uuid('conversa_id')
+      .notNull()
+      .references(() => conversa.id),
+    /** `simulado` | `autentique` — qual provider criou este documento. */
+    provedor: text('provedor').notNull(),
+    /** Id do documento NO PROVEDOR: é por ele que o webhook reconhece a linha. */
+    documentoId: text('documento_id').notNull(),
+    /** Contrato do ERP que virou documento. */
+    contratoErpId: text('contrato_erp_id').notNull(),
+    estado: text('estado', { enum: ESTADOS_ASSINATURA }).notNull(),
+    link: text('link').notNull(),
+    assinadoEm: timestamp('assinado_em', { withTimezone: true }),
+    /** Via assinada publicada pelo provedor, quando existe (o dublê não publica). */
+    urlAssinado: text('url_assinado'),
+    criadoEm: timestamp('criado_em', { withTimezone: true }).notNull().defaultNow(),
+    atualizadoEm: timestamp('atualizado_em', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    /** O evento chega pelo par provedor+documento — e chega mais de uma vez. */
+    uniqueIndex('assinatura_documento_uq').on(t.provedor, t.documentoId),
+    /** Uma assinatura viva por venda: reenviar link não cria outro documento. */
+    uniqueIndex('assinatura_venda_uq').on(t.vendaId).where(sql`estado = 'pendente'`),
+    index('assinatura_venda_idx').on(t.vendaId),
   ],
 );

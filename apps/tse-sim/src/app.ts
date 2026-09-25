@@ -2,8 +2,10 @@ import { type FastifyInstance, type FastifyReply, fastify } from 'fastify';
 import { z } from 'zod';
 import { type Autenticador, criarAutenticador } from './auth.js';
 import type { Banco } from './db.js';
+import { EMPRESA } from './empresa.js';
 import type { Env } from './env.js';
 import { cadastrosRoutes } from './rotas/cadastros.js';
+import { extensoesRoutes } from './rotas/extensoes.js';
 import { financeiroRoutes } from './rotas/financeiro.js';
 import { lookupRoutes } from './rotas/lookup.js';
 import { painelDoClienteRoutes } from './rotas/painel-do-cliente.js';
@@ -112,6 +114,8 @@ export function buildTseSimApp({ env, db, auth }: BuildOptions): App {
   // 045: o ciclo comercial — lead ("casal") e venda
   app.register(recepcaoRoutes, { db, auth: autenticador });
   app.register(vendasRoutes, { db, auth: autenticador });
+  // 046: extensões do simulador — sob `/sim/`, fora do contrato do fornecedor
+  app.register(extensoesRoutes, { db, auth: autenticador, vendedora: EMPRESA });
 
   return app;
 }
