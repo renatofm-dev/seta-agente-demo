@@ -238,6 +238,17 @@ export const disparoDestinatario = pgTable(
       .default('pendente'),
     waMessageId: text('wa_message_id').unique(),
     erro: text('erro'),
+    /**
+     * 044: valores de {{1}}..{{N}} DESTE destinatário. `null` ⇒ usa os globais
+     * do disparo, e é por isso que a coluna é anulável em vez de ter default
+     * `[]`: `[]` é "este destinatário não tem variável nenhuma", resposta
+     * diferente de "não foi dito nada sobre ele". Todo disparo da 013 fica com
+     * `null` e continua lendo o global — nenhum muda de comportamento.
+     *
+     * Existe porque cobrança não tem valor global: link e código PIX mudam a
+     * cada pessoa. O global continua certo para "sua parcela vence amanhã".
+     */
+    variaveis: jsonb('variaveis'),
     atualizadoEm: timestamp('atualizado_em', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index('disparo_destinatario_disparo_idx').on(t.disparoId)],

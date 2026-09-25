@@ -328,6 +328,8 @@ export interface DisparoResumo {
   pendentes: number;
   /** 044: opt-out respeitado — não é erro de envio, e por isso conta separado. */
   recusados: number;
+  /** 044: as variáveis são de cada pessoa (cobrança) — não há valor global. */
+  variaveis_por_destinatario: boolean | null;
 }
 
 export interface DisparoDestinatarioView {

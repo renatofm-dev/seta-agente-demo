@@ -65,9 +65,7 @@ export async function processarDisparo(deps: DisparoWorkerDeps, disparoId: strin
     .where(eq(disparo.id, disparoId));
   if (d?.status !== 'enviando') return; // inexistente ou já concluído (reprocesso)
 
-  const variaveis = (Array.isArray(d.variaveis) ? d.variaveis : []) as string[];
-  const textoRenderizado =
-    renderizarCorpo(d.corpo, variaveis) + (d.rodape ? `\n\n${d.rodape}` : '');
+  const globais = (Array.isArray(d.variaveis) ? d.variaveis : []) as string[];
 
   const pendentes = await db
     .select()
@@ -102,6 +100,16 @@ export async function processarDisparo(deps: DisparoWorkerDeps, disparoId: strin
       logger.info({ disparoId, waId: dest.waId }, 'disparo: destinatário suprimido — não enviado');
       continue;
     }
+    /**
+     * 044: as variáveis do destinatário vencem as globais. `null` (todo disparo
+     * da 013) cai no global — a leitura fica aqui, e não numa query com
+     * `COALESCE`, para o texto gravado na thread ser renderizado com o MESMO
+     * array que foi enviado. Renderizar fora do laço, como antes, gravaria na
+     * conversa de todo mundo o texto do primeiro.
+     */
+    const variaveis = Array.isArray(dest.variaveis) ? (dest.variaveis as string[]) : globais;
+    const textoRenderizado =
+      renderizarCorpo(d.corpo, variaveis) + (d.rodape ? `\n\n${d.rodape}` : '');
     try {
       const { waMessageId } = await gateway.sendTemplate({
         to: dest.waId,

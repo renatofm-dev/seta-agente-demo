@@ -145,17 +145,45 @@ export const disparosRoutes: FastifyPluginCallback<DisparosRoutesOpts> = (app, o
 
   app.post('/api/console/disparos', async (req, reply) => {
     const sessao = sessaoDe(req);
+    /**
+     * 044: duas formas de dizer para quem vai, e só uma por disparo.
+     *
+     * `waIds` + `variaveis` global é a 013 ("sua parcela vence amanhã"):
+     * mesma mensagem para todos. `destinatarios` é a cobrança: cada pessoa tem
+     * link e código PIX próprios, e aí não existe valor global que sirva.
+     *
+     * Aceitar as duas ao mesmo tempo criaria a pergunta "qual venceu?" — e a
+     * resposta errada mandaria o PIX de uma pessoa para outra. Por isso o
+     * `refine` recusa em vez de escolher.
+     */
+    const VariavelSchema = z.string().min(1).max(1024);
     const body = z
       .object({
         modeloId: z.uuid(),
-        variaveis: z.array(z.string().min(1).max(1024)).default([]),
-        waIds: z.array(WaPhoneSchema).min(1).max(500),
+        variaveis: z.array(VariavelSchema).default([]),
+        waIds: z.array(WaPhoneSchema).min(1).max(500).optional(),
+        destinatarios: z
+          .array(z.object({ waId: WaPhoneSchema, variaveis: z.array(VariavelSchema) }))
+          .min(1)
+          .max(500)
+          .optional(),
         /** 017: rótulo da campanha (ausente ⇒ nome do modelo). */
         nome: z.string().trim().min(1).max(80).optional(),
         /** 017: meta de conversão própria em bps (ausente ⇒ global do client.yaml). */
         metaConversaoBps: z.number().int().min(0).max(10_000).optional(),
       })
+      .refine((b) => (b.waIds === undefined) !== (b.destinatarios === undefined), {
+        error: 'informe waIds (variáveis globais) OU destinatarios (variáveis por pessoa)',
+      })
+      .refine((b) => b.destinatarios === undefined || b.variaveis.length === 0, {
+        error: 'com destinatarios, as variáveis são de cada um — não mande variaveis global',
+      })
       .parse(req.body);
+
+    /** Lista única: `variaveis: null` ⇒ o destinatário usa as globais. */
+    const alvos: { waId: string; variaveis: string[] | null }[] =
+      body.destinatarios?.map((d) => ({ waId: d.waId, variaveis: d.variaveis })) ??
+      (body.waIds ?? []).map((waId) => ({ waId, variaveis: null }));
 
     const [modelo] = await db
       .select()
@@ -168,13 +196,39 @@ export const disparosRoutes: FastifyPluginCallback<DisparosRoutesOpts> = (app, o
       });
     }
     const esperadas = variaveisDoCorpo(modelo.corpo).length;
-    if (body.variaveis.length !== esperadas) {
+    if (body.waIds && body.variaveis.length !== esperadas) {
       return reply.code(400).send({
         erro: `o corpo do modelo tem ${esperadas} variável(is) e o disparo trouxe ${body.variaveis.length}`,
       });
     }
+    /**
+     * 044: a contagem é conferida por pessoa, e o erro diz DE QUEM. Um disparo
+     * de 200 cobranças em que a 137ª veio com uma variável a menos precisa
+     * apontar a 137ª — "contagem errada" mandaria procurar em 200.
+     */
+    const forasDeConta = (body.destinatarios ?? []).filter((d) => d.variaveis.length !== esperadas);
+    if (forasDeConta.length > 0) {
+      return reply.code(400).send({
+        erro: `o corpo do modelo tem ${esperadas} variável(is); fora da conta: ${forasDeConta
+          .map((d) => `${d.waId} (${d.variaveis.length})`)
+          .join(', ')}`,
+      });
+    }
     // audiência restrita à carteira: wa_id desconhecido é erro, não silêncio
-    const waIds = [...new Set(body.waIds)];
+    const waIds = [...new Set(alvos.map((a) => a.waId))];
+    /**
+     * 044: repetido em `waIds` continua sendo deduplicado em silêncio, como na
+     * 013 — a mensagem é a mesma, mandar uma vez é o que se queria. Em
+     * `destinatarios` é erro: duas linhas para a mesma pessoa são dois PIX
+     * diferentes, e escolher um deles por conta própria seria cobrar o valor
+     * errado.
+     */
+    if (body.destinatarios && waIds.length !== alvos.length) {
+      const contagem = new Map<string, number>();
+      for (const a of alvos) contagem.set(a.waId, (contagem.get(a.waId) ?? 0) + 1);
+      const repetidos = [...contagem].filter(([, n]) => n > 1).map(([w]) => w);
+      return reply.code(400).send({ erro: `destinatário repetido: ${repetidos.join(', ')}` });
+    }
     const daCarteira = await db
       .select({ waId: contato.waId, nome: contato.nome })
       .from(contato)
@@ -207,12 +261,15 @@ export const disparosRoutes: FastifyPluginCallback<DisparosRoutesOpts> = (app, o
         metaConversaoBps: body.metaConversaoBps ?? null,
         criadoPor: sessao.userId,
       });
+      const variaveisDe = new Map(alvos.map((a) => [a.waId, a.variaveis]));
       await tx.insert(disparoDestinatario).values(
         daCarteira.map((c) => ({
           id: newTraceId(),
           disparoId,
           waId: c.waId,
           contatoNome: c.nome,
+          // 044: `null` ⇒ o worker usa as globais (todo disparo da 013)
+          variaveis: variaveisDe.get(c.waId) ?? null,
           ...(suprimidos.has(c.waId)
             ? { status: 'recusado' as const, erro: 'contato na lista de supressão' }
             : {}),
@@ -233,7 +290,7 @@ export const disparosRoutes: FastifyPluginCallback<DisparosRoutesOpts> = (app, o
       SELECT d.id, d.status, d.variaveis, d.criado_em, d.nome, d.meta_conversao_bps,
              m.nome AS modelo_nome,
              ct.total, ct.enviados, ct.entregues, ct.lidos, ct.falhas, ct.pendentes,
-             ct.recusados
+             ct.recusados, ct.variaveis_por_destinatario
       FROM disparo d
       JOIN modelo_mensagem m ON m.id = d.modelo_id
       LEFT JOIN LATERAL (
@@ -244,7 +301,11 @@ export const disparosRoutes: FastifyPluginCallback<DisparosRoutesOpts> = (app, o
                count(*) FILTER (WHERE dd.status = 'falha')::int AS falhas,
                count(*) FILTER (WHERE dd.status = 'pendente')::int AS pendentes,
                -- 044: recusado é opt-out respeitado, não erro de envio
-               count(*) FILTER (WHERE dd.status = 'recusado')::int AS recusados
+               count(*) FILTER (WHERE dd.status = 'recusado')::int AS recusados,
+               -- 044: com variável por destinatário não existe valor global para
+               -- mostrar na linha; sem esta flag o console mostraria NADA, que se
+               -- lê como "campanha sem variáveis"
+               bool_or(dd.variaveis IS NOT NULL) AS variaveis_por_destinatario
         FROM disparo_destinatario dd WHERE dd.disparo_id = d.id
       ) ct ON true
       ORDER BY d.criado_em DESC

@@ -120,10 +120,19 @@ export default function CampanhasPage() {
               <Linha key={d.id} colunas={COLUNAS} onClick={() => router.push(`/campanhas/${d.id}`)}>
                 <span className="min-w-0">
                   <span className="block truncate font-semibold">{d.nome ?? d.modelo_nome}</span>
-                  {d.variaveis.length > 0 && (
+                  {d.variaveis.length > 0 ? (
                     <span className="block truncate text-[11.5px] text-text-3">
                       {d.variaveis.join(' · ')}
                     </span>
+                  ) : (
+                    // 044: cobrança tem link e PIX de cada um — não há valor
+                    // global para listar aqui. Dizer isso é melhor que a linha
+                    // vazia, que se lê como campanha sem variável nenhuma.
+                    d.variaveis_por_destinatario && (
+                      <span className="block truncate text-[11.5px] text-text-3">
+                        variáveis por destinatário
+                      </span>
+                    )
                   )}
                 </span>
                 <span className="text-text-2">
