@@ -36,14 +36,25 @@ curl -X POST "https://graph.facebook.com/v21.0/$WA_PHONE_NUMBER_ID" \
 # conferir: "application" é o webhook do app (produção), "phone_number" é o override
 curl "https://graph.facebook.com/v21.0/$WA_PHONE_NUMBER_ID?fields=webhook_configuration,display_phone_number" \
   -H "Authorization: Bearer $WA_ACCESS_TOKEN"
-# {"webhook_configuration":{"application":"https://seta.outerlab.com.br/webhook",
+# {"webhook_configuration":{"application":"https://n8n.setaia.com.br/webhook/…",
 #                           "phone_number":"https://<túnel>.trycloudflare.com/webhook"}, …}
+# (o `application` deste app é um fluxo do n8n — não é nosso; ver o aviso abaixo)
 
-# remover (o número volta ao webhook do app)
+# devolver para a VPS da demo ao terminar (NÃO remova: ver o aviso abaixo)
 curl -X POST "https://graph.facebook.com/v21.0/$WA_PHONE_NUMBER_ID" \
   -H "Authorization: Bearer $WA_ACCESS_TOKEN" -H "Content-Type: application/json" \
-  -d '{"webhook_configuration":{"override_callback_uri":""}}'
+  -d '{"webhook_configuration":{"override_callback_uri":"https://api.demo.setaia.com.br/webhook","verify_token":"'"$WA_VERIFY_TOKEN"'"}}'
 ```
+
+> **Remover o override não é neutro.** Sem override, o número volta ao webhook
+> **do app** — e o webhook do app deste número não é nosso: é um fluxo do
+> **n8n** (`n8n.setaia.com.br/webhook/…`), que divide o mesmo app Meta. Desde
+> que a demo subiu na VPS (24/09/2026), o **destino de repouso** do número é
+> `https://api.demo.setaia.com.br/webhook`, e é para lá que ele tem de voltar.
+> O `limpar()` do script faz isso sozinho: guarda o destino antes de
+> sobrescrever e devolve no `Ctrl+C`. Esvaziar o override só é certo se não
+> havia nenhum. Um `curl` conferindo o `application` antes mostra para onde o
+> número cairia.
 
 Ao aplicar o override, a Meta faz na hora o **handshake** de verificação: `GET
 <url>/webhook?hub.mode=subscribe&hub.verify_token=…&hub.challenge=<n>` e espera o `<n>` de volta.
@@ -80,7 +91,7 @@ sequenceDiagram
   T->>S: POST /webhook
   S-->>G: POST /messages (resposta do agente)
   G-->>C: mensagem do agente
-  D->>G: Ctrl+C - override_callback_uri = "" (volta ao webhook do app)
+  D->>G: Ctrl+C - override_callback_uri = destino anterior (a VPS da demo)
 ```
 
 | # | Passo | Linhas | Detalhe que importa |
@@ -94,7 +105,7 @@ sequenceDiagram
 | 7 | Handshake **público** pelo túnel, até 20 tentativas | 156–167 | Prova que a Meta vai conseguir verificar antes de pedir o override. |
 | 8 | `POST` do override e exige `"success":true`; `GET` de conferência impresso na tela | 169–182 | O JSON impresso mostra `application` (produção) e `phone_number` (o túnel) — confira que o `display_phone_number` é o número de teste. |
 | 9 | Webhook do **Asaas** pelo mesmo túnel (`seta-dev` → `/webhooks/asaas`) | 184–224 | Só com `ASAAS_API_KEY` + `ASAAS_WEBHOOK_TOKEN` + `ASAAS_WEBHOOK_EMAIL`. Best-effort: falha aqui não derruba o teste do WhatsApp. Ver [`asaas-setup.md`](../asaas-setup.md). |
-| 10 | `wait` no túnel. **`Ctrl+C`** → `limpar()` | 53–78, 232 | Esvazia o override (`override_callback_uri: ""`), desliga o webhook do Asaas, mata o túnel e o grupo do `pnpm dev` (se foi o script que subiu). Por isso o número **nunca fica apontando para uma URL morta**. |
+| 10 | `wait` no túnel. **`Ctrl+C`** → `limpar()` | 53–78, 232 | **Devolve** o número ao destino que ele tinha antes (a VPS da demo), e só esvazia o override se não havia nenhum; desliga o webhook do Asaas, mata o túnel e o grupo do `pnpm dev` (se foi o script que subiu). Por isso o número **nunca fica apontando para uma URL morta nem cai no fluxo do n8n**. |
 
 ### Quando o `Ctrl+C` não acontece
 
@@ -167,8 +178,8 @@ Mande "oi" do celular. Acompanhe em `http://localhost:3000/inbox` e no log do se
 
 Se o túnel cair no meio (Wi-Fi, suspensão da máquina): a URL antiga morre e o override aponta
 para o nada. Rode `pnpm dev-whatsapp` de novo — URL nova, override novo. Se o processo morreu sem
-passar pelo `limpar()` (kill -9, máquina reiniciada), remova o override na mão com o `curl` da
-seção anterior; a Meta não avisa que o webhook está morto, o número só fica surdo.
+passar pelo `limpar()` (kill -9, máquina reiniciada), aponte o override de volta para a VPS na mão
+com o `curl` da seção anterior; a Meta não avisa que o webhook está morto, o número só fica surdo.
 
 ## Na mão, sem o script
 
@@ -185,9 +196,11 @@ curl -X POST "https://graph.facebook.com/v21.0/$WA_PHONE_NUMBER_ID" \
   -H "Authorization: Bearer $WA_ACCESS_TOKEN" -H "Content-Type: application/json" \
   -d '{"webhook_configuration":{"override_callback_uri":"'"$URL"'/webhook","verify_token":"'"$WA_VERIFY_TOKEN"'"}}'
 # … teste …
+# SEMPRE, ao terminar: devolva o número para a VPS. Esvaziar o override o
+# entregaria ao webhook do app, que é um fluxo do n8n.
 curl -X POST "https://graph.facebook.com/v21.0/$WA_PHONE_NUMBER_ID" \
   -H "Authorization: Bearer $WA_ACCESS_TOKEN" -H "Content-Type: application/json" \
-  -d '{"webhook_configuration":{"override_callback_uri":""}}'   # SEMPRE, ao terminar
+  -d '{"webhook_configuration":{"override_callback_uri":"https://api.demo.setaia.com.br/webhook","verify_token":"'"$WA_VERIFY_TOKEN"'"}}'
 ```
 
 ## Diagnóstico

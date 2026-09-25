@@ -25,8 +25,9 @@ verificados — suficiente para a demo (000). WABA real fica para depois da POC.
 
 - URL de produção (011): `https://seta.outerlab.com.br/webhook`
 - Dev (1 comando): sobe o `pnpm dev` se preciso, abre um túnel Cloudflare e
-  aplica o override de webhook **só no número de teste** (produção intacta;
-  Ctrl+C remove o override e derruba tudo):
+  aplica o override de webhook **só no número de teste** (o webhook do app
+  intacto; Ctrl+C devolve o número ao destino anterior — a VPS da demo — e
+  derruba tudo):
 
   ```sh
   pnpm dev-whatsapp        # = tools/dev-whatsapp.sh
