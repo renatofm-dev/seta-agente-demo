@@ -533,7 +533,19 @@ describe('spec 013 — disparos para a carteira', () => {
     });
     expect(inbound.statusCode).toBe(202);
 
-    await aguardar(async () => (await db.select().from(supressao)).length === 1);
+    /**
+     * A espera fica no OUTBOX, não na supressão.
+     *
+     * O caminho grava a supressão e SÓ DEPOIS enfileira a confirmação
+     * (`turno-handler.ts`: `suprimir` → `enviar`). Esperar a supressão e ler o
+     * outbox na sequência deixa uma janela em que a linha ainda não existe —
+     * flake que apareceu no CI com `expected [] to have a length of 1`, e que
+     * passava sempre na máquina local, mais rápida.
+     *
+     * Esperar o artefato POSTERIOR cobre os dois: se a confirmação está no
+     * outbox, a supressão já foi gravada.
+     */
+    await aguardar(async () => (await db.select().from(outbox)).length === 1);
     const [linha] = await db.select().from(supressao);
     expect(linha).toMatchObject({ waId: '5511999990001', origem: 'pedido_do_contato' });
     expect(linha?.detalhe).toBe('SAIR');
