@@ -405,4 +405,33 @@ describe('critérios spec 015a (via simulador)', { timeout: 90_000 }, () => {
     expect(trace.escalado).toBe(false);
     expect(triggersDe(trace)).not.toContain('interesse_compra');
   });
+
+  /**
+   * #44 — a persona segue o VÍNCULO, não a existência das deps do SDR.
+   *
+   * A 045 abriu o fluxo de venda para o cotista, e com isso `sdrDeps` passou a
+   * existir para todo mundo. A seleção da persona ainda olhava `sdrDeps`, então
+   * o cotista recebia a persona COMERCIAL — a que diz "você não tem acesso a
+   * contrato, parcelas, boleto ou segunda via nesta raia". Na primeira pergunta
+   * da conversa, com as 19 tools do cotista na mão.
+   */
+  it('#44: a persona vem do vínculo — cotista recebe a de atendimento, lead a comercial', async () => {
+    const systemDoUltimoTurno = (): string => {
+      const req = fake.requests[fake.requests.length - 1];
+      const sys = req?.messages.find((m) => m.role === 'system');
+      return typeof sys?.content === 'string' ? sys.content : '';
+    };
+
+    fake.respondeTexto('outro_assunto');
+    await turnoDe(WA_VINCULADO, 'quais boletos eu tenho em aberto?');
+    const doCotista = systemDoUltimoTurno();
+    expect(doCotista).toContain('assistente oficial de atendimento aos cotistas');
+    expect(doCotista).not.toContain('assistente comercial');
+
+    fake.respondeTexto('outro_assunto');
+    await turnoDe(LEAD_A, 'quanto custa uma cota?');
+    const doLead = systemDoUltimoTurno();
+    expect(doLead).toContain('assistente comercial');
+    expect(doLead).not.toContain('assistente oficial de atendimento aos cotistas');
+  });
 });

@@ -894,10 +894,32 @@ async function processarComAgente(
     }));
   }
 
+  /**
+   * Quem está na raia COMERCIAL é quem não tem vínculo — e a conta é `clienteId
+   * === ''`, não `sdrDeps !== null`.
+   *
+   * A 015 ligava o SDR só para lead frio, e ali `sdrDeps` e "sem vínculo" eram
+   * a mesma coisa. A 045 abriu o fluxo de venda para o cotista também (ele pode
+   * comprar outra cota), então `sdrDeps` passou a existir para TODO MUNDO — e
+   * esta linha, que não mudou, passou a dar a persona comercial ao cotista.
+   *
+   * O efeito (#44): a persona comercial diz "VOCÊ NÃO TEM ACESSO a contrato,
+   * parcelas, boleto ou segunda via nesta raia" e manda escalar quem se diz
+   * cotista. O agente recebia as 19 tools do cotista na mão e respondia que não
+   * podia consultar — sem escalar, prometendo um atendente que ninguém acionou.
+   * Na primeira pergunta da conversa, que é a que o cliente vê na demo.
+   *
+   * `comercialSemVinculo` é a MESMA condição que o hook de guardrail da 015c já
+   * usa 20 linhas abaixo, com o comentário explicando esta exata armadilha. O
+   * conserto é usar uma conta só para as duas decisões, para não divergirem de
+   * novo na próxima spec que mexer no SDR.
+   */
+  const comercialSemVinculo = sdrDeps !== null && clienteId === '';
+
   // #47: com a conversa na fila, o agente sabe que o humano já foi acionado —
   // atende outros assuntos e não promete (nem escala) de novo o mesmo tema
   // 015: na raia do lead frio a persona é a comercial (personaSdr), se houver
-  const personaBase = sdrDeps
+  const personaBase = comercialSemVinculo
     ? (deps.clientConfig.personaSdr ?? deps.clientConfig.persona)
     : deps.clientConfig.persona;
   const persona =
@@ -925,7 +947,6 @@ async function processarComAgente(
    * O cotista COMPRANDO não fica descoberto: ali o fluxo de venda é
    * determinístico e consome o turno antes do LLM — não há rascunho para barrar.
    */
-  const comercialSemVinculo = sdrDeps !== null && clienteId === '';
   const runtime = createAgentRuntime({
     provider: deps.provider,
     guardrails: comercialSemVinculo
