@@ -1,5 +1,5 @@
 id: financeiro.titulos_atraso
-version: 2
+version: 3
 description: >-
   Parcelas VENCIDAS do contrato da sessão, da mais antiga para a mais nova:
   origem (entrada|saldo), número da parcela, total de parcelas, valor em
@@ -8,6 +8,10 @@ description: >-
   atraso em dias). Use quando o cotista perguntar o que está atrasado,
   vencido ou pendente. Lista vazia significa contrato em dia. Para PAGAR
   parcelas, use iniciar_pagamento.
+  Ao falar de dinheiro, COPIE `valor_reais` e `saldo_vencido_reais` como vêm —
+  já estão em reais. Nunca divida os campos `_centavos` nem some valores por
+  conta própria: em campo o modelo errou a casa decimal e diria ao cotista que
+  ele deve dez vezes menos (o guardrail barrou, mas a resposta foi perdida).
 entities: [titulo, inadimplencia]
 modules: [financeiro]
 params:
@@ -18,7 +22,11 @@ params:
 sql: >-
   SELECT t.id, t.origem, t.parcela, t.total_parcelas, t.valor_centavos, t.vencimento,
          i.qtd_titulos_vencidos, i.saldo_vencido_centavos,
-         i.vencimento_mais_antigo, i.maior_atraso_dias
+         i.vencimento_mais_antigo, i.maior_atraso_dias,
+         (t.valor_centavos / 100)::text || ',' ||
+           lpad((t.valor_centavos % 100)::text, 2, '0') AS valor_reais,
+         (i.saldo_vencido_centavos / 100)::text || ',' ||
+           lpad((i.saldo_vencido_centavos % 100)::text, 2, '0') AS saldo_vencido_reais
   FROM v_titulo t
   JOIN v_inadimplencia i ON i.contrato_id = t.contrato_id
   WHERE t.contrato_id = :contrato_id AND t.status = 'vencido'
@@ -38,6 +46,8 @@ output:
     - saldo_vencido_centavos
     - vencimento_mais_antigo
     - maior_atraso_dias
+    - valor_reais
+    - saldo_vencido_reais
   masking: {}
 tool:
   expose: true

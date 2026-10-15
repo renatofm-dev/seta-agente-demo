@@ -1,5 +1,5 @@
 id: financeiro.proxima_parcela
-version: 1
+version: 2
 description: >-
   Próxima parcela A VENCER do contrato da sessão: valor em centavos, data de
   vencimento, meio de pagamento (boleto|pix|cartao_recorrente) e, quando
@@ -7,6 +7,9 @@ description: >-
   cotista perguntar quando vence a próxima parcela, quanto vai pagar ou pedir
   a segunda via/código de pagamento. Parcelas já vencidas ficam na tool de
   atraso.
+  Ao falar de dinheiro, COPIE o campo `*_reais` como vem — já está em reais.
+  Nunca divida os campos `_centavos`: em campo o modelo errou a casa decimal e
+  diria ao cotista um valor dez vezes menor.
 entities: [titulo]
 modules: [financeiro]
 params:
@@ -16,7 +19,8 @@ params:
     description: Contrato vinculado à sessão (nunca vem do modelo).
 sql: >-
   SELECT id, origem, parcela, valor_centavos, vencimento, meio_pagamento,
-         linha_digitavel, pix_copia_cola
+         linha_digitavel, pix_copia_cola,
+         (valor_centavos / 100)::text || ',' || lpad((valor_centavos % 100)::text, 2, '0') AS valor_reais
   FROM v_titulo
   WHERE contrato_id = :contrato_id AND status = 'aberto'
   ORDER BY vencimento ASC
@@ -30,6 +34,7 @@ output:
     - origem
     - parcela
     - valor_centavos
+    - valor_reais
     - vencimento
     - meio_pagamento
     - linha_digitavel

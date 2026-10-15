@@ -482,3 +482,38 @@ describe('015c: percentual na raia do SDR', () => {
     }
   });
 });
+
+/**
+ * Regressão de campo (15/10/2026): o agente respondeu "7 parcelas em atraso,
+ * totalizando R$ 1.474,90" quando o saldo era R$ 14.749,00 — errou a casa
+ * decimal ao dividir `saldo_vencido_centavos` por conta própria, e **para
+ * menos**: diria ao cotista que ele deve dez vezes menos.
+ *
+ * O guardrail barrou, porque `147490` não tinha origem em tool nenhuma do
+ * turno. Estes testes fixam as duas pontas: o valor inventado continua barrado,
+ * e o valor COPIADO do campo `*_reais` que o catálogo passou a devolver é
+ * aceito — senão o conserto do catálogo quebraria o caminho feliz.
+ */
+describe('regressão: casa decimal de centavos (campo, 15/10)', () => {
+  const g = guardrailPreco();
+  const ctx = ctxComTools(
+    [{ valor_centavos: 210700, saldo_vencido_centavos: 1474900, saldo_vencido_reais: '14749,00' }],
+    false, // não é price_source: só colunas monetárias validam
+  );
+
+  it('valor com a casa decimal errada é barrado', async () => {
+    const r = await g.beforeReply?.('Você tem 7 parcelas, totalizando R$ 1.474,90.', ctx);
+    expect(r?.tipo).toBe('escalate');
+    expect(r?.reason).toContain('1474.9');
+  });
+
+  it('o valor certo passa — é o que o campo *_reais entrega para copiar', async () => {
+    const r = await g.beforeReply?.('Você tem 7 parcelas, totalizando R$ 14.749,00.', ctx);
+    expect(r?.tipo).toBe('allow');
+  });
+
+  it('a parcela individual também passa', async () => {
+    const r = await g.beforeReply?.('A parcela 21 é de R$ 2.107,00.', ctx);
+    expect(r?.tipo).toBe('allow');
+  });
+});

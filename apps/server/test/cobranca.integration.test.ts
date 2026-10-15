@@ -986,6 +986,16 @@ describe('spec 044 — campanha de cobrança pela carteira', () => {
     await db.delete(contato).where(eq(contato.waId, segundo));
   }, 30_000);
 
+  /**
+   * A supressão é desfeita no `afterAll`, não no fim do corpo: o fim do corpo
+   * não roda se um assert falhar antes, e `beforeEach` limpa ANTES de cada
+   * teste — nunca depois do último. Foi exatamente assim que esta linha vazou
+   * para o `relatorio-campanhas` e derrubou o funil dele (15/10).
+   */
+  afterAll(async () => {
+    await db.delete(supressao);
+  });
+
   it('quem pediu para sair não entra na campanha', async () => {
     await suprimir(db, WA_INADIMPLENTE, 'pedido_do_contato', 'pediu para sair');
     const r = await apiConsole('POST', '/api/console/cobranca/campanha', {});
