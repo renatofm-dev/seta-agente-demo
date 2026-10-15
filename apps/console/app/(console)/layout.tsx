@@ -44,6 +44,9 @@ const NAV: ItemNav[] = [
     badge: (r) => r.cobrancasAguardandoAprovacao,
     modulo: 'pagamentos',
   },
+  // 044: a Carteira responde "quem cobrar"; Cobranças responde "o que já foi
+  // cobrado". São perguntas diferentes, por isso itens diferentes.
+  { href: '/carteira', rotulo: 'Carteira', modulo: 'pagamentos' },
   { href: '/leads', rotulo: 'Leads', badge: (r) => r.leadsAguardandoAprovacao, modulo: 'sdr' },
   // 045: a venda mora ao lado de Leads — é o que acontece depois que o lead aceita
   { href: '/vendas', rotulo: 'Vendas', modulo: 'sdr' },
