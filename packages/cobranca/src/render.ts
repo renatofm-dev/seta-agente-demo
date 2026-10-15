@@ -147,14 +147,32 @@ export interface DadosEmissao {
   readonly linhaDigitavel: string | null;
   readonly pixCopiaCola: string | null;
   readonly reenvio: boolean;
+  /**
+   * #43: presente quando a emissão foi LIBERADA POR APROVAÇÃO humana, com a
+   * quantidade de parcelas que o cotista confirmou.
+   *
+   * Existe porque a mensagem "Seu boleto está pronto!" era idêntica nos dois
+   * casos — pedido agora e pedido que esperou. Quando houve espera, o pedido já
+   * saiu da cabeça de quem esperou, e no pior caso ele já pediu outra coisa: em
+   * campo, a aprovação saiu um segundo depois de o cotista perguntar por PIX, e
+   * o boleto aprovado chegou junto da resposta ao PIX. Ele leu como erro de
+   * método.
+   */
+  readonly aprovacao?: { readonly qtdParcelas: number } | undefined;
 }
 
 /** Mensagens da cobrança emitida: explicação + (boleto/PIX) o código sozinho, para copiar. */
 export function mensagensEmitida(d: DadosEmissao): string[] {
   const valor = formatarReais(d.valorCentavos);
+  // `reenvio` vence: ele já explica que é a mesma cobrança de antes, e hoje os
+  // dois nunca coexistem (reenvio só nasce em `fluxo.ts`, dentro da janela).
   const prefixo = d.reenvio
     ? `Você já tinha um ${NOME_METODO[d.metodo]} gerado para essas parcelas — reenviando:\n`
-    : '';
+    : d.aprovacao
+      ? `Aprovado pela nossa equipe! Aqui está o ${NOME_METODO[d.metodo]} ${
+          d.aprovacao.qtdParcelas === 1 ? 'da parcela' : `das ${d.aprovacao.qtdParcelas} parcelas`
+        } que você confirmou:\n`
+      : '';
   switch (d.metodo) {
     case 'boleto': {
       const link = d.urlBoleto ?? d.urlFatura;

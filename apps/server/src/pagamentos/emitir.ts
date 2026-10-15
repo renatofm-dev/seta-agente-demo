@@ -137,6 +137,10 @@ export async function processarEmissao(
       // definição — quando existir reenvio fora da janela (040/044), é ele que
       // passa `reenvio: true` e o montador escolhe `boleto_segunda_via`.
       reenvio: false,
+      // #43: só quando um humano liberou. `aprovadoPor` é gravado pela tela de
+      // Cobranças; emissão dentro da alçada chega aqui com ele nulo e a
+      // mensagem fica exatamente como era.
+      ...(c.aprovadoPor ? { aprovacao: { qtdParcelas: titulos.length } } : {}),
     };
     const textos = mensagensEmitida(dados);
     const template =

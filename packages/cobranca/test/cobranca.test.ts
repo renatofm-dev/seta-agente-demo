@@ -96,6 +96,52 @@ describe('spec 014 — render', () => {
     expect(cartao[0]).toContain('https://x/i/1');
     expect(cartao[0]).toContain('nunca peço dados do cartão');
   });
+
+  /**
+   * #43 — a cobrança liberada por aprovação diz a que pedido pertence.
+   *
+   * Sem o prefixo, "Seu boleto está pronto!" é idêntico para o pedido de agora
+   * e para o que esperou aprovação. Em campo o segundo chegou junto da resposta
+   * a OUTRO pedido do cotista, e ele leu como erro de método.
+   */
+  it('#43: emissão por aprovação se liga ao pedido; dentro da alçada não muda', () => {
+    const base = {
+      valorCentavos: 977500,
+      vencimento: '2026-09-28',
+      urlFatura: 'https://x/i/1',
+      urlBoleto: 'https://x/b/1',
+      linhaDigitavel: '46191110',
+      pixCopiaCola: null,
+      reenvio: false,
+      metodo: 'boleto' as const,
+    };
+
+    const aprovada = mensagensEmitida({ ...base, aprovacao: { qtdParcelas: 5 } });
+    expect(aprovada[0]).toContain('Aprovado pela nossa equipe');
+    expect(aprovada[0]).toContain('das 5 parcelas que você confirmou');
+    // o conteúdo que já existia continua inteiro
+    expect(aprovada[0]).toContain('Seu boleto está pronto');
+    expect(aprovada[0]).toContain('https://x/b/1');
+    expect(aprovada[1]).toBe('46191110');
+
+    // uma parcela: singular, não "das 1 parcelas"
+    const uma = mensagensEmitida({ ...base, aprovacao: { qtdParcelas: 1 } });
+    expect(uma[0]).toContain('da parcela que você confirmou');
+
+    // dentro da alçada (sem aprovação) a mensagem é a de antes, sem prefixo
+    const direta = mensagensEmitida(base);
+    expect(direta[0]).not.toContain('Aprovado');
+    expect(direta[0].startsWith('Seu boleto está pronto')).toBe(true);
+
+    // reenvio vence a aprovação — é a explicação mais específica
+    const reenviada = mensagensEmitida({
+      ...base,
+      reenvio: true,
+      aprovacao: { qtdParcelas: 5 },
+    });
+    expect(reenviada[0]).toContain('reenviando');
+    expect(reenviada[0]).not.toContain('Aprovado');
+  });
 });
 
 describe('spec 014 — referência externa', () => {
