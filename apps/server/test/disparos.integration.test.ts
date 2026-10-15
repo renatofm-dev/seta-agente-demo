@@ -2,7 +2,7 @@ import { join } from 'node:path';
 import { createFakeProvider } from '@seta/ai-provider/testing';
 import { loadClientConfig } from '@seta/client-config';
 import { createPgConnector, type DbConnector } from '@seta/erp-connector';
-import { createLogger, createNoopObsEmitter } from '@seta/observability';
+import { createLogger, createNoopObsEmitter, newTraceId } from '@seta/observability';
 import { createExecutor, type Executor, loadCatalog } from '@seta/query-catalog';
 import {
   type OutboundTemplate,
@@ -668,5 +668,122 @@ describe('spec 044 — variáveis por destinatário', () => {
       variaveis: [],
       variaveis_por_destinatario: true,
     });
+  }, 30_000);
+});
+
+/**
+ * 044 — ritmo de envio: pausa entre destinatários e disjuntor por falhas
+ * consecutivas.
+ *
+ * O laço era sequencial sem pausa, sem backoff e sem parada. Para aviso da 013
+ * passava; para cobrança proativa o preço de errar não é um disparo perdido, é
+ * a qualidade do número na Meta.
+ *
+ * Os testes chamam `processarDisparo` DIRETO, sem passar pela fila: o worker
+ * registrado no `beforeAll` usa o ritmo padrão, e disputar o mesmo job com ele
+ * daria um teste que passa ou falha pela ordem do agendador.
+ */
+describe('spec 044 — ritmo de envio', () => {
+  async function disparoCru(nome: string, waIds: string[]): Promise<string> {
+    const modelo = await modeloAprovado(nome, 'Olá {{1}}!');
+    const disparoId = newTraceId();
+    await db.insert(disparo).values({
+      id: disparoId,
+      modeloId: modelo.id,
+      variaveis: ['cotista'],
+      criadoPor: 'teste',
+    });
+    await db
+      .insert(disparoDestinatario)
+      .values(waIds.map((waId) => ({ id: newTraceId(), disparoId, waId, contatoNome: waId })));
+    return disparoId;
+  }
+
+  it('para por falhas consecutivas e deixa o resto PENDENTE para reprocesso', async () => {
+    gatewayFake.falhar.add('5511999990001');
+    gatewayFake.falhar.add('5511999990002');
+    const id = await disparoCru('ritmo_disjuntor', [
+      '5511999990001',
+      '5511999990002',
+      '5511999990003',
+    ]);
+
+    await processarDisparo(
+      {
+        db,
+        boss,
+        gateway: gatewayFake.gateway,
+        logger,
+        ritmo: { pausaMs: 0, pararEmFalhasSeguidas: 2 },
+      },
+      id,
+    );
+
+    const dests = await db
+      .select()
+      .from(disparoDestinatario)
+      .where(eq(disparoDestinatario.disparoId, id));
+    const porWa = new Map(dests.map((d) => [d.waId, d.status]));
+    expect(porWa.get('5511999990001')).toBe('falha');
+    expect(porWa.get('5511999990002')).toBe('falha');
+    // o terceiro NUNCA foi tentado — e continua pendente, não "falha"
+    expect(porWa.get('5511999990003')).toBe('pendente');
+    expect(gatewayFake.templates.map((t) => t.to)).not.toContain('5511999990003');
+
+    // e o disparo NÃO foi concluído: concluir marcaria como feito o que não saiu
+    const [d] = await db.select().from(disparo).where(eq(disparo.id, id));
+    expect(d?.status).toBe('enviando');
+  }, 30_000);
+
+  it('sucesso zera o contador: falhas alternadas não abrem o disjuntor', async () => {
+    gatewayFake.falhar.add('5511999990002');
+    const id = await disparoCru('ritmo_alternado', [
+      '5511999990001',
+      '5511999990002',
+      '5511999990003',
+    ]);
+
+    await processarDisparo(
+      {
+        db,
+        boss,
+        gateway: gatewayFake.gateway,
+        logger,
+        ritmo: { pausaMs: 0, pararEmFalhasSeguidas: 2 },
+      },
+      id,
+    );
+
+    const dests = await db
+      .select()
+      .from(disparoDestinatario)
+      .where(eq(disparoDestinatario.disparoId, id));
+    const porWa = new Map(dests.map((d) => [d.waId, d.status]));
+    expect(porWa.get('5511999990001')).toBe('enviado');
+    expect(porWa.get('5511999990002')).toBe('falha');
+    // chegou ao fim: a falha do meio não parou o disparo
+    expect(porWa.get('5511999990003')).toBe('enviado');
+    const [d] = await db.select().from(disparo).where(eq(disparo.id, id));
+    expect(d?.status).toBe('concluido');
+  }, 30_000);
+
+  it('a pausa espaça os envios, e não acontece antes do primeiro', async () => {
+    const id = await disparoCru('ritmo_pausa', ['5511999990001', '5511999990003']);
+    const inicio = Date.now();
+    await processarDisparo(
+      {
+        db,
+        boss,
+        gateway: gatewayFake.gateway,
+        logger,
+        ritmo: { pausaMs: 400, pararEmFalhasSeguidas: 3 },
+      },
+      id,
+    );
+    const gasto = Date.now() - inicio;
+    // 2 destinatários ⇒ UMA pausa (nunca antes do primeiro, nunca depois do último)
+    expect(gasto).toBeGreaterThanOrEqual(400);
+    expect(gasto).toBeLessThan(1_200);
+    expect(gatewayFake.templates).toHaveLength(2);
   }, 30_000);
 });

@@ -336,7 +336,10 @@ export const cobranca = pgTable(
      * contrato, e `contrato_id` carrega `lead:{id}` só para chavear o cliente
      * no PSP (ver a decisão registrada no PR).
      */
-    origem: text('origem', { enum: ['contrato', 'venda'] })
+    // 044: `campanha` = cobrança ativa, aberta pela plataforma e não pedida pelo
+    // cotista. O relatório da 017 precisa distinguir: conversão de campanha não
+    // se mede junto com cobrança que o próprio cotista pediu.
+    origem: text('origem', { enum: ['contrato', 'venda', 'campanha'] })
       .notNull()
       .default('contrato'),
     propostaId: uuid('proposta_id'),

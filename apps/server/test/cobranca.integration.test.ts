@@ -46,6 +46,7 @@ import {
   pagamento,
   pspCliente,
   sinalAprendizado,
+  supressao,
   ticket,
   traceTurno,
   turno,
@@ -59,6 +60,7 @@ import { createDrizzleQueryEventSink } from '../src/query-event-sink.ts';
 import { createPgVectorStore } from '../src/rag/pgvector-store.ts';
 import { seedApp, USUARIOS_DEMO } from '../src/seed-app.ts';
 import { registerDebounceWorker } from '../src/wa/debounce.ts';
+import { suprimir } from '../src/wa/supressao.ts';
 import { ticketPermiteBot } from '../src/wa/tickets.ts';
 import { createAgentTurnoHandler } from '../src/wa/turno-handler.ts';
 
@@ -314,7 +316,8 @@ beforeAll(async () => {
     env,
     clientConfig,
     wa: { db, boss },
-    console: { auth, executor },
+    // 044: `erp` destrava as rotas de campanha de cobrança
+    console: { auth, executor, erp: connector },
     pagamentos: { repo, psp },
   });
 
@@ -341,6 +344,9 @@ beforeEach(async () => {
   }
   for (let tentativa = 0; ; tentativa++) {
     try {
+      // 044: supressão de um teste não pode vazar para o próximo — foi assim
+      // que a campanha apareceu com tudo "suprimido" na primeira rodada
+      await db.delete(supressao);
       await db.delete(pagamento);
       await db.delete(cobrancaTitulo);
       await db.delete(fluxoCobranca);
@@ -885,4 +891,74 @@ describe('spec 014 — compra e cobrança pelo WhatsApp', () => {
     expect(t.variaveis).toHaveLength(4); // contrato do corpo aprovado
     expect(t.variaveis[2]).toBe(c.linhaDigitavel);
   }, 60_000);
+});
+
+/**
+ * 044 — cobrança ativa pela carteira inadimplente.
+ *
+ * O que estes testes protegem, em ordem de gravidade: que o dry-run NÃO crie
+ * nada (é o que separa olhar a carteira de cobrar gente de verdade), que a
+ * supressão seja respeitada antes de qualquer cobrança nascer, e que a mesma
+ * parcela não seja cobrada duas vezes.
+ */
+describe('spec 044 — campanha de cobrança pela carteira', () => {
+  it('lista a carteira inadimplente com a parcela mais antiga de cada contrato', async () => {
+    const r = await apiConsole('GET', '/api/console/cobranca/carteira');
+    expect(r.statusCode).toBe(200);
+    const body = r.json();
+    // o seed tem 10002 e 10003 inadimplentes na carteira; 10001 está em dia
+    const porWa = new Map(body.linhas.map((l: { waId: string }) => [l.waId, l]));
+    expect(porWa.has(WA_INADIMPLENTE)).toBe(true);
+    expect(porWa.has(WA_EM_DIA)).toBe(false);
+
+    const alvo = porWa.get(WA_INADIMPLENTE) as {
+      qtdVencidas: number;
+      parcela: number;
+      parcelaValorCentavos: number;
+      recusa: string | null;
+    };
+    expect(alvo.qtdVencidas).toBeGreaterThan(0);
+    expect(alvo.parcelaValorCentavos).toBeGreaterThan(0);
+    expect(alvo.recusa).toBeNull();
+  }, 30_000);
+
+  it('dry-run é o padrão: devolve o plano e NÃO cria cobrança nenhuma', async () => {
+    const antes = await db.select().from(cobranca);
+    const r = await apiConsole('POST', '/api/console/cobranca/campanha', {});
+    expect(r.statusCode).toBe(200);
+    expect(r.json().dryRun).toBe(true);
+    expect(r.json().cobraveis).toBeGreaterThan(0);
+    const depois = await db.select().from(cobranca);
+    expect(depois).toHaveLength(antes.length);
+  }, 30_000);
+
+  it('confirmar: true cria a cobrança com origem campanha e recusa quem já tem uma', async () => {
+    const r = await apiConsole('POST', '/api/console/cobranca/campanha', { confirmar: true });
+    expect(r.statusCode).toBe(202);
+    expect(r.json().dryRun).toBe(false);
+    expect(r.json().cobrancasCriadas).toBeGreaterThan(0);
+
+    const criadas = await db.select().from(cobranca).where(eq(cobranca.origem, 'campanha'));
+    expect(criadas.length).toBeGreaterThan(0);
+    const umaDelas = criadas[0];
+    expect(umaDelas?.metodo).toBe('boleto');
+    expect(umaDelas?.status).toBe('emitindo');
+
+    // segunda chamada: a MESMA parcela não é cobrada de novo
+    const r2 = await apiConsole('POST', '/api/console/cobranca/campanha', { confirmar: true });
+    expect(r2.statusCode).toBe(202);
+    expect(r2.json().cobrancasCriadas).toBe(0);
+    expect(r2.json().recusados.map((x: { recusa: string }) => x.recusa)).toContain(
+      'cobranca_em_aberto',
+    );
+  }, 60_000);
+
+  it('quem pediu para sair não entra na campanha', async () => {
+    await suprimir(db, WA_INADIMPLENTE, 'pedido_do_contato', 'pediu para sair');
+    const r = await apiConsole('POST', '/api/console/cobranca/campanha', {});
+    const linha = r.json().linhas.find((l: { waId: string }) => l.waId === WA_INADIMPLENTE) as {
+      recusa: string;
+    };
+    expect(linha.recusa).toBe('suprimido');
+  }, 30_000);
 });

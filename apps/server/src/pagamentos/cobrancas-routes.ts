@@ -1,9 +1,11 @@
 import { TEXTO_RECUSADO } from '@seta/cobranca';
+import type { DbConnector } from '@seta/erp-connector';
 import { newTraceId } from '@seta/observability';
 import type { PaymentProvider } from '@seta/payment-provider';
 import { and, desc, eq, isNull, sql } from 'drizzle-orm';
 import type { FastifyPluginCallback, FastifyRequest } from 'fastify';
 import type { PgBoss } from 'pg-boss';
+import type { Logger } from 'pino';
 import { z } from 'zod';
 import { type Auth, type SessaoConsole, sessaoDaRequest } from '../auth.js';
 import { FILA_COBRANCA_EMITIR } from '../boss.js';
@@ -19,6 +21,12 @@ import {
 } from '../db/schema.js';
 import type { Env } from '../env.js';
 import { enqueueOutbound } from '../wa/outbox.js';
+import {
+  dispararCampanha,
+  MAX_DESTINATARIOS_CAMPANHA,
+  planejarCampanha,
+} from './campanha-cobranca.js';
+import { FILTRO_PADRAO } from './carteira-inadimplente.js';
 import { registrarEventoPsp } from './eventos.js';
 import type { PagamentosRepo } from './repo.js';
 
@@ -29,12 +37,18 @@ import type { PagamentosRepo } from './repo.js';
  */
 
 export interface CobrancasRoutesOpts {
-  readonly env: Pick<Env, 'DEV_SIMULATOR'>;
+  readonly env: Pick<
+    Env,
+    'DEV_SIMULATOR' | 'PAGAMENTO_TETO_SEM_HITL_CENTAVOS' | 'PAGAMENTO_DIAS_VENCIMENTO'
+  >;
   readonly db: Db;
   readonly boss: PgBoss;
   readonly auth: Auth;
   readonly repo: PagamentosRepo;
   readonly psp: PaymentProvider;
+  readonly logger: Logger;
+  /** 044: leitura cross-contrato do ERP; ausente ⇒ rotas de campanha não entram. */
+  readonly erp?: DbConnector;
 }
 
 const sessoes = new WeakMap<FastifyRequest, SessaoConsole>();
@@ -247,6 +261,100 @@ export const cobrancasRoutes: FastifyPluginCallback<CobrancasRoutesOpts> = (app,
     }
     return reply.code(202).send({ ok: true, psp: psp.nome });
   });
+
+  // --- 044: cobrança ativa pela carteira inadimplente ---------------------
+
+  /**
+   * O filtro é do OPERADOR, não do agente: atraso mínimo e saldo mínimo. Vem
+   * da query string porque é uma leitura — a criação é o POST abaixo.
+   */
+  const FiltroQuery = z.object({
+    atrasoMinimoDias: z.coerce
+      .number()
+      .int()
+      .min(0)
+      .max(3_650)
+      .default(FILTRO_PADRAO.atrasoMinimoDias),
+    saldoMinimoCentavos: z.coerce.number().int().min(0).default(FILTRO_PADRAO.saldoMinimoCentavos),
+  });
+
+  if (opts.erp) {
+    const erp = opts.erp;
+    const campanhaDeps = {
+      db,
+      erp,
+      boss,
+      logger: opts.logger,
+      env: opts.env,
+      pspNome: psp.nome,
+    };
+
+    /** Quem está em atraso na carteira, já com a parcela que seria cobrada. */
+    app.get('/api/console/cobranca/carteira', async (req) => {
+      const filtro = FiltroQuery.parse(req.query);
+      const plano = await planejarCampanha(campanhaDeps, filtro);
+      return {
+        total: plano.total,
+        cobraveis: plano.cobraveis,
+        maxPorCampanha: MAX_DESTINATARIOS_CAMPANHA,
+        truncadoEm: plano.truncadoEm,
+        linhas: plano.linhas.map((l) => ({ ...l.alvo, recusa: l.recusa })),
+      };
+    });
+
+    /**
+     * Dispara a campanha. **`confirmar: true` é obrigatório** — sem ele a rota
+     * devolve o plano e não cria nada.
+     *
+     * Não é cerimônia: isto abre conversa de cobrança com gente de verdade, e
+     * um POST acidental não pode ter esse efeito. O plano devolvido no dry-run
+     * é montado pela MESMA função que o disparo consome, então o que apareceu
+     * na tela é o que vai acontecer.
+     */
+    app.post('/api/console/cobranca/campanha', async (req, reply) => {
+      const body = z
+        .object({
+          atrasoMinimoDias: z.number().int().min(0).max(3_650).optional(),
+          saldoMinimoCentavos: z.number().int().min(0).optional(),
+          confirmar: z.boolean().default(false),
+        })
+        .parse(req.body ?? {});
+      const filtro = {
+        atrasoMinimoDias: body.atrasoMinimoDias ?? FILTRO_PADRAO.atrasoMinimoDias,
+        saldoMinimoCentavos: body.saldoMinimoCentavos ?? FILTRO_PADRAO.saldoMinimoCentavos,
+      };
+
+      if (!body.confirmar) {
+        const plano = await planejarCampanha(campanhaDeps, filtro);
+        return reply.code(200).send({
+          dryRun: true,
+          total: plano.total,
+          cobraveis: plano.cobraveis,
+          truncadoEm: plano.truncadoEm,
+          linhas: plano.linhas.map((l) => ({ ...l.alvo, recusa: l.recusa })),
+        });
+      }
+
+      const sessao = sessoes.get(req);
+      const r = await dispararCampanha(campanhaDeps, filtro);
+      opts.logger.info(
+        {
+          por: sessao?.userId,
+          cobraveis: r.plano.cobraveis,
+          criadas: r.cobrancasCriadas.length,
+        },
+        '044: campanha de cobrança disparada',
+      );
+      return reply.code(202).send({
+        dryRun: false,
+        cobraveis: r.plano.cobraveis,
+        cobrancasCriadas: r.cobrancasCriadas.length,
+        recusados: r.plano.linhas
+          .filter((l) => l.recusa !== null)
+          .map((l) => ({ waId: l.alvo.waId, recusa: l.recusa })),
+      });
+    });
+  }
 
   done();
 };
