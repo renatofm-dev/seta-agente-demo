@@ -1,6 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { AIProvider } from '@seta/ai-provider';
 import type { ClientConfig } from '@seta/client-config';
+import type { DbConnector } from '@seta/erp-connector';
 import { createLogger, newTraceId, type ObsEmitter } from '@seta/observability';
 import type { PaymentProvider } from '@seta/payment-provider';
 import type { Executor } from '@seta/query-catalog';
@@ -44,6 +45,12 @@ export interface WaDeps {
 export interface ConsoleDeps {
   readonly auth: Auth;
   readonly executor: Executor;
+  /**
+   * 044: leitura CROSS-CONTRATO do ERP (quem está inadimplente na carteira).
+   * O executor não serve: todo param do catálogo é da sessão de UM cotista.
+   * Ausente ⇒ as rotas de campanha de cobrança não são registradas.
+   */
+  readonly erp?: DbConnector;
   /** Aba Aprendizado (009); ausentes ⇒ rotas não registradas. */
   readonly registry?: SkillRegistry;
   readonly provider?: AIProvider | null;
@@ -170,6 +177,9 @@ export function buildApp({
           auth: consoleDeps.auth,
           repo: pagamentos.repo,
           psp: pagamentos.psp,
+          logger: app.log,
+          // 044: sem connector as rotas de campanha simplesmente não existem
+          ...(consoleDeps.erp ? { erp: consoleDeps.erp } : {}),
         });
         app.register(eventosPspRoutes, {
           db: wa.db,

@@ -2,7 +2,7 @@ import { join } from 'node:path';
 import { createFakeProvider } from '@seta/ai-provider/testing';
 import { loadClientConfig } from '@seta/client-config';
 import { createPgConnector, type DbConnector } from '@seta/erp-connector';
-import { createLogger, createNoopObsEmitter } from '@seta/observability';
+import { createLogger, createNoopObsEmitter, newTraceId } from '@seta/observability';
 import { createExecutor, type Executor, loadCatalog } from '@seta/query-catalog';
 import {
   type OutboundTemplate,
@@ -533,7 +533,19 @@ describe('spec 013 — disparos para a carteira', () => {
     });
     expect(inbound.statusCode).toBe(202);
 
-    await aguardar(async () => (await db.select().from(supressao)).length === 1);
+    /**
+     * A espera fica no OUTBOX, não na supressão.
+     *
+     * O caminho grava a supressão e SÓ DEPOIS enfileira a confirmação
+     * (`turno-handler.ts`: `suprimir` → `enviar`). Esperar a supressão e ler o
+     * outbox na sequência deixa uma janela em que a linha ainda não existe —
+     * flake que apareceu no CI com `expected [] to have a length of 1`, e que
+     * passava sempre na máquina local, mais rápida.
+     *
+     * Esperar o artefato POSTERIOR cobre os dois: se a confirmação está no
+     * outbox, a supressão já foi gravada.
+     */
+    await aguardar(async () => (await db.select().from(outbox)).length === 1);
     const [linha] = await db.select().from(supressao);
     expect(linha).toMatchObject({ waId: '5511999990001', origem: 'pedido_do_contato' });
     expect(linha?.detalhe).toBe('SAIR');
@@ -552,5 +564,238 @@ describe('spec 013 — disparos para a carteira', () => {
       waIds: ['5511999990001'],
     });
     expect(res.json()).toMatchObject({ destinatarios: 0, recusados: ['5511999990001'] });
+  }, 30_000);
+});
+
+/**
+ * 044 — variável por destinatário.
+ *
+ * O disparo da 013 tem UM conjunto de variáveis para todo mundo, o que serve
+ * para "sua parcela vence amanhã" e não serve para cobrança: link e código PIX
+ * mudam a cada pessoa. Estes testes fixam as duas formas e a fronteira entre
+ * elas — inclusive que a 013 continua igual, que é o critério 6 da spec.
+ */
+describe('spec 044 — variáveis por destinatário', () => {
+  it('cada destinatário recebe o SEU valor, no template e na thread', async () => {
+    const modelo = await modeloAprovado('cobranca_um', 'Olá {{1}}, sua parcela é {{2}}.');
+
+    const res = await apiConsole('POST', '/api/console/disparos', {
+      modeloId: modelo.id,
+      destinatarios: [
+        { waId: '5511999990001', variaveis: ['Ana', 'R$ 1.200,00'] },
+        { waId: '5511999990003', variaveis: ['Bruno', 'R$ 350,00'] },
+      ],
+    });
+    expect(res.statusCode).toBe(202);
+    expect(res.json().destinatarios).toBe(2);
+
+    await aguardar(async () => (await db.select().from(disparo))[0]?.status === 'concluido');
+
+    const porWa = new Map(gatewayFake.templates.map((t) => [t.to, t.variaveis]));
+    expect(porWa.get('5511999990001')).toEqual(['Ana', 'R$ 1.200,00']);
+    expect(porWa.get('5511999990003')).toEqual(['Bruno', 'R$ 350,00']);
+
+    // a thread de cada um mostra o texto DELE — o defeito a evitar é gravar o
+    // texto do primeiro na conversa de todos
+    const msgs = await db.select().from(mensagem).where(eq(mensagem.autor, 'campanha'));
+    const textos = msgs.map((m) => m.texto).sort();
+    expect(textos).toEqual([
+      'Olá Ana, sua parcela é R$ 1.200,00.',
+      'Olá Bruno, sua parcela é R$ 350,00.',
+    ]);
+  }, 30_000);
+
+  it('critério 6: disparo da 013 (waIds + variáveis globais) não muda', async () => {
+    const modelo = await modeloAprovado('aviso_013', 'Olá {{1}}! Aviso.');
+    const res = await apiConsole('POST', '/api/console/disparos', {
+      modeloId: modelo.id,
+      variaveis: ['cotista'],
+      waIds: ['5511999990001', '5511999990003'],
+    });
+    expect(res.statusCode).toBe(202);
+    await aguardar(async () => (await db.select().from(disparo))[0]?.status === 'concluido');
+
+    // ninguém ganhou variável própria: a coluna fica nula e o worker lê a global
+    const dests = await db.select().from(disparoDestinatario);
+    expect(dests.every((d) => d.variaveis === null)).toBe(true);
+    expect(gatewayFake.templates.every((t) => t.variaveis?.[0] === 'cotista')).toBe(true);
+  }, 30_000);
+
+  it('as duas formas juntas → 400, e o global junto com destinatarios → 400', async () => {
+    const modelo = await modeloAprovado('cobranca_dois', 'Olá {{1}}!');
+
+    const ambas = await apiConsole('POST', '/api/console/disparos', {
+      modeloId: modelo.id,
+      waIds: ['5511999990001'],
+      destinatarios: [{ waId: '5511999990003', variaveis: ['Bruno'] }],
+    });
+    expect(ambas.statusCode).toBe(400);
+
+    const nenhuma = await apiConsole('POST', '/api/console/disparos', { modeloId: modelo.id });
+    expect(nenhuma.statusCode).toBe(400);
+
+    const comGlobal = await apiConsole('POST', '/api/console/disparos', {
+      modeloId: modelo.id,
+      variaveis: ['cotista'],
+      destinatarios: [{ waId: '5511999990003', variaveis: ['Bruno'] }],
+    });
+    expect(comGlobal.statusCode).toBe(400);
+  });
+
+  it('contagem errada e repetido dizem DE QUEM — não só que houve erro', async () => {
+    const modelo = await modeloAprovado('cobranca_tres', 'Olá {{1}}, parcela {{2}}.');
+
+    const faltando = await apiConsole('POST', '/api/console/disparos', {
+      modeloId: modelo.id,
+      destinatarios: [
+        { waId: '5511999990001', variaveis: ['Ana', 'R$ 10'] },
+        { waId: '5511999990003', variaveis: ['Bruno'] },
+      ],
+    });
+    expect(faltando.statusCode).toBe(400);
+    expect(faltando.json().erro).toContain('5511999990003');
+    expect(faltando.json().erro).not.toContain('5511999990001');
+
+    const repetido = await apiConsole('POST', '/api/console/disparos', {
+      modeloId: modelo.id,
+      destinatarios: [
+        { waId: '5511999990001', variaveis: ['Ana', 'R$ 10'] },
+        { waId: '5511999990001', variaveis: ['Ana', 'R$ 99'] },
+      ],
+    });
+    expect(repetido.statusCode).toBe(400);
+    expect(repetido.json().erro).toContain('5511999990001');
+  });
+
+  it('a listagem do console avisa que as variáveis são por destinatário', async () => {
+    const modelo = await modeloAprovado('cobranca_quatro', 'Olá {{1}}!');
+    await apiConsole('POST', '/api/console/disparos', {
+      modeloId: modelo.id,
+      destinatarios: [{ waId: '5511999990001', variaveis: ['Ana'] }],
+    });
+    await aguardar(async () => (await db.select().from(disparo))[0]?.status === 'concluido');
+
+    const lista = await apiConsole('GET', '/api/console/disparos');
+    expect(lista.json().disparos[0]).toMatchObject({
+      variaveis: [],
+      variaveis_por_destinatario: true,
+    });
+  }, 30_000);
+});
+
+/**
+ * 044 — ritmo de envio: pausa entre destinatários e disjuntor por falhas
+ * consecutivas.
+ *
+ * O laço era sequencial sem pausa, sem backoff e sem parada. Para aviso da 013
+ * passava; para cobrança proativa o preço de errar não é um disparo perdido, é
+ * a qualidade do número na Meta.
+ *
+ * Os testes chamam `processarDisparo` DIRETO, sem passar pela fila: o worker
+ * registrado no `beforeAll` usa o ritmo padrão, e disputar o mesmo job com ele
+ * daria um teste que passa ou falha pela ordem do agendador.
+ */
+describe('spec 044 — ritmo de envio', () => {
+  async function disparoCru(nome: string, waIds: string[]): Promise<string> {
+    const modelo = await modeloAprovado(nome, 'Olá {{1}}!');
+    const disparoId = newTraceId();
+    await db.insert(disparo).values({
+      id: disparoId,
+      modeloId: modelo.id,
+      variaveis: ['cotista'],
+      criadoPor: 'teste',
+    });
+    await db
+      .insert(disparoDestinatario)
+      .values(waIds.map((waId) => ({ id: newTraceId(), disparoId, waId, contatoNome: waId })));
+    return disparoId;
+  }
+
+  it('para por falhas consecutivas e deixa o resto PENDENTE para reprocesso', async () => {
+    gatewayFake.falhar.add('5511999990001');
+    gatewayFake.falhar.add('5511999990002');
+    const id = await disparoCru('ritmo_disjuntor', [
+      '5511999990001',
+      '5511999990002',
+      '5511999990003',
+    ]);
+
+    await processarDisparo(
+      {
+        db,
+        boss,
+        gateway: gatewayFake.gateway,
+        logger,
+        ritmo: { pausaMs: 0, pararEmFalhasSeguidas: 2 },
+      },
+      id,
+    );
+
+    const dests = await db
+      .select()
+      .from(disparoDestinatario)
+      .where(eq(disparoDestinatario.disparoId, id));
+    const porWa = new Map(dests.map((d) => [d.waId, d.status]));
+    expect(porWa.get('5511999990001')).toBe('falha');
+    expect(porWa.get('5511999990002')).toBe('falha');
+    // o terceiro NUNCA foi tentado — e continua pendente, não "falha"
+    expect(porWa.get('5511999990003')).toBe('pendente');
+    expect(gatewayFake.templates.map((t) => t.to)).not.toContain('5511999990003');
+
+    // e o disparo NÃO foi concluído: concluir marcaria como feito o que não saiu
+    const [d] = await db.select().from(disparo).where(eq(disparo.id, id));
+    expect(d?.status).toBe('enviando');
+  }, 30_000);
+
+  it('sucesso zera o contador: falhas alternadas não abrem o disjuntor', async () => {
+    gatewayFake.falhar.add('5511999990002');
+    const id = await disparoCru('ritmo_alternado', [
+      '5511999990001',
+      '5511999990002',
+      '5511999990003',
+    ]);
+
+    await processarDisparo(
+      {
+        db,
+        boss,
+        gateway: gatewayFake.gateway,
+        logger,
+        ritmo: { pausaMs: 0, pararEmFalhasSeguidas: 2 },
+      },
+      id,
+    );
+
+    const dests = await db
+      .select()
+      .from(disparoDestinatario)
+      .where(eq(disparoDestinatario.disparoId, id));
+    const porWa = new Map(dests.map((d) => [d.waId, d.status]));
+    expect(porWa.get('5511999990001')).toBe('enviado');
+    expect(porWa.get('5511999990002')).toBe('falha');
+    // chegou ao fim: a falha do meio não parou o disparo
+    expect(porWa.get('5511999990003')).toBe('enviado');
+    const [d] = await db.select().from(disparo).where(eq(disparo.id, id));
+    expect(d?.status).toBe('concluido');
+  }, 30_000);
+
+  it('a pausa espaça os envios, e não acontece antes do primeiro', async () => {
+    const id = await disparoCru('ritmo_pausa', ['5511999990001', '5511999990003']);
+    const inicio = Date.now();
+    await processarDisparo(
+      {
+        db,
+        boss,
+        gateway: gatewayFake.gateway,
+        logger,
+        ritmo: { pausaMs: 400, pararEmFalhasSeguidas: 3 },
+      },
+      id,
+    );
+    const gasto = Date.now() - inicio;
+    // 2 destinatários ⇒ UMA pausa (nunca antes do primeiro, nunca depois do último)
+    expect(gasto).toBeGreaterThanOrEqual(400);
+    expect(gasto).toBeLessThan(1_200);
+    expect(gatewayFake.templates).toHaveLength(2);
   }, 30_000);
 });

@@ -1,0 +1,1 @@
+ALTER TABLE "disparo_destinatario" ADD COLUMN "variaveis" jsonb;

@@ -20,7 +20,36 @@ export interface DisparoWorkerDeps {
   readonly boss: PgBoss;
   readonly gateway: OutboundGateway;
   readonly logger: Logger;
+  /** 044: ritmo de envio. Ausente ⇒ os defaults abaixo. */
+  readonly ritmo?: RitmoDisparo;
 }
+
+/**
+ * 044 — ritmo de envio.
+ *
+ * O laço era sequencial sem pausa, sem backoff e sem parada. Para aviso da 013
+ * isso passou; para COBRANÇA proativa é agressivo com os limites da Meta, e o
+ * preço de errar não é um disparo perdido — é a qualidade do número, que leva
+ * semanas para recuperar e derruba todo o resto do produto.
+ *
+ * `pausaMs` espaça os envios. `pararEmFalhasSeguidas` é o disjuntor: N falhas
+ * CONSECUTIVAS e o disparo para, deixando o resto `pendente` para reprocesso —
+ * melhor um disparo pela metade do que 500 tentativas contra um token revogado
+ * ou um número bloqueado.
+ *
+ * Por que falhas SEGUIDAS e não taxa: taxa precisa de amostra para significar
+ * algo, e no começo do disparo (quando ainda dá para evitar o estrago) não há
+ * amostra. Três seguidas no primeiro minuto é sinal; 3% no fim é relatório.
+ */
+export interface RitmoDisparo {
+  readonly pausaMs: number;
+  readonly pararEmFalhasSeguidas: number;
+}
+
+export const RITMO_PADRAO: RitmoDisparo = { pausaMs: 1_000, pararEmFalhasSeguidas: 3 };
+
+const dormir = (ms: number): Promise<void> =>
+  ms <= 0 ? Promise.resolve() : new Promise((r) => setTimeout(r, ms));
 
 /** Substitui {{1}}..{{N}} pelos valores — o texto como o cliente vê na thread. */
 export function renderizarCorpo(corpo: string, variaveis: readonly string[]): string {
@@ -65,9 +94,7 @@ export async function processarDisparo(deps: DisparoWorkerDeps, disparoId: strin
     .where(eq(disparo.id, disparoId));
   if (d?.status !== 'enviando') return; // inexistente ou já concluído (reprocesso)
 
-  const variaveis = (Array.isArray(d.variaveis) ? d.variaveis : []) as string[];
-  const textoRenderizado =
-    renderizarCorpo(d.corpo, variaveis) + (d.rodape ? `\n\n${d.rodape}` : '');
+  const globais = (Array.isArray(d.variaveis) ? d.variaveis : []) as string[];
 
   const pendentes = await db
     .select()
@@ -89,6 +116,10 @@ export async function processarDisparo(deps: DisparoWorkerDeps, disparoId: strin
     pendentes.map((p) => p.waId),
   );
 
+  const ritmo = deps.ritmo ?? RITMO_PADRAO;
+  let falhasSeguidas = 0;
+  let enviadosNesteLaco = 0;
+
   for (const dest of pendentes) {
     if (suprimidos.has(dest.waId)) {
       await db
@@ -102,6 +133,19 @@ export async function processarDisparo(deps: DisparoWorkerDeps, disparoId: strin
       logger.info({ disparoId, waId: dest.waId }, 'disparo: destinatário suprimido — não enviado');
       continue;
     }
+    /**
+     * 044: as variáveis do destinatário vencem as globais. `null` (todo disparo
+     * da 013) cai no global — a leitura fica aqui, e não numa query com
+     * `COALESCE`, para o texto gravado na thread ser renderizado com o MESMO
+     * array que foi enviado. Renderizar fora do laço, como antes, gravaria na
+     * conversa de todo mundo o texto do primeiro.
+     */
+    const variaveis = Array.isArray(dest.variaveis) ? (dest.variaveis as string[]) : globais;
+    const textoRenderizado =
+      renderizarCorpo(d.corpo, variaveis) + (d.rodape ? `\n\n${d.rodape}` : '');
+    // a pausa vem ANTES do envio e nunca antes do primeiro: pausar depois
+    // deixaria o processo dormindo depois do último destinatário, por nada
+    if (enviadosNesteLaco > 0) await dormir(ritmo.pausaMs);
     try {
       const { waMessageId } = await gateway.sendTemplate({
         to: dest.waId,
@@ -125,6 +169,8 @@ export async function processarDisparo(deps: DisparoWorkerDeps, disparoId: strin
           .set({ status: 'enviado', waMessageId, atualizadoEm: new Date() })
           .where(eq(disparoDestinatario.id, dest.id));
       });
+      falhasSeguidas = 0;
+      enviadosNesteLaco += 1;
     } catch (err) {
       // 013: falha por destinatário marca SÓ ele — o disparo segue
       await db
@@ -136,6 +182,21 @@ export async function processarDisparo(deps: DisparoWorkerDeps, disparoId: strin
         })
         .where(eq(disparoDestinatario.id, dest.id));
       logger.warn({ err, disparoId, waId: dest.waId }, 'disparo: falha em destinatário');
+      falhasSeguidas += 1;
+      enviadosNesteLaco += 1;
+      if (falhasSeguidas >= ritmo.pararEmFalhasSeguidas) {
+        /**
+         * Disjuntor aberto. O disparo NÃO é concluído: os restantes ficam
+         * `pendente` e o mesmo job reprocessa do ponto em que parou (o SELECT
+         * do topo filtra por `pendente`). Concluir aqui marcaria como feito um
+         * disparo que não saiu — e ninguém iria procurar.
+         */
+        logger.error(
+          { disparoId, falhasSeguidas, restantes: pendentes.length - enviadosNesteLaco },
+          'disparo PARADO por falhas consecutivas — restantes seguem pendentes',
+        );
+        return;
+      }
     }
   }
 

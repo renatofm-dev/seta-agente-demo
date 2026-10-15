@@ -269,7 +269,8 @@ const app = buildApp({
   env,
   clientConfig,
   wa: { db, boss },
-  console: { auth, executor, registry, provider, templateApi },
+  // 044: `erp` é o connector CRU — a carteira inadimplente é leitura cross-contrato
+  console: { auth, executor, registry, provider, templateApi, erp: connector },
   pagamentos: { repo: pagamentosRepo, psp },
   assinatura: assinaturaDeps, // 046: página de assinatura + webhook do provedor
   // 015b: as rotas de decisão da proposta precisam do fluxo SDR inteiro
