@@ -49,6 +49,7 @@ import {
   propostaSdr,
   pspCliente,
   sinalAprendizado,
+  supressao,
   ticket,
   traceTurno,
   turno,
@@ -368,6 +369,10 @@ beforeEach(async () => {
   }
   for (let tentativa = 0; ; tentativa++) {
     try {
+      // 044: supressão deixada por OUTRO arquivo faz o destinatário ser
+      // recusado em silêncio — o funil perde uma entrega e o diff não diz por
+      // quê. Aconteceu de verdade (15/10) com o teste da campanha de cobrança.
+      await db.delete(supressao);
       await db.delete(pagamento);
       await db.delete(cobrancaTitulo);
       await db.delete(fluxoCobranca);

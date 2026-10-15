@@ -1,11 +1,14 @@
 id: financeiro.total_pago
-version: 1
+version: 2
 description: >-
   Quanto o cotista já pagou no contrato da sessão, quebrado por origem
   (entrada|saldo): quantidade de parcelas pagas e total pago em centavos por
   origem. Use quando o cotista perguntar quanto já pagou, quanto investiu ou
   quantas parcelas quitou. Não recebe parâmetros — o contrato é sempre o da
   sessão.
+  Ao falar de dinheiro, COPIE o campo `*_reais` como vem — já está em reais.
+  Nunca divida os campos `_centavos`: em campo o modelo errou a casa decimal e
+  diria ao cotista um valor dez vezes menor.
 entities: [titulo]
 modules: [financeiro]
 params:
@@ -15,7 +18,8 @@ params:
     description: Contrato vinculado à sessão (nunca vem do modelo).
 sql: >-
   SELECT origem, count(*) AS parcelas_pagas,
-         CAST(coalesce(sum(valor_pago_centavos), 0) AS bigint) AS total_pago_centavos
+         CAST(coalesce(sum(valor_pago_centavos), 0) AS bigint) AS total_pago_centavos,
+         (coalesce(sum(valor_pago_centavos), 0)::bigint / 100)::text || ',' || lpad((coalesce(sum(valor_pago_centavos), 0)::bigint % 100)::text, 2, '0') AS total_pago_reais
   FROM v_titulo
   WHERE contrato_id = :contrato_id AND status = 'pago'
   GROUP BY origem
@@ -24,7 +28,7 @@ limits:
   timeout_ms: 3000
   max_rows: 2
 output:
-  columns: [origem, parcelas_pagas, total_pago_centavos]
+  columns: [origem, parcelas_pagas, total_pago_centavos, total_pago_reais]
   masking: {}
 tool:
   expose: true

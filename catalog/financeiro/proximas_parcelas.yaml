@@ -1,11 +1,14 @@
 id: financeiro.proximas_parcelas
-version: 1
+version: 2
 description: >-
   Próximas parcelas A VENCER do contrato da sessão (até 5, da mais próxima
   para a mais distante): id, origem, número da parcela, total de parcelas,
   valor em centavos e vencimento. Usada pelo fluxo de pagamento (014), pela
   conciliação e pelo agente quando o cotista quer escolher UMA parcela (040:
   2ª via do boleto) — sem ela o modelo só enxerga a próxima e as vencidas.
+  Ao falar de dinheiro, COPIE o campo `*_reais` como vem — já está em reais.
+  Nunca divida os campos `_centavos`: em campo o modelo errou a casa decimal e
+  diria ao cotista um valor dez vezes menor.
 entities: [titulo]
 modules: [financeiro]
 params:
@@ -14,7 +17,8 @@ params:
     source: session
     description: Contrato vinculado à sessão (nunca vem do modelo).
 sql: >-
-  SELECT id, origem, parcela, total_parcelas, valor_centavos, vencimento
+  SELECT id, origem, parcela, total_parcelas, valor_centavos, vencimento,
+         (valor_centavos / 100)::text || ',' || lpad((valor_centavos % 100)::text, 2, '0') AS valor_reais
   FROM v_titulo
   WHERE contrato_id = :contrato_id AND status = 'aberto'
   ORDER BY vencimento ASC
@@ -23,7 +27,7 @@ limits:
   timeout_ms: 2000
   max_rows: 5
 output:
-  columns: [id, origem, parcela, total_parcelas, valor_centavos, vencimento]
+  columns: [id, origem, parcela, total_parcelas, valor_centavos, vencimento, valor_reais]
   masking: {}
 tool:
   expose: true
