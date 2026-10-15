@@ -163,7 +163,7 @@ tool: { expose: true, name: titulos_atraso }
 | Escrita no ERP (036) | `TSE_BASE_URL`, `TSE_USERNAME`, `TSE_PASSWORD`, `TSE_TIMEOUT_MS`, `ERP_CONCILIACAO` | sem `TSE_BASE_URL` o writer é simulado e a baixa fica local; credencial de OPERADOR (escreve baixa, reserva e venda) — em produção o boot recusa a de exemplo |
 | Instalação | `CLIENT_CONFIG_PATH`, `CATALOG_DIR`, `CONTATOS_PATH`, `SKILLS_SEED_DIR`, `KB_DIR` | caminhos relativos à raiz do monorepo |
 | Auth | `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL` | o console fala com o server pela mesma origem |
-| WhatsApp | `WA_VERIFY_TOKEN`, `WA_APP_SECRET`, `WA_ACCESS_TOKEN`, `WA_PHONE_NUMBER_ID`, `WA_WABA_ID`, `WA_DEBOUNCE_MS`, `WA_TEMPLATE_PAGAMENTO_CONFIRMADO`, `DEV_SIMULATOR` | |
+| WhatsApp | `WA_VERIFY_TOKEN`, `WA_APP_SECRET`, `WA_ACCESS_TOKEN`, `WA_PHONE_NUMBER_ID`, `WA_WABA_ID`, `WA_DEBOUNCE_MS`, `WA_TYPING_INDICATOR`, `WA_TEMPLATE_PAGAMENTO_CONFIRMADO`, `DEV_SIMULATOR` | `WA_TYPING_INDICATOR` ligado por default: mostra "digitando…" antes da resposta do agente. A Cloud API não separa isso de marcar a mensagem como **lida** (é o mesmo request) — `false` desliga as duas coisas. Ver [`09-whatsapp-real-e-tunel.md`](09-whatsapp-real-e-tunel.md) |
 | LLM | `LLM_BASE_URL`, `LLM_API_KEY`, `LLM_MODEL`, `EMBEDDING_MODEL`, `EMBEDDING_DIM`, `LLM_PRECO_IN_POR_1M`, `LLM_PRECO_OUT_POR_1M` | |
 | Agente | `AGENT_TURN_TIMEOUT_MS`, `AGENT_RESUMO_A_CADA_TURNOS`, `AGENT_TURNOS_CONCORRENTES` | |
 | Pagamentos | `ASAAS_*`, `PAGAMENTO_TETO_SEM_HITL_CENTAVOS`, `PAGAMENTO_MAX_COBRANCAS_DIA`, `PAGAMENTO_DIAS_VENCIMENTO`, `PAGAMENTO_FLUXO_EXPIRA_MIN` | |

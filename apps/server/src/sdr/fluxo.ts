@@ -448,7 +448,7 @@ async function reenviarSinal(
   const boss = deps.venda?.boss;
   if (!cobrancaId || !boss) return false;
   const [c] = await deps.db.select().from(cobranca).where(eq(cobranca.id, cobrancaId));
-  if (!c || c.status !== 'emitida' || !c.urlFatura) {
+  if (c?.status !== 'emitida' || !c.urlFatura) {
     deps.logger.warn(
       { cobrancaId, status: c?.status },
       'sinal já emitido, mas a cobrança não está reenviável',

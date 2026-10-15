@@ -12,8 +12,11 @@ import {
 import { createExecutor, loadCatalog } from '@seta/query-catalog';
 import {
   createLogGateway,
+  createLogIndicador,
   createMetaGateway,
+  createMetaIndicador,
   createMetaTemplateApi,
+  type IndicadorDigitacao,
   type OutboundGateway,
 } from '@seta/wa-meta';
 import { montarProviderAnonimizado } from './anonimizacao.js';
@@ -140,6 +143,21 @@ const gateway: OutboundGateway =
     ? createMetaGateway({ accessToken: env.WA_ACCESS_TOKEN, phoneNumberId: env.WA_PHONE_NUMBER_ID })
     : createLogGateway(logger);
 
+/**
+ * "Digitando…" antes da resposta. Sem credenciais da Meta vale o mesmo desenho do
+ * gateway: o de log, para o caminho do turno ser o MESMO nos dois modos. O que o
+ * simulador mostra na tela vem do SSE de /dev/events, não desta chamada — em dev
+ * ela não acontece.
+ */
+const digitacao: IndicadorDigitacao | null = !env.WA_TYPING_INDICATOR
+  ? null
+  : env.WA_ACCESS_TOKEN && env.WA_PHONE_NUMBER_ID
+    ? createMetaIndicador({
+        accessToken: env.WA_ACCESS_TOKEN,
+        phoneNumberId: env.WA_PHONE_NUMBER_ID,
+      })
+    : createLogIndicador(logger);
+
 // 013: gestão de modelos exige o WABA — sem ele a plataforma explica o 503
 const templateApi =
   env.WA_ACCESS_TOKEN && env.WA_WABA_ID
@@ -190,6 +208,7 @@ await registerDebounceWorker({
     reserva: { repo: reservaRepo, writer: reservaWriter, env }, // 038
     anexos: erpWriter, // 040: a 2ª via em PDF sai pela credencial da integração
     venda: { repo: vendaRepo, pspNome: psp.nome }, // 045
+    ...(digitacao ? { digitacao } : {}),
     ...(anonimizacao ? { anonimizacao: anonimizacao.acumulador } : {}), // 016
   }),
   logger,

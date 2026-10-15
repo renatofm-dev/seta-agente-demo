@@ -126,7 +126,16 @@ export default function CampanhasPage() {
                     </span>
                   )}
                 </span>
-                <span className="text-text-2">{d.total} contatos</span>
+                <span className="text-text-2">
+                  {d.total} contatos
+                  {/* 044: opt-out respeitado aparece na linha. Sem isto, quem criou a
+                      campanha vai procurar no funil por que 30 dos 200 não receberam. */}
+                  {d.recusados > 0 && (
+                    <span className="block text-[11.5px] text-text-3">
+                      {d.recusados} não receberam (opt-out)
+                    </span>
+                  )}
+                </span>
                 <span className="truncate font-mono text-[11.5px] text-text-2">
                   {d.modelo_nome}
                 </span>

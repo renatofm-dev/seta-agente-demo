@@ -110,7 +110,7 @@ export const STATUS_DISPARO: Record<'enviando' | 'concluido', { rotulo: string; 
 };
 
 export const STATUS_DESTINATARIO: Record<
-  'pendente' | 'enviado' | 'entregue' | 'lido' | 'falha',
+  'pendente' | 'enviado' | 'entregue' | 'lido' | 'falha' | 'recusado',
   { rotulo: string; papel: Papel }
 > = {
   pendente: { rotulo: 'Pendente', papel: 'off' },
@@ -118,6 +118,11 @@ export const STATUS_DESTINATARIO: Record<
   entregue: { rotulo: 'Entregue', papel: 'info' },
   lido: { rotulo: 'Lido', papel: 'ok' },
   falha: { rotulo: 'Falha', papel: 'risk' },
+  /**
+   * 044: `off`, não `risk`. Não enviar para quem pediu para sair é o sistema
+   * funcionando — pintar de vermelho ensinaria o operador a "resolver" isso.
+   */
+  recusado: { rotulo: 'Não enviado (opt-out)', papel: 'off' },
 };
 
 export const STATUS_MODELO: Record<

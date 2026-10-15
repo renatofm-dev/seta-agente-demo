@@ -4,7 +4,8 @@ import { loadClientConfig } from '@seta/client-config';
 import { createPgConnector, type DbConnector } from '@seta/erp-connector';
 import { createLogger, createNoopObsEmitter, newTraceId } from '@seta/observability';
 import { createExecutor, type Executor, loadCatalog } from '@seta/query-catalog';
-import { count } from 'drizzle-orm';
+import type { IndicadorDigitacao } from '@seta/wa-meta';
+import { count, eq } from 'drizzle-orm';
 import { migrate } from 'drizzle-orm/node-postgres/migrator';
 import pg from 'pg';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
@@ -30,7 +31,9 @@ import { type Env, loadEnv } from '../src/env.ts';
 import { createDrizzleQueryEventSink } from '../src/query-event-sink.ts';
 import { createPgVectorStore } from '../src/rag/pgvector-store.ts';
 import { seedApp } from '../src/seed-app.ts';
+import type { TurnoHandler } from '../src/wa/debounce.ts';
 import { registerDebounceWorker } from '../src/wa/debounce.ts';
+import { TEXTO_SAIDA_CONFIRMADA } from '../src/wa/supressao.ts';
 import { createAgentTurnoHandler } from '../src/wa/turno-handler.ts';
 
 /**
@@ -52,6 +55,20 @@ let admin: pg.Pool;
 let connector: DbConnector;
 let executor: Executor;
 let fake = createFakeProvider();
+let handler: TurnoHandler;
+/**
+ * Indicador de digitação trocável por teste, como o provider: cada cenário
+ * instala o seu (registra / lança / pendura) e o beforeEach volta ao default de
+ * "não configurado", que é o turno de antes da feature.
+ */
+let indicador: IndicadorDigitacao | undefined;
+/**
+ * Atraso do primeiro disparo, trocável por cenário: 0 para provar que o
+ * indicador acende, alto para provar que turno rápido NÃO acende. É o que
+ * permite afirmar a invariante sem depender de quanto o turno demora.
+ */
+let digitacaoAtrasoMs = 0;
+const wamidsDigitando: string[] = [];
 
 const clientConfig = loadClientConfig(
   join(import.meta.dirname, '../../../configs/demo/client.yaml'),
@@ -123,33 +140,37 @@ beforeAll(async () => {
   });
 
   boss = await startBoss(env.DATABASE_URL, logger);
-  await registerDebounceWorker({
+  handler = createAgentTurnoHandler({
     db,
     boss,
-    debounceMs: DEBOUNCE_MS,
-    handler: createAgentTurnoHandler({
-      db,
-      boss,
-      get provider() {
-        return fake;
-      },
-      catalog,
-      executor,
-      clientConfig,
-      registry: null, // skills fora destes cenários (009 tem suíte própria)
-      store: createPgVectorStore({ db, dim: env.EMBEDDING_DIM }),
-      obs: createNoopObsEmitter(),
-      logger,
-      turnoTimeoutMs: 30_000,
-      resumoACadaTurnos: 99, // sem sumarização nestes testes
-    }),
+    get provider() {
+      return fake;
+    },
+    catalog,
+    executor,
+    clientConfig,
+    registry: null, // skills fora destes cenários (009 tem suíte própria)
+    store: createPgVectorStore({ db, dim: env.EMBEDDING_DIM }),
+    obs: createNoopObsEmitter(),
     logger,
+    turnoTimeoutMs: 30_000,
+    resumoACadaTurnos: 99, // sem sumarização nestes testes
+    get digitacao() {
+      return indicador;
+    },
+    get digitacaoAtrasoMs() {
+      return digitacaoAtrasoMs;
+    },
   });
+  await registerDebounceWorker({ db, boss, debounceMs: DEBOUNCE_MS, handler, logger });
   app = buildApp({ env, clientConfig, wa: { db, boss } });
 }, 60_000);
 
 beforeEach(async () => {
   fake = createFakeProvider();
+  indicador = undefined;
+  digitacaoAtrasoMs = 0;
+  wamidsDigitando.length = 0;
   await boss.deleteQueuedJobs(FILA_DEBOUNCE);
   await boss.deleteQueuedJobs(FILA_OUTBOX);
   // turno em voo do teste anterior pode gravar trace no meio da limpeza (FK);
@@ -373,4 +394,115 @@ describe('critérios spec 005 (via simulador)', () => {
     );
     expect(emVoo).toBeGreaterThanOrEqual(2);
   }, 30_000);
+});
+
+/**
+ * O indicador de digitação é ENFEITE; a resposta é OBRIGAÇÃO. Estes casos travam
+ * essa hierarquia: nada que o indicador faça (falhar, pendurar, não existir) pode
+ * mudar o que o contato recebe.
+ */
+describe('indicador de digitação', () => {
+  it('mostra "digitando…" uma vez, com o wamid da mensagem que abriu o turno', async () => {
+    indicador = {
+      mostrar: async (id) => {
+        wamidsDigitando.push(id);
+      },
+    };
+    fake.respondeTexto('outro').respondeTexto('Bom dia! Posso ajudar com boletos e reservas.');
+
+    await enviarPeloSimulador(WA_ID_VINCULADO, 'bom dia');
+    const { resposta } = await aguardarResposta();
+
+    expect(resposta).toBe('Bom dia! Posso ajudar com boletos e reservas.');
+    const [entrada] = await db.select().from(mensagem).where(eq(mensagem.direcao, 'in'));
+    // UMA chamada: turno curto não chega a renovar, e o parar() no enfileiramento
+    // impede renovação depois de a resposta estar a caminho
+    expect(wamidsDigitando).toEqual([entrada?.waMessageId]);
+  }, 20_000);
+
+  it('indicador que falha não impede a resposta nem derruba o turno', async () => {
+    indicador = {
+      mostrar: async () => {
+        throw new Error('Graph API 400: invalid message_id');
+      },
+    };
+    fake.respondeTexto('outro').respondeTexto('Claro, já verifico isso para você.');
+
+    await enviarPeloSimulador(WA_ID_VINCULADO, 'e o boleto de março?');
+    const { resposta, trace } = await aguardarResposta();
+
+    expect(resposta).toBe('Claro, já verifico isso para você.');
+    expect(trace.fallback).toBe(false); // turno normal, não o fallback de emergência
+  }, 20_000);
+
+  it('indicador pendurado não atrasa a resposta — o disparo não é esperado', async () => {
+    // promise que nunca resolve: se alguém puser `await` no disparo, o turno
+    // trava aqui e o teste estoura no aguardar()
+    indicador = { mostrar: () => new Promise<void>(() => {}) };
+    fake.respondeTexto('outro').respondeTexto('Tudo certo por aqui!');
+
+    await enviarPeloSimulador(WA_ID_VINCULADO, 'tudo bem?');
+    const { resposta } = await aguardarResposta();
+
+    expect(resposta).toBe('Tudo certo por aqui!');
+  }, 20_000);
+
+  it('turno sem wamid não chama a Graph API', async () => {
+    indicador = {
+      mostrar: async (id) => {
+        wamidsDigitando.push(id);
+      },
+    };
+    const conversaId = newTraceId();
+    const turnoId = newTraceId();
+    await db.insert(conversa).values({ id: conversaId, waId: '5511999990009' });
+    await db.insert(turno).values({ id: turnoId, conversaId, textoAgregado: 'oi' });
+    fake.respondeTexto('outro').respondeTexto('Olá!');
+
+    await handler.processar({
+      id: turnoId,
+      conversaId,
+      textoAgregado: 'oi',
+      waMessageIdUltima: null,
+    });
+
+    const [saida] = await db.select().from(outbox).where(eq(outbox.conversaId, conversaId));
+    expect(saida?.texto).toBe('Olá!'); // a resposta sai...
+    expect(wamidsDigitando).toEqual([]); // ...e nada foi pedido à Meta
+  }, 20_000);
+});
+
+/**
+ * A corrida que o caminho instantâneo cria. Turno que responde sem LLM — opt-out
+ * (044), "já na fila" (#47), dev sem LLM_* — termina em dezenas de ms, e o
+ * request do indicador leva centenas. Sem o atraso, ele pousaria na Meta DEPOIS
+ * de a resposta sair, e aí nada o apaga: o contato pede para sair, recebe a
+ * confirmação e vê o robô "digitando" por 25 s.
+ */
+describe('indicador de digitação em turno instantâneo', () => {
+  it('turno que responde antes do atraso não acende nada — e a resposta sai igual', async () => {
+    indicador = {
+      mostrar: async (id) => {
+        wamidsDigitando.push(id);
+      },
+    };
+    // atraso maior que o turno inteiro: a invariante não depende do relógio real
+    digitacaoAtrasoMs = 5_000;
+    const conversaId = newTraceId();
+    const turnoId = newTraceId();
+    await db.insert(conversa).values({ id: conversaId, waId: '5511999990012' });
+    await db.insert(turno).values({ id: turnoId, conversaId, textoAgregado: 'sair' });
+
+    // "sair" é o opt-out da 044: responde sem passar por LLM nenhum
+    await handler.processar({
+      id: turnoId,
+      conversaId,
+      textoAgregado: 'sair',
+      waMessageIdUltima: 'wamid.opt-out',
+    });
+
+    const [saida] = await db.select().from(outbox).where(eq(outbox.conversaId, conversaId));
+    expect(saida?.texto).toBe(TEXTO_SAIDA_CONFIRMADA); // a confirmação de saída saiu
+    expect(wamidsDigitando).toEqual([]); // e nenhum "digitando" foi pedido à Meta
+  }, 20_000);
 });

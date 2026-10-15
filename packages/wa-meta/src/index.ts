@@ -46,6 +46,18 @@ export {
   type OutboundGateway,
 } from './gateway.js';
 export {
+  criarPostMessages,
+  GRAPH_VERSAO_DEFAULT,
+  type GraphMessagesConfig,
+} from './graph.js';
+export {
+  createLogIndicador,
+  createMetaIndicador,
+  ehWamidDaMeta,
+  type IndicadorDigitacao,
+  TIMEOUT_INDICADOR_MS,
+} from './indicador-digitacao.js';
+export {
   type BotaoTemplate,
   BotaoTemplateSchema,
   type ItemPedido,

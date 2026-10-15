@@ -24,6 +24,7 @@ import type { PaymentProvider } from '@seta/payment-provider';
 import { buildToolSpecs, type CatalogIndex, type Executor } from '@seta/query-catalog';
 import type { VectorStore } from '@seta/rag';
 import type { SkillRegistry } from '@seta/skills';
+import type { IndicadorDigitacao } from '@seta/wa-meta';
 import { and, desc, eq, isNull, ne, or, sql } from 'drizzle-orm';
 import type { PgBoss } from 'pg-boss';
 import type { Logger } from 'pino';
@@ -66,6 +67,7 @@ import {
   type ResolvedorAnexo,
 } from './outbox.js';
 import { type PedidoSegundaVia, toolEnviarSegundaVia } from './segunda-via.js';
+import { ehPedidoDeSaida, suprimir, TEXTO_SAIDA_CONFIRMADA } from './supressao.js';
 import { aplicarTransicao, garantirTicket } from './tickets.js';
 
 /**
@@ -108,6 +110,21 @@ export interface AgentTurnoHandlerDeps {
   readonly reserva?: ReservaTurnoDeps;
   /** 045: presente ⇒ o SDR fecha a venda com sinal por PIX. */
   readonly venda?: VendaTurnoDeps;
+  /**
+   * Quem mostra "digitando…" no WhatsApp. Ausente ⇒ turno igual ao de antes.
+   *
+   * NÃO é o `OutboundGateway`: o handler só enfileira no outbox, e receber o
+   * gateway inteiro aqui abriria a porta para furar essa invariante — é por não
+   * ter o gateway na mão que ele não pode enviar por fora.
+   */
+  readonly digitacao?: IndicadorDigitacao;
+  /**
+   * Atraso do primeiro disparo do indicador. Existe como dep, e não só como
+   * constante, para o teste afirmar a INVARIANTE ("turno que termina antes do
+   * atraso não acende nada") em vez de depender de o turno cair fora de uma
+   * faixa de milissegundos. Ausente ⇒ `ATRASO_INICIAL_DIGITACAO_MS`.
+   */
+  readonly digitacaoAtrasoMs?: number;
 }
 
 /** 045: o que o fechamento da venda precisa além do que o turno já tem. */
@@ -264,13 +281,112 @@ async function enfileirarComFusao(
   return r.resultado;
 }
 
+/**
+ * 25 s é o teto da Meta para o indicador; renovar a 20 s deixa folga de rede
+ * para o próximo chegar antes de o anterior apagar.
+ */
+const RENOVAR_DIGITACAO_MS = 20_000;
+/**
+ * Atraso do PRIMEIRO disparo. Turno que responde sem LLM — opt-out (044),
+ * `TEXTO_JA_NA_FILA` (#47), e todo turno em dev sem `LLM_*` — termina em dezenas
+ * de ms. Acender o indicador ali faria o request pousar na Meta DEPOIS de a
+ * resposta ter saído, e aí não há mais o que o apague: o contato pediria para
+ * sair da lista, receberia a confirmação e veria o robô "digitando" por 25 s.
+ * Com o atraso, esses turnos não acendem NADA, de forma determinística, em vez de
+ * depender de quem ganha a corrida. Em turno de LLM 250 ms é imperceptível: o
+ * contato já esperou o debounce inteiro.
+ *
+ * CONSEQUÊNCIA DELIBERADA: como o indicador e o read receipt são o MESMO request,
+ * não acender nada também significa não marcar a mensagem como lida. Quem pede
+ * para sair da lista recebe a confirmação sem os dois tiques azuis. É a troca
+ * certa: a própria resposta é o reconhecimento, e ela chega em menos de um
+ * segundo — melhor do que um "digitando" fantasma por 25 s depois dela.
+ */
+const ATRASO_INICIAL_DIGITACAO_MS = 250;
+/**
+ * Teto de renovações: 3 cobrem ~80 s, além do `AGENT_TURN_TIMEOUT_MS` (60 s). O
+ * teto existe para o timer nunca ser eterno se o `parar()` não chegar por um
+ * caminho que ninguém previu.
+ */
+const MAX_RENOVACOES_DIGITACAO = 3;
+
+interface Digitacao {
+  /** Idempotente: é chamado do enfileiramento E do `finally` do turno. */
+  parar(): void;
+}
+
+/** Turno sem indicador configurado ou sem wamid: nada a mostrar, nada a parar. */
+const SEM_DIGITACAO: Digitacao = { parar: () => {} };
+
+/**
+ * Mostra "digitando…" e vai RENOVANDO enquanto o turno roda (a Meta apaga o
+ * indicador em 25 s). Best-effort de verdade: sem wamid, sem indicador
+ * configurado, 400 da Meta ou rede fora ⇒ log e segue. Nunca entra no caminho
+ * crítico da resposta (nem com o timeout de 3 s do adapter) e nunca faz o job do
+ * turno re-tentar — o `.catch` em cada disparo é o que garante que uma promise
+ * rejeitada solta não vire unhandled rejection.
+ *
+ * `setTimeout` em cadeia, e não `setInterval`: um handle por vez, sem chance de
+ * dois disparos se sobreporem. `unref()` para o indicador nunca segurar o
+ * encerramento do processo (nem o teardown da suíte de testes).
+ *
+ * O efeito marca a mensagem como LIDA — é o mesmo request na Cloud API, não há
+ * como ter um sem o outro. Por isso o chamador é UM só, e é o ponto onde
+ * responder já é decisão tomada.
+ */
+function mostrarDigitando(deps: AgentTurnoHandlerDeps, t: TurnoPronto, traceId: string): Digitacao {
+  const indicador = deps.digitacao;
+  const wamid = t.waMessageIdUltima;
+  if (!indicador || !wamid) return SEM_DIGITACAO;
+
+  let restantes = MAX_RENOVACOES_DIGITACAO;
+  let timer: NodeJS.Timeout | null = null;
+  // cancela o disparo EM VÔO, não só os futuros: o timer morto não impede um
+  // request que já saiu de pousar depois da resposta
+  const abortar = new AbortController();
+  const agendar = (atrasoMs: number): void => {
+    timer = setTimeout(disparar, atrasoMs);
+    timer.unref(); // o indicador nunca segura o encerramento do processo
+  };
+  const disparar = (): void => {
+    void indicador.mostrar(wamid, abortar.signal).catch((err) => {
+      if (abortar.signal.aborted) return; // cancelado por nós: não é falha
+      deps.logger.warn(
+        { err, turnoId: t.id, traceId },
+        'indicador de digitação falhou — turno segue normal',
+      );
+    });
+    if (restantes <= 0) return;
+    restantes -= 1;
+    agendar(RENOVAR_DIGITACAO_MS);
+  };
+  agendar(deps.digitacaoAtrasoMs ?? ATRASO_INICIAL_DIGITACAO_MS);
+
+  return {
+    parar() {
+      if (timer) clearTimeout(timer);
+      timer = null;
+      restantes = 0;
+      abortar.abort();
+    },
+  };
+}
+
 export function createAgentTurnoHandler(deps: AgentTurnoHandlerDeps): TurnoHandler {
   return {
     async processar(t: TurnoPronto): Promise<void> {
       const traceId = newTraceId();
       const inicio = Date.now();
+      /**
+       * Aqui — e não no webhook — é onde "o agente vai responder" é verdade: o
+       * debounce já fechou (ele come 6 a 15 s dos 25 s do indicador) e o
+       * ticketGate já deixou passar (ticket `humano_ativo` nem cria turno, então
+       * bot silenciado nunca aparece digitando). Antes do trabalho do modelo,
+       * que é justamente o tempo que a feature existe para cobrir.
+       */
+      const digitacao = mostrarDigitando(deps, t, traceId);
       try {
-        const resultado = await processarComAgente(deps, t, traceId);
+        const resultado = await processarComAgente(deps, t, traceId, digitacao);
         if (resultado.escalado) {
           await escalarTicket(deps, t, resultado);
         }
@@ -332,6 +448,10 @@ export function createAgentTurnoHandler(deps: AgentTurnoHandlerDeps): TurnoHandl
           // último recurso: nunca deixar o job re-tentar por falha do próprio trace
           deps.logger.error({ e, turnoId: t.id }, 'falha ao gravar trace de emergência');
         });
+      } finally {
+        // rede de segurança: nenhum timer sobrevive ao turno, nem no caminho de
+        // exceção. O ponto normal de parada é o enfileiramento da resposta.
+        digitacao.parar();
       }
     },
   };
@@ -341,6 +461,7 @@ async function processarComAgente(
   deps: AgentTurnoHandlerDeps,
   t: TurnoPronto,
   traceId: string,
+  digitacao: Digitacao,
 ): Promise<ResultadoComFusao> {
   const [conv] = await deps.db.select().from(conversa).where(eq(conversa.id, t.conversaId));
   if (!conv) throw new Error(`turno ${t.id} sem conversa`);
@@ -369,13 +490,22 @@ async function processarComAgente(
     resultado: 'enviado',
     textoEnviado: null,
   };
+  /**
+   * O `parar()` vem ANTES do enfileiramento, e não só no `finally` de `processar`:
+   * entre o enqueue e o `finally` ainda rodam `escalarTicket`,
+   * `gravarSinaisDeVerdict`, `emitirObservabilidade` e `gravarTrace` — dezenas de
+   * ms com ida ao banco. Uma renovação caindo nessa janela acenderia "digitando"
+   * com a resposta já a caminho, e ele ficaria aceso por 25 s.
+   */
   const enviar = async (texto: string, opts: { ignorarPendentes?: boolean } = {}) => {
+    digitacao.parar();
     fusao.resultado = await enfileirarComFusao(deps, t, [texto], opts);
     fusao.textoEnviado = fusao.resultado === 'enviado' ? texto : null;
   };
   // 014: N mensagens do fluxo de cobrança num turno só
   const enviarVarias = async (textos: readonly SaidaDoTurno[], seqInicial = 1) => {
     if (textos.length === 0) return;
+    digitacao.parar();
     fusao.resultado = await enfileirarComFusao(deps, t, textos, {
       seqInicial,
       ignorarPendentes: seqInicial > 1,
@@ -488,6 +618,34 @@ async function processarComAgente(
     fusao: fusao.resultado,
     respostaEnviada: fusao.textoEnviado,
   });
+  /**
+   * 044 — pedido de saída, ANTES de tudo.
+   *
+   * Antes dos fluxos (que interceptam o turno) e antes do classificador (que é
+   * uma chamada de LLM). Opt-out é obrigação, não interpretação: precisa
+   * funcionar com o modelo fora do ar, e não pode depender de o LLM classificar
+   * certo. Quem pede para sair recebe UMA confirmação e mais nada — inclusive
+   * se estiver no meio de um fluxo de cobrança ou de venda.
+   */
+  if (ehPedidoDeSaida(t.textoAgregado)) {
+    await suprimir(deps.db, conv.waId, 'pedido_do_contato', t.textoAgregado.slice(0, 300));
+    await enviar(TEXTO_SAIDA_CONFIRMADA, { ignorarPendentes: true });
+    deps.logger.info({ waId: conv.waId, conversaId: conv.id }, 'opt-out: contato suprimido');
+    return {
+      resposta: TEXTO_SAIDA_CONFIRMADA,
+      escalado: false,
+      escaladoTrigger: null,
+      fallback: false,
+      fallbackMotivo: null,
+      eventos: [{ tipo: 'opt_out' }],
+      tokensEntrada: 0,
+      tokensSaida: 0,
+      latenciaMs: Date.now() - inicioTurno,
+      fusao: fusao.resultado,
+      respostaEnviada: fusao.textoEnviado,
+    };
+  }
+
   let personaExtra = '';
   if (fluxoDeps) {
     const ativo = await fluxoDeps.repo.fluxoAtivo(t.conversaId);
@@ -765,10 +923,32 @@ async function processarComAgente(
     }));
   }
 
+  /**
+   * Quem está na raia COMERCIAL é quem não tem vínculo — e a conta é `clienteId
+   * === ''`, não `sdrDeps !== null`.
+   *
+   * A 015 ligava o SDR só para lead frio, e ali `sdrDeps` e "sem vínculo" eram
+   * a mesma coisa. A 045 abriu o fluxo de venda para o cotista também (ele pode
+   * comprar outra cota), então `sdrDeps` passou a existir para TODO MUNDO — e
+   * esta linha, que não mudou, passou a dar a persona comercial ao cotista.
+   *
+   * O efeito (#44): a persona comercial diz "VOCÊ NÃO TEM ACESSO a contrato,
+   * parcelas, boleto ou segunda via nesta raia" e manda escalar quem se diz
+   * cotista. O agente recebia as 19 tools do cotista na mão e respondia que não
+   * podia consultar — sem escalar, prometendo um atendente que ninguém acionou.
+   * Na primeira pergunta da conversa, que é a que o cliente vê na demo.
+   *
+   * `comercialSemVinculo` é a MESMA condição que o hook de guardrail da 015c já
+   * usa 20 linhas abaixo, com o comentário explicando esta exata armadilha. O
+   * conserto é usar uma conta só para as duas decisões, para não divergirem de
+   * novo na próxima spec que mexer no SDR.
+   */
+  const comercialSemVinculo = sdrDeps !== null && clienteId === '';
+
   // #47: com a conversa na fila, o agente sabe que o humano já foi acionado —
   // atende outros assuntos e não promete (nem escala) de novo o mesmo tema
   // 015: na raia do lead frio a persona é a comercial (personaSdr), se houver
-  const personaBase = sdrDeps
+  const personaBase = comercialSemVinculo
     ? (deps.clientConfig.personaSdr ?? deps.clientConfig.persona)
     : deps.clientConfig.persona;
   const persona =
@@ -796,7 +976,6 @@ async function processarComAgente(
    * O cotista COMPRANDO não fica descoberto: ali o fluxo de venda é
    * determinístico e consome o turno antes do LLM — não há rascunho para barrar.
    */
-  const comercialSemVinculo = sdrDeps !== null && clienteId === '';
   const runtime = createAgentRuntime({
     provider: deps.provider,
     guardrails: comercialSemVinculo

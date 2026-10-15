@@ -1,6 +1,6 @@
 import { join } from 'node:path';
 import { loadClientConfig } from '@seta/client-config';
-import { createLogger } from '@seta/observability';
+import { createLogger, newTraceId } from '@seta/observability';
 import { JanelaFechadaError, type OutboundTemplate, signBody } from '@seta/wa-meta';
 import { count, eq } from 'drizzle-orm';
 import { migrate } from 'drizzle-orm/node-postgres/migrator';
@@ -21,6 +21,7 @@ import {
 } from '../src/db/schema.ts';
 import { type Env, loadEnv } from '../src/env.ts';
 import { registerDebounceWorker, type TurnoPronto } from '../src/wa/debounce.ts';
+import { estadoDigitando } from '../src/wa/dev-routes.ts';
 import {
   enqueueOutbound,
   enviarLinha,
@@ -258,6 +259,9 @@ describe('critérios spec 004', () => {
     );
     const processado = turnosProcessados.find((t) => t.id === turnos[0]?.id);
     expect(processado).toBeDefined();
+    // o indicador de digitação reage à ÚLTIMA mensagem da rajada: é o id dela que
+    // a Meta aceita, e marcar a primeira como lida apontaria para a mensagem errada
+    expect(processado?.waMessageIdUltima).toBe('wamid.rajada-2');
   });
 });
 
@@ -584,5 +588,54 @@ describe('simulador dev', () => {
     expect(res.statusCode).toBe(202);
     expect(res.json().duplicada).toBe(false);
     await aguardar(async () => (await db.select({ n: count() }).from(turno))[0]?.n === 1);
+  });
+});
+
+/**
+ * A bolha "digitando…" do simulador. A decisão pura tem teste próprio
+ * (`digitando-simulador.test.ts`); aqui o que se prova é o SQL — nomes de coluna,
+ * o filtro por `turnoId` + `direcao` e a ordenação — contra o banco de verdade.
+ * O SSE em si não cabe num `app.inject`: é stream que nunca termina.
+ */
+describe('estado de digitação do simulador', () => {
+  const TETO = 60_000;
+
+  it('turno recém-criado: digitando; a mensagem de saída apaga', async () => {
+    const waId = '5511999990010';
+    const corpo = payloadTexto(waId, 'wamid.digitando-1', 'oi');
+    expect((await postWebhook(corpo, signBody(corpo, env.WA_APP_SECRET))).statusCode).toBe(200);
+    await aguardar(async () => {
+      const [conv] = await db.select().from(conversa).where(eq(conversa.waId, waId));
+      if (!conv) return false;
+      const turnos = await db.select().from(turno).where(eq(turno.conversaId, conv.id));
+      return turnos.length === 1;
+    });
+    const [conv] = await db.select().from(conversa).where(eq(conversa.waId, waId));
+    if (!conv) throw new Error('sem conversa');
+    const [t] = await db.select().from(turno).where(eq(turno.conversaId, conv.id));
+    if (!t) throw new Error('sem turno');
+
+    expect(await estadoDigitando(db, conv.id, TETO)).toBe(true);
+
+    // é o worker do outbox que grava a mensagem `out` no instante do envio —
+    // o mesmo instante em que o WhatsApp apaga o indicador
+    await db.insert(mensagem).values({
+      id: newTraceId(),
+      conversaId: conv.id,
+      direcao: 'out',
+      autor: 'bot',
+      texto: 'Olá! Como posso ajudar?',
+      status: 'enviada',
+      turnoId: t.id,
+    });
+
+    expect(await estadoDigitando(db, conv.id, TETO)).toBe(false);
+  });
+
+  it('conversa sem turno nenhum não está digitando', async () => {
+    const conversaId = newTraceId();
+    await db.insert(conversa).values({ id: conversaId, waId: '5511999990011' });
+
+    expect(await estadoDigitando(db, conversaId, TETO)).toBe(false);
   });
 });

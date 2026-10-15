@@ -17,6 +17,13 @@ export interface TurnoPronto {
   readonly id: string;
   readonly conversaId: string;
   readonly textoAgregado: string;
+  /**
+   * wamid da ÚLTIMA mensagem recebida que entrou neste turno. Existe porque a
+   * Meta só mostra "digitando…" com o id de uma mensagem RECEBIDA, e o turno é
+   * o único lugar que sabe qual foi. `null` ⇒ o indicador não aparece (nunca
+   * acontece pelo webhook, onde a coluna é UNIQUE e obrigatória).
+   */
+  readonly waMessageIdUltima: string | null;
 }
 
 // #46: heurística barata da janela adaptativa — quem "termina a frase" espera
@@ -125,22 +132,28 @@ async function processarDisparo(deps: DebounceDeps, conversaId: string): Promise
       .orderBy(asc(mensagem.criadoEm))
       .for('update', { skipLocked: true });
     if (travadas.length === 0) return null;
-    const criado: TurnoPronto = {
+    // a LINHA da tabela e o OBJETO do handler deixam de ser a mesma coisa: `turno`
+    // tem quatro colunas, e o handler precisa de um dado que não é coluna nenhuma
+    const linha = {
       id: newTraceId(),
       conversaId,
       textoAgregado: travadas.map((m) => m.texto).join('\n'),
     };
-    await tx.insert(turno).values(criado);
+    await tx.insert(turno).values(linha);
     await tx
       .update(mensagem)
-      .set({ turnoId: criado.id })
+      .set({ turnoId: linha.id })
       .where(
         inArray(
           mensagem.id,
           travadas.map((m) => m.id),
         ),
       );
-    return criado;
+    const ultimaTravada = travadas[travadas.length - 1];
+    return {
+      ...linha,
+      waMessageIdUltima: ultimaTravada?.waMessageId ?? null,
+    } satisfies TurnoPronto;
   });
   if (!novoTurno) return;
 

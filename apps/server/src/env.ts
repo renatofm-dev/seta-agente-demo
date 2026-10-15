@@ -44,6 +44,17 @@ export const EnvSchemaBase = z.object({
    * última mensagem (fecho 0.6×, continuação 1.5×).
    */
   WA_DEBOUNCE_MS: z.coerce.number().int().min(100).default(10_000),
+  /**
+   * "Digitando…" antes da resposta do agente. Ligado por default — é o que o
+   * contato espera de quem está do outro lado, e hoje ele fica 10 s sem sinal
+   * nenhum. Desligar é o botão para UM caso: a Cloud API não tem indicador sem
+   * marcar a mensagem como LIDA (é o mesmo request), e se o cliente não quiser os
+   * dois tiques azuis do robô isso precisa ser reversível sem deploy.
+   */
+  WA_TYPING_INDICATOR: z
+    .enum(['true', 'false'])
+    .default('true')
+    .transform((v) => v === 'true'),
   /** Provedor LLM OpenAI-compatible. Ausente ⇒ agente responde fallback honesto. */
   LLM_BASE_URL: z.url().optional(),
   LLM_API_KEY: z.string().min(1).optional(),
