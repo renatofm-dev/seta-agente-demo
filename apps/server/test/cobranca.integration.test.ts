@@ -10,7 +10,7 @@ import {
   TEXTO_SEM_DOCUMENTO,
 } from '@seta/cobranca';
 import { createPgConnector, type DbConnector } from '@seta/erp-connector';
-import { createLogger, createNoopObsEmitter } from '@seta/observability';
+import { createLogger, createNoopObsEmitter, newTraceId } from '@seta/observability';
 import { createSimulatedPaymentProvider } from '@seta/payment-provider';
 import { createExecutor, type Executor, loadCatalog } from '@seta/query-catalog';
 import type { OutboundTemplate } from '@seta/wa-meta';
@@ -952,6 +952,39 @@ describe('spec 044 — campanha de cobrança pela carteira', () => {
       'cobranca_em_aberto',
     );
   }, 60_000);
+
+  /**
+   * Dois contatos no MESMO contrato — titular e cônjuge, ou dois números da
+   * mesma pessoa. Acontece no `contatos.yaml` de verdade, e foi assim que o
+   * defeito apareceu: o plano dizia "3 cobráveis" para o mesmo contrato.
+   *
+   * O índice `cobranca_referencia_aberta_uq` barraria o segundo insert, então
+   * dinheiro não seria cobrado duas vezes — mas os outros dois falhariam com
+   * erro de banco no log, e o número na tela estaria errado.
+   */
+  it('dois contatos no mesmo contrato: cobra um e recusa o outro com motivo', async () => {
+    const segundo = '5511999990099';
+    await db.insert(contato).values({
+      id: newTraceId(),
+      waId: segundo,
+      nome: 'Cônjuge do contrato 10002',
+      clienteErpId: '10002',
+      documento: '52998224725',
+      verificadoEm: new Date(),
+    });
+
+    const r = await apiConsole('POST', '/api/console/cobranca/campanha', {});
+    const linhas = r.json().linhas as { waId: string; contratoId: string; recusa: string | null }[];
+    const doContrato = linhas.filter((l) => l.contratoId === '10002');
+    expect(doContrato.length).toBeGreaterThan(1);
+    // exatamente UM cobrável, e os demais com motivo legível
+    expect(doContrato.filter((l) => l.recusa === null)).toHaveLength(1);
+    expect(doContrato.filter((l) => l.recusa === 'contrato_repetido').length).toBe(
+      doContrato.length - 1,
+    );
+
+    await db.delete(contato).where(eq(contato.waId, segundo));
+  }, 30_000);
 
   it('quem pediu para sair não entra na campanha', async () => {
     await suprimir(db, WA_INADIMPLENTE, 'pedido_do_contato', 'pediu para sair');

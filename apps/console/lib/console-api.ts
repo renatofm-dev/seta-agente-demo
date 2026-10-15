@@ -523,6 +523,39 @@ export interface CobrancaView {
   parcelas: string | null;
 }
 
+/** 044: um inadimplente da carteira, com a parcela que a campanha cobraria. */
+export interface AlvoCarteira {
+  waId: string;
+  nome: string | null;
+  contratoId: string;
+  qtdVencidas: number;
+  saldoVencidoCentavos: number;
+  maiorAtrasoDias: number;
+  parcela: number;
+  parcelaTituloId: string;
+  parcelaValorCentavos: number;
+  /** YYYY-MM-DD */
+  parcelaVencimento: string;
+  /** null ⇒ cobrável. */
+  recusa: 'suprimido' | 'acima_do_teto' | 'cobranca_em_aberto' | 'contrato_repetido' | null;
+}
+
+export interface CarteiraInadimplente {
+  total: number;
+  cobraveis: number;
+  maxPorCampanha: number;
+  /** não-nulo ⇒ a lista foi cortada neste tamanho. */
+  truncadoEm: number | null;
+  linhas: AlvoCarteira[];
+}
+
+export interface CampanhaDisparada {
+  dryRun: false;
+  cobraveis: number;
+  cobrancasCriadas: number;
+  recusados: { waId: string; recusa: string }[];
+}
+
 export interface CobrancasResposta {
   psp: string;
   ambiente: string;
@@ -781,6 +814,21 @@ export const api = {
     fetch(`/api/console/cobrancas/${id}`).then((r) => json<CobrancaDetalhe>(r)),
   aprovarCobranca: (id: string) =>
     post(`/api/console/cobrancas/${id}/aprovar`).then((r) => json<{ ok: boolean }>(r)),
+  // --- 044: cobrança ativa pela carteira inadimplente ---
+  carteiraInadimplente: (filtro: { atrasoMinimoDias: number; saldoMinimoCentavos: number }) => {
+    const params = new URLSearchParams({
+      atrasoMinimoDias: String(filtro.atrasoMinimoDias),
+      saldoMinimoCentavos: String(filtro.saldoMinimoCentavos),
+    });
+    return fetch(`/api/console/cobranca/carteira?${params}`).then((r) =>
+      json<CarteiraInadimplente>(r),
+    );
+  },
+  /** `confirmar: true` é o que cria cobrança de verdade — sem ele, só o plano. */
+  dispararCampanhaCobranca: (filtro: { atrasoMinimoDias: number; saldoMinimoCentavos: number }) =>
+    post('/api/console/cobranca/campanha', { ...filtro, confirmar: true }).then((r) =>
+      json<CampanhaDisparada>(r),
+    ),
   // --- Reservas (038) ---
   reservas: (filtro?: { status?: StatusReserva; conversaId?: string }) => {
     const params = new URLSearchParams();

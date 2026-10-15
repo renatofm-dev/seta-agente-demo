@@ -58,7 +58,11 @@ export interface CampanhaCobrancaDeps {
   readonly pspNome: string;
 }
 
-export type MotivoRecusa = 'suprimido' | 'acima_do_teto' | 'cobranca_em_aberto';
+export type MotivoRecusa =
+  | 'suprimido'
+  | 'acima_do_teto'
+  | 'cobranca_em_aberto'
+  | 'contrato_repetido';
 
 export interface LinhaPlano {
   readonly alvo: AlvoCobranca;
@@ -92,10 +96,24 @@ export async function planejarCampanha(
   const alvos = truncadoEm ? todos.slice(0, truncadoEm) : todos;
 
   const linhas: LinhaPlano[] = [];
+  /**
+   * Um contrato pode ter DOIS contatos (titular e cônjuge, ou dois números da
+   * mesma pessoa) — acontece no `contatos.yaml` de verdade. A cobrança é da
+   * parcela, não do contato: a referência determinística é a mesma para os
+   * dois, e o índice `cobranca_referencia_aberta_uq` barraria o segundo insert.
+   *
+   * Barrar no banco funcionaria, mas erraria duas coisas: o plano diria "3
+   * cobráveis" quando só 1 pode dar certo, e os outros dois falhariam com erro
+   * de banco no log em vez de motivo legível. Então a deduplicação é aqui, e o
+   * primeiro da ordem (mais atrasado) é quem recebe.
+   */
+  const contratosJaNoPlano = new Set<string>();
   for (const alvo of alvos) {
     let recusa: MotivoRecusa | null = null;
     if (await estaSuprimido(deps.db, alvo.waId)) {
       recusa = 'suprimido';
+    } else if (contratosJaNoPlano.has(alvo.contratoId)) {
+      recusa = 'contrato_repetido';
     } else if (alvo.parcelaValorCentavos > deps.env.PAGAMENTO_TETO_SEM_HITL_CENTAVOS) {
       // acima do teto a 014 escalaria para aprovação; numa campanha isso vira
       // fila humana sem aviso, então ele é RECUSADO aqui, visível no plano
@@ -110,6 +128,7 @@ export async function planejarCampanha(
       // mensagem para quem já recebeu
       if (aberta) recusa = 'cobranca_em_aberto';
     }
+    if (recusa === null) contratosJaNoPlano.add(alvo.contratoId);
     linhas.push({ alvo, recusa });
   }
   return {
