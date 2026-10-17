@@ -10,11 +10,23 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0 # o gitleaks precisa do histórico, não só do último commit
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v5
         with:
           node-version: 24
           cache: pnpm
+      # 026/#6: varredura de segredo ANTES de qualquer coisa — se vazou, o
+      # resto do CI não importa. Binário pinado em vez da action oficial: ela
+      # exige licença para organização, e este repositório pode voltar a ser
+      # privado.
+      - name: gitleaks
+        run: |
+          VERSAO=8.30.1
+          curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v${VERSAO}/gitleaks_${VERSAO}_linux_x64.tar.gz" \
+            | tar -xz -C /usr/local/bin gitleaks
+          gitleaks git --redact --exit-code 1 .
       - run: pnpm install --frozen-lockfile
       - run: pnpm lint
       - run: pnpm typecheck

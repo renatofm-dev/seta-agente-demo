@@ -1,0 +1,18 @@
+# Achados conhecidos e conferidos — NÃO são credenciais.
+#
+# Os quatro apontam para a MESMA chave PIX aleatória (EVP) da SETA TECH LTDA,
+# repetida num YAML de configuração e em três fixtures de teste. Chave PIX é um
+# identificador de RECEBIMENTO: ela não autentica, não autoriza e não movimenta
+# dinheiro — é o que se imprime no QR code da maquininha. O gitleaks a marca
+# porque é um UUID e a regra `generic-api-key` dispara por entropia.
+#
+# Varredura completa do histórico em 17/10/2026: 233 commits, nenhum token da
+# Meta, chave do Asaas, senha de banco ou chave de LLM. O `.env` sempre esteve
+# no .gitignore.
+#
+# Se a chave PIX passar a ser de CLIENTE (e não da SETA), ela sai do repositório
+# e vira variável de ambiente — aí estas linhas devem ser removidas junto.
+46ed2a125475298cca5af26a7efe9f07c568a4a8:apps/server/test/template-cobranca.test.ts:generic-api-key:20
+ed762ea28452f65f790c9a23503144eed5f650f1:apps/server/test/order-details.test.ts:generic-api-key:9
+ed762ea28452f65f790c9a23503144eed5f650f1:configs/demo/client.yaml:generic-api-key:43
+ed762ea28452f65f790c9a23503144eed5f650f1:packages/wa-meta/test/template.test.ts:generic-api-key:126

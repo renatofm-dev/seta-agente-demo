@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+# Varre o que está PRESTES a ser commitado, não o histórico: `--staged` olha o
+# índice, então o segredo é barrado antes de existir em commit nenhum. Depois
+# que ele entra, tirar exige reescrever histórico — e num repo já publicado,
+# nem isso resolve.
+#
+# Instala com `pnpm hooks:install` (usa core.hooksPath, sem dependência nova).
+set -euo pipefail
+
+if ! command -v gitleaks >/dev/null 2>&1; then
+  # FALHA ABERTA, de propósito: bloquear quem não tem a ferramenta instalada
+  # trava o repositório para quem acabou de cloná-lo. O gate que não deixa
+  # passar é o do CI; este aqui é o que avisa cedo, enquanto é barato.
+  echo "aviso: gitleaks não encontrado — commit liberado SEM varredura." >&2
+  echo "       instale com 'brew install gitleaks' (o CI varre de qualquer forma)." >&2
+  exit 0
+fi
+
+if ! gitleaks git --staged --redact --no-banner . ; then
+  cat >&2 <<'AVISO'
+
+commit BARRADO: o gitleaks achou um segredo no que você ia commitar.
+
+  • se for segredo de verdade: tire do código, use variável de ambiente e
+    ROTACIONE a credencial — ela já passou pelo seu disco.
+  • se for falso positivo (fixture, UUID, chave pública): acrescente o
+    fingerprint ao .gitleaksignore COM UM COMENTÁRIO dizendo por que não é
+    segredo. Linha sem explicação vira permissão esquecida.
+
+AVISO
+  exit 1
+fi
