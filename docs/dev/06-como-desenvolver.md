@@ -6,6 +6,23 @@
 - Node 24 (`node -v`) e pnpm 10 (`corepack enable` ativa a versão pinada no `package.json`)
 - Chave de um provedor LLM OpenAI-compatible (opcional para subir; necessária para o agente
   conversar de verdade)
+- [`gitleaks`](https://github.com/gitleaks/gitleaks) (`brew install gitleaks`) — varredura de
+  segredo no pre-commit. Sem ele o hook **libera o commit com um aviso**, em vez de travar o
+  repositório para quem acabou de cloná-lo; quem não deixa passar é o CI.
+
+### Ative os hooks do repositório (uma vez por clone)
+
+```sh
+pnpm hooks:install     # git config core.hooksPath tools/hooks
+```
+
+Não há husky nem lefthook — `core.hooksPath` é do próprio git e não acrescenta dependência à
+stack travada. O hook de pre-commit roda `gitleaks git --staged`, que varre **o índice**: o
+segredo é barrado antes de existir em commit nenhum. Depois que entra, tirar exige reescrever
+histórico — e num repositório já publicado, nem isso resolve.
+
+Falso positivo entra no `.gitleaksignore` **com um comentário explicando por que não é segredo**.
+Linha sem explicação vira permissão esquecida.
 
 ## Subir o ambiente
 
@@ -49,6 +66,8 @@ descubra o dono com `lsof -nP -iTCP:3000 -sTCP:LISTEN` antes de subir.
 | `pnpm dev` / `pnpm dev-whatsapp` | ambiente completo (ver acima) |
 | `pnpm test` | `tsc -b` + Vitest (unitários e integração) |
 | `pnpm lint` | Biome (`check .`) + dependency-cruiser |
+| `pnpm segredos` | `gitleaks` no histórico inteiro (o mesmo que o CI roda) |
+| `pnpm hooks:install` | aponta o git para `tools/hooks` (pre-commit de segredo) |
 | `pnpm typecheck` | `tsc -b` + typecheck do console |
 | `pnpm build` | `tsc -b` + `next build` |
 | `pnpm db:migrate` | aplica `apps/server/drizzle/` |

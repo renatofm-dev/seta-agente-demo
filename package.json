@@ -15,6 +15,8 @@
     "dev:console": "pnpm --filter @seta/console dev",
     "dev-whatsapp": "tools/dev-whatsapp.sh",
     "envs-coolify": "tools/envs-coolify.sh",
+    "hooks:install": "git config core.hooksPath tools/hooks && echo 'hooks do repo ativos (tools/hooks)'",
+    "segredos": "gitleaks git --redact --exit-code 1 .",
     "build": "tsc -b && pnpm --filter @seta/console build",
     "typecheck": "tsc -b && pnpm --filter @seta/console typecheck",
     "test": "tsc -b && vitest run",
