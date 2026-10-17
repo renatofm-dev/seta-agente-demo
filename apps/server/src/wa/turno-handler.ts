@@ -951,14 +951,39 @@ async function processarComAgente(
   const personaBase = comercialSemVinculo
     ? (deps.clientConfig.personaSdr ?? deps.clientConfig.persona)
     : deps.clientConfig.persona;
-  const persona =
-    (filaHumano
-      ? `${personaBase}\n\nATENÇÃO: um atendente humano JÁ FOI ACIONADO para esta ` +
+
+  /**
+   * #51: com a conversa na fila, a nota dizia "sobre ESSE assunto informe que
+   * um atendente assume" e, na frase seguinte, "continue ajudando normalmente
+   * em qualquer outro assunto". O modelo aplicava a primeira metade ao que a
+   * segunda liberava — em campo, a MESMA conversa com o MESMO ticket aberto
+   * atendeu uma 2ª via às 14:17 e recusou outra às 16:13.
+   *
+   * O sistema sabe qual é o assunto deste turno: o classificador já rodou. Com
+   * `segunda_via`, `pagar` ou `reservar` a plataforma resolve sozinha — não é
+   * o tema que está na fila, e mandar "um atendente assume" é prometer o que
+   * ninguém vai cumprir, porque ticket novo não é aberto.
+   *
+   * A nota não some: ela encolhe para o que ainda precisa valer — **não
+   * escalar de novo pelo mesmo motivo**. O que sai é a ordem de desviar.
+   *
+   * `outro` mantém a nota inteira: sem saber o assunto, o conservador é supor
+   * que é o mesmo da fila.
+   */
+  const plataformaResolve =
+    intencao === 'segunda_via' || intencao === 'pagar' || intencao === 'reservar';
+  const notaFila = filaHumano
+    ? plataformaResolve
+      ? `\n\nATENÇÃO: um atendente humano já foi acionado para esta conversa (motivo: ` +
+        `${motivoEscalada}). NÃO escale de novo por esse motivo e NÃO prometa atendente — ` +
+        'atenda normalmente o que o cotista está pedindo agora.'
+      : `\n\nATENÇÃO: um atendente humano JÁ FOI ACIONADO para esta ` +
         `conversa (motivo: ${motivoEscalada}) e ela está na fila de atendimento. Sobre ESSE ` +
         'assunto, apenas informe que um atendente vai assumir em instantes — não responda o ' +
         'tema, não prometa acionar de novo e não use a tool escalar_para_humano para o mesmo ' +
         'motivo. Continue ajudando normalmente em qualquer outro assunto.'
-      : personaBase) + personaExtra;
+    : '';
+  const persona = personaBase + notaFila + personaExtra;
 
   /**
    * 015c: na raia do SDR entra um hook a mais. `preco.ts` barra percentual só
