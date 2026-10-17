@@ -281,6 +281,46 @@ describe('#47 — bot ativo na fila de humano', () => {
     expect((await respostasDoBot()).length).toBe(3);
   }, 40_000);
 
+  /**
+   * #51 — a nota da fila vale para o ASSUNTO que escalou, não para a conversa.
+   *
+   * Em campo (15/10) a MESMA conversa com o MESMO ticket aberto atendeu uma 2ª
+   * via às 14:17 e recusou outra às 16:13 com "esse assunto já está com a
+   * equipe". O modelo aplicava a primeira metade da nota ("sobre ESSE assunto,
+   * informe que um atendente assume") ao que a segunda metade liberava
+   * ("continue ajudando normalmente em qualquer outro assunto").
+   *
+   * Os dois casos estão aqui porque consertar só um trocaria um comportamento
+   * cego por outro: o que a plataforma resolve sozinha ela atende, e o tema
+   * que está na fila continua sendo devolvido para o humano.
+   */
+  it('#51: com ticket na fila, assunto que a plataforma resolve é ATENDIDO; o tema escalado não', async () => {
+    const t = await escalar('consigo algum desconto?');
+
+    // 1) pedido de 2ª via: a nota encolhe — sem ordem de desviar
+    const antes = await contarTraces();
+    const provider = createFakeProvider()
+      .respondeTexto('segunda_via')
+      .respondeTexto('O boleto está a caminho!');
+    fake = provider;
+    await mensagemDoContato('me manda a 2ª via da parcela 24');
+    await aguardar(async () => (await contarTraces()) > antes);
+
+    const systemSegundaVia = String(provider.requests[1]?.messages[0]?.content ?? '');
+    expect(systemSegundaVia).toContain('NÃO escale de novo por esse motivo');
+    expect(systemSegundaVia).toContain('atenda normalmente o que o cotista está pedindo agora');
+    // a ordem de desviar NÃO pode estar presente — era ela que recusava a 2ª via
+    expect(systemSegundaVia).not.toContain('Sobre ESSE assunto');
+    expect(systemSegundaVia).toContain(t.motivoEscalonamento); // o motivo continua no contexto
+
+    // 2) assunto desconhecido (`outro`) mantém a nota inteira: sem saber do que
+    //    se trata, supor que é o tema da fila é o conservador
+    const provider2 = await turnoDoBot('e aquilo lá?', 'Pode me dar mais detalhes?');
+    const systemOutro = String(provider2.requests[1]?.messages[0]?.content ?? '');
+    expect(systemOutro).toContain('Sobre ESSE assunto');
+    expect(systemOutro).toContain('JÁ FOI ACIONADO');
+  }, 30_000);
+
   it('corrida do Assumir: resposta do bot em voo é descartada quando o humano assume', async () => {
     const t = await escalar('quero desconto');
     const respostasAntes = (await respostasDoBot()).length;
