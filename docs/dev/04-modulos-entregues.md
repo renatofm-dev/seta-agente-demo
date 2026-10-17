@@ -486,6 +486,41 @@ aqui é o mapa.
   promete ao cliente e não entrega. Vale como convenção — **promessa termina em entrega, em
   explicação honesta ou em ticket, nunca em `return` mudo**.
 
+## 044 — Cobrança ativa: a plataforma abre a conversa com quem está em atraso
+
+- **Entrega:** até aqui a cobrança só começava se o cotista escrevesse primeiro. Agora o console
+  mostra a **carteira inadimplente** (quem, quanto, há quantos dias, e qual parcela seria cobrada) e
+  dispara a cobrança para todos de uma vez. Provado em produção em 15/10: 3 cobranças criadas, 3
+  mensagens `entregue` confirmadas pela Meta, pagamento simulado e **baixa automática no ERP**
+  (`erp_escrita` confirmada, `erp_id` 7).
+- **Onde está:** `apps/server/src/pagamentos/carteira-inadimplente.ts` (seleção),
+  `campanha-cobranca.ts` (plano e disparo), as rotas `/api/console/cobranca/{carteira,campanha}` em
+  `cobrancas-routes.ts`, a tela `apps/console/app/(console)/carteira/`, o opt-out em
+  `wa/supressao.ts` (migração `0024`), a variável por destinatário em `wa/disparo.ts` + migração
+  `0025`, e o ritmo de envio no mesmo `disparo.ts`.
+- **Cobra UMA parcela por destinatário**, a mais antiga vencida — não todas. Com o teto de alçada
+  em R$ 5.000, cobrar o saldo inteiro jogaria quase todo mundo em `aguardando_aprovacao`, e campanha
+  que para inteira na fila humana não é campanha.
+- **Dry-run é o padrão.** Sem `confirmar: true` nada é criado; a tela só manda o disparo depois de
+  uma confirmação que repete quantas pessoas e quanto. Isto abre conversa com gente real e não tem
+  desfazer.
+- **Recusa aparece com motivo** — `suprimido`, `acima_do_teto`, `cobranca_em_aberto`,
+  `contrato_repetido` —, nunca como linha ausente: quem dispara precisa saber que 3 dos 20 não vão
+  receber, e por quê.
+- **Ritmo:** pausa entre envios e disjuntor por N falhas CONSECUTIVAS (não por taxa — taxa precisa
+  de amostra, e no começo do disparo, quando ainda dá para evitar o estrago, não há amostra). Ao
+  abrir, o disparo **não** é concluído: os restantes ficam `pendente` e o mesmo job retoma.
+- **Desvio da spec, consciente:** a seleção **não** ficou no catálogo. A spec pedia
+  `financeiro.titulos_atraso`, mas aquela entrada responde "o que está vencido NESTE contrato"
+  (`source: session`), e não existe origem "operador" — inventá-la mexeria no bind que impede o LLM
+  de escolher de qual contrato lê, que é o controle de acesso do produto. E a inadimplência vive no
+  banco do ERP enquanto a carteira vive no do app, com credenciais diferentes: não há `JOIN`
+  possível. São duas etapas, no servidor, com bind nomeado.
+- **O que ficou faltando:** a campanha **não aparece no funil da 017** (#53) — o relatório é
+  construído sobre `disparo`, e a campanha reusa o caminho da 014 sem criar um. O critério 3 da spec
+  (resposta ao template caindo no fluxo normal) não foi verificado em campo. E "sem CPF" bloqueia na
+  emissão, não aparece como recusa no plano.
+
 ## 040 — 2ª via de boleto em PDF pelo WhatsApp
 - **Entrega:** o cotista pede "me manda a segunda via" e **o boleto chega em PDF**, com nome de
   arquivo legível (`boleto-parcela-03-20260310.pdf`). Até aqui o agente só sabia mandar texto: o

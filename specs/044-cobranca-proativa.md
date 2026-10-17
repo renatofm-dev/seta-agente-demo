@@ -1,5 +1,11 @@
 # 044 — cobrança proativa: do disparo ao pagamento confirmado
 
+> **ENTREGUE em 15/10/2026.** Carteira inadimplente no console, opt-out, variável por
+> destinatário, emissão e ritmo de envio — provado em produção (3 cobranças, 3 mensagens
+> entregues, pagamento e baixa automática no ERP). **Duas ressalvas**: a seleção do público
+> **não** ficou no catálogo (ver os critérios abaixo) e o funil da 017 ainda não conta a campanha
+> (issue #53). Detalhes em [`docs/dev/04-modulos-entregues.md`](../docs/dev/04-modulos-entregues.md).
+>
 > **Pré-spec** (rascunho de 15/09/2026): terceira etapa da
 > [frente de pagamentos](../docs/roadmap-pagamentos-whatsapp.md). Depende da
 > [042](042-asaas-sandbox-real.md) e da [043](043-template-pagamento-pix.md). É a etapa que
@@ -77,16 +83,23 @@ disparo do que queimar o número.
 - O limite de 500 destinatários por disparo continua valendo.
 
 ## Critérios de aceite
-1. Um disparo de cobrança criado a partir do catálogo emite uma cobrança por destinatário e
-   envia o template com o link e o PIX **daquela** pessoa — conferido em dois destinatários
-   com valores diferentes.
+1. ⚠️ **parcial** — a campanha emite uma cobrança por destinatário e manda a mensagem com o
+   link e o código **daquela** pessoa (conferido em campo com três valores diferentes), mas o
+   público **não vem do catálogo**. `financeiro.titulos_atraso` responde "o que está vencido
+   NESTE contrato" (`source: session`), e não existe origem "operador" — criá-la mexeria no bind
+   que impede o LLM de escolher de qual contrato lê. Além disso a inadimplência vive no banco do
+   ERP e a carteira no do app, com credenciais diferentes: não há `JOIN`. A seleção é server-side,
+   em duas etapas, com bind nomeado.
 2. Quem está na lista de supressão não recebe e aparece como recusado na resposta da
    criação; a palavra de saída insere na lista e responde ao cotista.
-3. Quem responde ao template cai no fluxo de cobrança normal, na mesma conversa, com a
-   janela de 24 h aberta pela resposta.
-4. Pagar uma das cobranças dispara a confirmação, e o funil da campanha contabiliza
-   entregue, lido, respondido, cobrado e pago.
-5. Destinatário bloqueado (sem CPF, contrato cancelado) não recebe e fica registrado com o
-   motivo; falha de um não interrompe o disparo.
+3. ⚠️ **não verificado em campo** — a conversa é criada sem tocar a janela, e a resposta do
+   cotista deve abri-la e cair no turno normal. O caminho existe (é o mesmo da 013), mas ninguém
+   respondeu a uma cobrança ativa ainda.
+4. ⚠️ **parcial** — pagar dispara a confirmação e a baixa no ERP (verificado em 15/10), mas o
+   **funil da campanha não conta** a cobrança ativa: o relatório da 017 é construído sobre
+   `disparo`, e a campanha reusa o caminho da 014 sem criar um. Issue #53.
+5. ⚠️ **parcial** — recusa com motivo visível no plano (`suprimido`, `acima_do_teto`,
+   `cobranca_em_aberto`, `contrato_repetido`) e falha de um não interrompe os demais (testado).
+   **Sem CPF** ainda bloqueia só na emissão, pela 014, e não aparece como recusa no plano.
 6. Um disparo da 013, sem variável por destinatário, continua funcionando igual.
 7. `pnpm lint && pnpm test && pnpm build` verdes.
