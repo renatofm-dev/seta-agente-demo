@@ -1,0 +1,52 @@
+id: financeiro.parcela_por_mes
+version: 1
+description: >-
+  A parcela EM ABERTO que vence num MÊS do contrato da sessão: id, número da
+  parcela, total de parcelas, valor em centavos e em reais, vencimento, origem,
+  forma de pagamento e a linha digitável (nula quando não há boleto gerado).
+  Irmã da parcela_por_numero, para quando o cotista fala pelo mês ("a de
+  março", "a de 03/2027") em vez do número — que é como ele fala quando o
+  contrato tem dezenas de parcelas e ele não decorou o número. Entrada de
+  VERIFICAÇÃO: o agente não a chama, quem chama é o servidor.
+entities: [titulo]
+modules: [financeiro]
+params:
+  contrato_id:
+    type: string
+    source: session
+    description: Contrato vinculado à sessão (nunca vem do modelo).
+  mes:
+    type: string
+    source: agent
+    description: >-
+      Mês do vencimento em AAAA-MM ("2027-03"). Comparado como texto para que
+      entrada malformada simplesmente não case, em vez de estourar.
+sql: >-
+  SELECT id, parcela, total_parcelas, valor_centavos, vencimento, origem,
+         meio_pagamento, linha_digitavel, status,
+         (valor_centavos / 100)::text || ',' ||
+           lpad((valor_centavos % 100)::text, 2, '0') AS valor_reais
+  FROM v_titulo
+  WHERE contrato_id = :contrato_id
+    AND to_char(vencimento, 'YYYY-MM') = :mes
+    AND status <> 'pago'
+  ORDER BY vencimento ASC
+limits:
+  timeout_ms: 3000
+  max_rows: 5
+output:
+  columns:
+    - id
+    - parcela
+    - total_parcelas
+    - valor_centavos
+    - valor_reais
+    - vencimento
+    - origem
+    - meio_pagamento
+    - linha_digitavel
+    - status
+  masking: {}
+tool:
+  expose: false
+  name: parcela_por_mes

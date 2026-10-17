@@ -32,16 +32,42 @@ export interface PedidoSegundaVia {
   readonly legenda: string;
 }
 
-const ParamsSchema = z.object({
-  parcela: z
-    .union([z.string(), z.number().int().positive()])
-    .transform((v) => String(v).trim())
-    .pipe(z.string().min(1).max(10))
-    .describe(
-      'NÚMERO da parcela, como o cotista fala ("20" em "parcela 20/120"). Nunca o id ' +
-        'interno da linha: o servidor resolve o id sozinho.',
-    ),
-});
+/**
+ * #36: duas formas de apontar a parcela, porque são as duas que o cotista usa.
+ *
+ * O NÚMERO funciona quando ele o tem à mão. Num contrato de 88 ou 120 parcelas
+ * ele raramente tem — e o que ele enxerga na conversa é uma janela de 5
+ * (`proximas_parcelas`) ou as vencidas. Pedir "a de março" é como ele fala, e é
+ * o critério de aceite da própria 040.
+ *
+ * Exatamente UM dos dois: aceitar os dois juntos criaria a pergunta "qual
+ * venceu?", e a resposta errada manda o boleto errado.
+ */
+const ParamsSchema = z
+  .object({
+    parcela: z
+      .union([z.string(), z.number().int().positive()])
+      .transform((v) => String(v).trim())
+      .pipe(z.string().min(1).max(10))
+      .optional()
+      .describe(
+        'NÚMERO da parcela, como o cotista fala ("20" em "parcela 20/120"). Nunca o id ' +
+          'interno da linha: o servidor resolve o id sozinho.',
+      ),
+    mes: z
+      .string()
+      .trim()
+      .regex(/^\d{4}-\d{2}$/)
+      .optional()
+      .describe(
+        'MÊS do vencimento em AAAA-MM, quando o cotista aponta a parcela pelo mês ("a de ' +
+          'março de 2027" ⇒ "2027-03"). Use este caminho quando ele NÃO disser o número — ' +
+          'num contrato longo ele quase nunca sabe o número.',
+      ),
+  })
+  .refine((p) => (p.parcela === undefined) !== (p.mes === undefined), {
+    error: 'informe parcela (número) OU mes (AAAA-MM), nunca os dois',
+  });
 
 /** Como o cotista reconhece a parcela numa frase. */
 function rotulo(parcela: unknown, total: unknown): string {
@@ -112,24 +138,36 @@ export function toolEnviarSegundaVia(
     description:
       'Envia ao cliente, em PDF pelo WhatsApp, a 2ª via do boleto de UMA parcela do contrato ' +
       'dele. Use quando o cliente pedir o boleto, a segunda via, o PDF ou o documento de uma ' +
-      'parcela. Informe o NÚMERO da parcela (o "20" de "parcela 20/120"), como o cliente a ' +
-      'chama — nunca um id. Se ele não disse qual, liste antes (proximas_parcelas ou ' +
-      'titulos_atraso) e pergunte. Depois de chamar, responda em UMA frase curta que o boleto está indo; o ' +
-      'arquivo sai logo em seguida, você não precisa (nem consegue) anexá-lo. Parcela sem ' +
-      'boleto ou de outro contrato volta com ok=false e o motivo: explique, não tente de novo.',
+      'parcela. Aponte a parcela de UMA das duas formas, nunca as duas: `parcela` com o NÚMERO ' +
+      'que o cliente falou (o "20" de "parcela 20/120", nunca um id), ou `mes` em AAAA-MM quando ' +
+      'ele apontar pelo mês ("a de março de 2027" ⇒ mes="2027-03"). Contrato longo tem 88 ou 120 ' +
+      'parcelas e o cliente quase nunca sabe o número: se ele disser o mês, use `mes` direto, sem ' +
+      'listar. ATENÇÃO: `proximas_parcelas` mostra só as 5 mais próximas — ela NÃO é a lista ' +
+      'completa, então nunca a use para afirmar qual é a "última" ou "a mais distante"; para uma ' +
+      'parcela fora dessa janela, peça o número ou o mês ao cliente. Depois de chamar, responda ' +
+      'em UMA frase curta que o boleto está indo; o arquivo sai logo em seguida, você não precisa ' +
+      '(nem consegue) anexá-lo. Parcela sem boleto ou de outro contrato volta com ok=false e o ' +
+      'motivo: explique, não tente de novo.',
     schema: ParamsSchema,
     priceSource: false,
     async execute(params, session) {
       if (!session.clienteId) throw new Error('sessão sem vínculo — tool indisponível');
-      const { parcela } = ParamsSchema.parse(params);
-      const r = await deps.executor.run('financeiro.parcela_por_numero', { parcela }, deps.session);
+      const p = ParamsSchema.parse(params);
+      // o `refine` garante que exatamente um veio; o `mes` decide a entrada
+      const porMes = p.mes !== undefined;
+      const entrada = porMes ? 'financeiro.parcela_por_mes' : 'financeiro.parcela_por_numero';
+      const binds = porMes ? { mes: p.mes } : { parcela: p.parcela };
+      /** Como o cotista apontou — entra nas mensagens de erro, para elas fazerem sentido. */
+      const comoPediu = porMes ? `parcela que vence em ${p.mes}` : `parcela ${p.parcela}`;
+
+      const r = await deps.executor.run(entrada, binds, deps.session);
       if (r.rows.length === 0) {
         return {
           rows: [
             {
               ok: false,
               motivo:
-                `não achei a parcela ${parcela} em aberto no contrato deste cliente; liste as ` +
+                `não achei a ${comoPediu} em aberto no contrato deste cliente; liste as ` +
                 'parcelas de novo e confirme com ele qual é',
             },
           ],
@@ -148,8 +186,8 @@ export function toolEnviarSegundaVia(
             {
               ok: false,
               motivo:
-                `há ${r.rows.length} parcelas ${parcela} em aberto neste contrato, de origens ` +
-                'diferentes: pergunte ao cliente qual delas, pelo vencimento',
+                `há ${r.rows.length} parcelas correspondendo a "${comoPediu}" em aberto neste ` +
+                'contrato, de origens diferentes: pergunte ao cliente qual delas, pelo vencimento',
               opcoes: r.rows.map((l) => ({
                 origem: l.origem,
                 vencimento: l.vencimento,

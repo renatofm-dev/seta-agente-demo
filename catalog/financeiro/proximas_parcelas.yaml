@@ -6,6 +6,9 @@ description: >-
   valor em centavos e vencimento. Usada pelo fluxo de pagamento (014), pela
   conciliação e pelo agente quando o cotista quer escolher UMA parcela (040:
   2ª via do boleto) — sem ela o modelo só enxerga a próxima e as vencidas.
+  É uma JANELA de 5, não a lista completa: num contrato de 88 ou 120 parcelas
+  ela não diz qual é a última nem a mais distante. Para uma parcela fora da
+  janela, peça ao cotista o número ou o mês — a 2ª via aceita os dois.
   Ao falar de dinheiro, COPIE o campo `*_reais` como vem — já está em reais.
   Nunca divida os campos `_centavos`: em campo o modelo errou a casa decimal e
   diria ao cotista um valor dez vezes menor.
