@@ -6,7 +6,7 @@ const CATALOG_REAL = join(import.meta.dirname, '../../../catalog');
 const FIXTURES_INVALIDAS = join(import.meta.dirname, 'fixtures-invalidas');
 
 describe('loader do catálogo', () => {
-  it('carrega o catálogo real do repo: 8 da 012 + 1 da 014 + 2 comerciais da 015 + 1 interna da 040', () => {
+  it('carrega o catálogo real do repo: 8 da 012 + 1 da 014 + 2 comerciais da 015 + 2 internas da 040', () => {
     const catalog = loadCatalog(CATALOG_REAL);
     const ids = catalog
       .list()
@@ -19,6 +19,7 @@ describe('loader do catálogo', () => {
       'contrato.meu_produto',
       'contrato.minha_cota',
       'contrato.status_cancelamento',
+      'financeiro.parcela_por_mes',
       'financeiro.parcela_por_numero',
       'financeiro.proxima_parcela',
       'financeiro.proximas_parcelas',
@@ -39,9 +40,13 @@ describe('loader do catálogo', () => {
       // traduz o NÚMERO da parcela (o que o cotista fala) para a linha do ERP —
       // o agente chama `enviar_segunda_via`, nunca esta. `proximas_parcelas`
       // deixou de ser interna na 040: sem enxergar a lista, o modelo só alcança
-      // a próxima parcela e as vencidas, e o critério de aceite da spec ("a
-      // segunda via da parcela de março") fica impossível.
-      const internas = ['financeiro.parcela_por_numero'];
+      // a próxima parcela e as vencidas.
+      //
+      // #36: `parcela_por_mes` é a irmã dela e nasce interna pelo mesmo motivo
+      // — ela é que torna possível o critério de aceite da 040 ("a segunda via
+      // da parcela de março"), porque num contrato de 88 parcelas o cotista
+      // aponta pelo mês, não pelo número que ele não decorou.
+      const internas = ['financeiro.parcela_por_numero', 'financeiro.parcela_por_mes'];
       expect(entry.tool.expose).toBe(!internas.includes(entry.id));
       // 015: condicoes_cota é a primeira price_source — a alçada do SDR emerge dela
       expect(entry.price_source).toBe(entry.id === 'comercial.condicoes_cota');

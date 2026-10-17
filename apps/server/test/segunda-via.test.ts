@@ -112,3 +112,79 @@ describe('enviar_segunda_via: do número para a linha (040)', () => {
     expect(pedidos).toHaveLength(0);
   });
 });
+
+/**
+ * #36 — a parcela também se aponta pelo MÊS.
+ *
+ * O número só serve quando o cotista o tem à mão. Num contrato de 88 ou 120
+ * parcelas ele não tem: a conversa mostra uma janela de 5 (`proximas_parcelas`)
+ * e as vencidas. Em campo, o pedido foi "o pdf da última parcela que tenho em
+ * aberto" e o agente respondeu com a 24 — a última das cinco que ele enxergava,
+ * quando a última de verdade era a 120.
+ *
+ * "A parcela de março" é como ele fala, e é o critério de aceite da própria 040.
+ */
+describe('enviar_segunda_via: apontar pelo mês (#36)', () => {
+  const session: SessionCtx = { traceId: 't', clienteId: '10159' };
+  const linha = {
+    id: '5328',
+    parcela: 33,
+    total_parcelas: 88,
+    valor_centavos: 210700,
+    vencimento: '2027-03-26',
+    origem: 'saldo',
+    meio_pagamento: 'boleto',
+    linha_digitavel: '46191110',
+    status: 'aberto',
+  };
+  const tool = (rows: readonly Record<string, unknown>[], registrar = () => {}) => {
+    const chamadas: { id: string; params: Record<string, unknown> }[] = [];
+    const executor: Executor = {
+      async run(id, params) {
+        chamadas.push({ id, params });
+        return { rows, rowCount: rows.length, truncated: false };
+      },
+    };
+    return { spec: toolEnviarSegundaVia({ executor, session }, registrar), chamadas };
+  };
+
+  it('o mês vai para a consulta por mês — e o id continua vindo do servidor', async () => {
+    const pedidos: PedidoSegundaVia[] = [];
+    const { spec, chamadas } = tool([linha], (p) => pedidos.push(p));
+
+    const r = await spec.execute({ mes: '2027-03' }, session);
+
+    expect(chamadas).toEqual([{ id: 'financeiro.parcela_por_mes', params: { mes: '2027-03' } }]);
+    expect(r.rows[0]).toMatchObject({ ok: true, parcela: 'parcela 33/88' });
+    expect(pedidos[0]?.anexo.contaFinanceiraId).toBe('5328');
+    expect(pedidos[0]?.anexo.filename).toBe('boleto-parcela-33-20270326.pdf');
+  });
+
+  it('mês sem parcela em aberto volta ok=false dizendo o que foi pedido', async () => {
+    const { spec } = tool([]);
+    const r = await spec.execute({ mes: '2030-01' }, session);
+    expect(r.rows[0]).toMatchObject({ ok: false });
+    // a mensagem tem de citar o MÊS, não um número que ninguém falou
+    expect(String((r.rows[0] as { motivo: string }).motivo)).toContain('2030-01');
+  });
+
+  /**
+   * Os dois juntos criariam a pergunta "qual venceu?" — e a resposta errada
+   * manda o boleto errado para o cotista. Nenhum dos dois é igualmente ruim:
+   * sem referência, não há o que buscar.
+   */
+  it('os dois juntos, ou nenhum, são recusados antes de consultar', async () => {
+    const { spec, chamadas } = tool([linha]);
+    await expect(spec.execute({ parcela: '33', mes: '2027-03' }, session)).rejects.toThrow();
+    await expect(spec.execute({}, session)).rejects.toThrow();
+    expect(chamadas).toEqual([]); // não chegou a consultar nada
+  });
+
+  it('duas parcelas no mesmo mês: pergunta pelo vencimento, não escolhe', async () => {
+    const outra = { ...linha, id: '5329', origem: 'entrada', vencimento: '2027-03-05' };
+    const { spec } = tool([linha, outra]);
+    const r = await spec.execute({ mes: '2027-03' }, session);
+    expect(r.rows[0]).toMatchObject({ ok: false });
+    expect(String((r.rows[0] as { motivo: string }).motivo)).toContain('2027-03');
+  });
+});
