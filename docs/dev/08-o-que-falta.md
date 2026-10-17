@@ -101,7 +101,6 @@ Roadmap da frente em [`roadmap-pagamentos-whatsapp.md`](../roadmap-pagamentos-wh
 |---|---|---|
 | [042 — Asaas de verdade no sandbox](../../specs/042-asaas-sandbox-real.md) | o PSP deixa de ser simulado; reprocesso de evento com erro; `simular-pagamento` barrado em produção | conta sandbox, CPF no vínculo |
 | [043 — template de pagamento com PIX](../../specs/043-template-pagamento-pix.md) | `wa-meta` aprende header e botão; `WA_TEMPLATE_PAGAMENTO_CONFIRMADO` preenchido e testado | 042, `WA_WABA_ID` |
-| [044 — cobrança proativa](../../specs/044-cobranca-proativa.md) | variável por destinatário, seleção pelo catálogo, opt-out e ritmo de envio | 042, 043 |
 
 **Duas coisas que quem executar precisa saber antes de abrir o editor:**
 
@@ -109,8 +108,14 @@ Roadmap da frente em [`roadmap-pagamentos-whatsapp.md`](../roadmap-pagamentos-wh
   `GET /{WABA_ID}/message_templates`, é a especificação. Se for uma mensagem de *order details*
   da Meta (pagamentos no Brasil) em vez de um template comum, o escopo cresce e a spec é
   reescrita antes de começar.
-- **Opt-out não existe em nenhuma linha do repositório.** Envio proativo sem lista de supressão
-  é risco de qualidade do número na Meta — por isso ele é escopo da 044, não "depois".
+- **O opt-out já existe** desde a 044 (`wa/supressao.ts`, migração `0024`): palavra de saída
+  reconhecida no inbound, confirmação ao cotista e consulta obrigatória antes de cada destinatário,
+  na criação e no worker. Era o pré-requisito de envio proativo e deixou de ser pendência.
+
+A **044 foi entregue em 15/10/2026** e fecha esta frente — ver
+[04 — Módulos entregues](04-modulos-entregues.md), inclusive as duas ressalvas: a seleção da
+carteira não ficou no catálogo (não existe origem "operador", e ERP e carteira vivem em bancos
+diferentes) e o funil da 017 ainda não conta a campanha (#53).
 
 Esta frente para no sandbox. Produção é a [027](../../specs/027-asaas-producao.md), presa à D1.
 
@@ -128,7 +133,7 @@ flowchart TD
   D7{D7 Meta cobra} --> S023
   D6{D6 dado sai?} -->|não| S025[025 LLM on-prem]
   D6 --> S024[024 LGPD retenção]
-  S042[042 Asaas sandbox] --> S043[043 template PIX] --> S044[044 cobrança proativa]
+  S042[042 Asaas sandbox] --> S043[043 template PIX] --> S044[044 cobrança proativa ✅]
   S042 --> S027
   D1{D1 pagamentos} --> S027[027 Asaas produção]
   S024 --> S027
@@ -148,8 +153,7 @@ flowchart TD
 | `apps/server/src/pagamentos/eventos.ts:133` | evento do PSP com erro fica com `processado_em` nulo e a reentrega não gera job — sem reprocesso | 042 |
 | `apps/server/src/pagamentos/cobrancas-routes.ts:210` | `simular-pagamento` guardado só por `DEV_SIMULATOR`, não pelo ambiente do PSP | 042 |
 | `packages/wa-meta/src/template.ts:176` | template só com corpo de texto: sem header, botão ou parâmetro nomeado | 043 |
-| `apps/server/src/wa/disparo.ts:79` | laço sequencial sem pausa, backoff ou retry; `disparo.variaveis` global ao disparo | 044 |
-| — | opt-out/supressão não existe; envio proativo sem ela é risco na Meta | 044 |
+| `apps/server/src/pagamentos/campanha-cobranca.ts` | campanha de cobrança não cria `disparo`, então não aparece no funil da 017 (#53) | #53 |
 | `apps/server/src/app.ts:81` | `/healthz` sem versão | 021 |
 | `apps/console/app/(console)/{disparos,ticket}` | rotas legadas que só redirecionam | remover quando nenhum link externo apontar |
 | `apps/console/test` | cobertura de UI baixa (só helpers puros) | teste de componente entra com a 032 |

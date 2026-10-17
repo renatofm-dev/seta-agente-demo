@@ -50,6 +50,7 @@ autônomo sobre WhatsApp, rodando local (repo privado + homelab), fora da org se
 | 015c | Guardrail do percentual por extenso na raia SDR | ✅ 17/09/2026 — "três por cento" deixa de chegar ao lead |
 | 040 | 2ª via de boleto em PDF pelo WhatsApp | ✅ 17/09/2026 — o boleto chega como arquivo, e o PDF não é armazenado em lugar nenhum |
 | 046 | O contrato vira documento e o comprador assina | ✅ 24/09/2026 — contrato em PDF, assinatura pelo celular e a via assinada no WhatsApp (assinatura simulada por decisão) |
+| 044 | Cobrança proativa: a plataforma abre a conversa com quem está em atraso | ✅ 15/10/2026 — carteira inadimplente, opt-out, variável por destinatário, emissão e ritmo; **a seleção não ficou no catálogo** (ver 04) e o funil da 017 ainda não conta a campanha (#53) |
 
 A ordem, o calendário e as decisões pendentes estão em **[`docs/roadmap.md`](../docs/roadmap.md)**;
 o mapa técnico do que cada spec entregou está em
@@ -84,7 +85,6 @@ executa em M2, antes de M4).
 | [037](037-catalogo-http.md) catálogo por HTTP (`source: api`) | **Demo** | ✅035, ✅036, **D10** |
 | ~~[039](039-sdr-escreve-no-erp.md) SDR escreve lead e venda no ERP~~ | — | **absorvida pela ✅045** |
 | [041](041-tse-real-e-fim-da-conciliacao.md) TSE real e fim da conciliação | **Demo** | 037, ambiente do TSE |
-| [044](044-cobranca-proativa.md) cobrança proativa | **Pagamentos** | ✅042, ✅043 |
 
 
 ### A frente "demo ponta a ponta" (035–041)
@@ -139,6 +139,14 @@ cobrança é paga por webhook real e conciliada, e o WhatsApp manda o template c
 corpo e o `order_details` no botão — validado no aparelho. Header de mídia continua sendo a
 033; variável por destinatário e opt-out são a 044.
 
+A **044 foi entregue em 15/10/2026** e fecha a frente: a plataforma deixou de esperar o cotista
+escrever. O console mostra a carteira inadimplente e dispara a cobrança — com dry-run por padrão,
+uma parcela por pessoa (o saldo inteiro estouraria a alçada e pararia tudo na fila humana), recusa
+com motivo visível e disjuntor por falhas consecutivas. Provada em produção: 3 cobranças, 3
+mensagens entregues, pagamento e **baixa automática no ERP**. Duas ressalvas em
+[04](../docs/dev/04-modulos-entregues.md): a seleção não ficou no catálogo, e o funil da 017 ainda
+não conta a campanha (#53).
+
 **A 043 começou descobrindo, e a descoberta mudou o escopo**: o template aprovado usa
 `ORDER_DETAILS` (WhatsApp Pay BR), e o botão `COPY_CODE` era impossível — aceita 20
 caracteres, o copia-e-cola do Asaas tem 180.
@@ -149,7 +157,7 @@ caracteres, o copia-e-cola do Asaas tem 180.
               ├─► 039 ◄─ 015b
               └─► 040 ◄─ 033
 
-042✅ ─► 043✅ ─► 044        (042 ─► 027 ◄─ D1)
+042✅ ─► 043✅ ─► 044✅       (042 ─► 027 ◄─ D1)
 
 M0 ─► 015b ─► P-27          026 ─► 022
       015c
